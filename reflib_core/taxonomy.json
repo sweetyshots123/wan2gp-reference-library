@@ -1,0 +1,5803 @@
+{
+ "version": 1,
+ "notes": "Reference Library auto-tag taxonomy. Adults only: no tag describes minors; 'appears_minor' blocks body/nudity tags (sensitive) and flags the image for review. Body descriptions are neutral impressions, not judgements.",
+ "nodes": [
+  {
+   "id": "framing",
+   "parent": null,
+   "kind": "category",
+   "en": "Framing & camera",
+   "es": "Encuadre y cámara",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "shot",
+   "parent": "framing",
+   "kind": "group",
+   "en": "Shot",
+   "es": "Plano",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "extreme_closeup",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "extreme close-up",
+   "es": "primerísimo primer plano",
+   "syn": {
+    "en": [
+     "macro detail"
+    ],
+    "es": [
+     "detalle"
+    ]
+   }
+  },
+  {
+   "id": "closeup",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "close-up",
+   "es": "primer plano",
+   "syn": {
+    "en": [
+     "headshot",
+     "portrait crop"
+    ],
+    "es": [
+     "retrato cercano"
+    ]
+   }
+  },
+  {
+   "id": "head_shoulders",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "head and shoulders",
+   "es": "cabeza y hombros",
+   "syn": {
+    "en": [
+     "bust shot"
+    ],
+    "es": [
+     "plano busto"
+    ]
+   }
+  },
+  {
+   "id": "half_body",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "half body",
+   "es": "medio cuerpo",
+   "syn": {
+    "en": [
+     "waist up",
+     "medium shot"
+    ],
+    "es": [
+     "plano medio",
+     "de cintura para arriba"
+    ]
+   }
+  },
+  {
+   "id": "three_quarter_body",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "three-quarter body",
+   "es": "plano americano",
+   "syn": {
+    "en": [
+     "knees up",
+     "cowboy shot"
+    ],
+    "es": [
+     "tres cuartos",
+     "hasta las rodillas"
+    ]
+   }
+  },
+  {
+   "id": "full_body",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "full body",
+   "es": "cuerpo entero",
+   "syn": {
+    "en": [
+     "full length",
+     "long shot"
+    ],
+    "es": [
+     "plano general",
+     "cuerpo completo"
+    ]
+   }
+  },
+  {
+   "id": "wide",
+   "parent": "shot",
+   "kind": "tag",
+   "en": "wide shot",
+   "es": "plano abierto",
+   "syn": {
+    "en": [
+     "environmental"
+    ],
+    "es": [
+     "gran plano general"
+    ]
+   }
+  },
+  {
+   "id": "angle",
+   "parent": "framing",
+   "kind": "group",
+   "en": "Camera angle",
+   "es": "Ángulo de cámara",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "eye_level",
+   "parent": "angle",
+   "kind": "tag",
+   "en": "eye level",
+   "es": "a la altura de los ojos",
+   "syn": {
+    "en": [
+     "straight on"
+    ],
+    "es": [
+     "frontal"
+    ]
+   }
+  },
+  {
+   "id": "high_angle",
+   "parent": "angle",
+   "kind": "tag",
+   "en": "high angle",
+   "es": "picado",
+   "syn": {
+    "en": [
+     "from above"
+    ],
+    "es": [
+     "desde arriba"
+    ]
+   }
+  },
+  {
+   "id": "low_angle",
+   "parent": "angle",
+   "kind": "tag",
+   "en": "low angle",
+   "es": "contrapicado",
+   "syn": {
+    "en": [
+     "from below"
+    ],
+    "es": [
+     "desde abajo"
+    ]
+   }
+  },
+  {
+   "id": "overhead",
+   "parent": "angle",
+   "kind": "tag",
+   "en": "overhead",
+   "es": "cenital",
+   "syn": {
+    "en": [
+     "top down",
+     "bird's eye"
+    ],
+    "es": [
+     "vista de pájaro"
+    ]
+   }
+  },
+  {
+   "id": "dutch_angle",
+   "parent": "angle",
+   "kind": "tag",
+   "en": "dutch angle",
+   "es": "plano holandés",
+   "syn": {
+    "en": [
+     "tilted"
+    ],
+    "es": [
+     "inclinado"
+    ]
+   }
+  },
+  {
+   "id": "orientation_img",
+   "parent": "framing",
+   "kind": "group",
+   "en": "Image orientation",
+   "es": "Orientación de la imagen",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "portrait_format",
+   "parent": "orientation_img",
+   "kind": "tag",
+   "en": "portrait format",
+   "es": "formato vertical",
+   "syn": {
+    "en": [
+     "vertical"
+    ],
+    "es": [
+     "vertical"
+    ]
+   }
+  },
+  {
+   "id": "landscape_format",
+   "parent": "orientation_img",
+   "kind": "tag",
+   "en": "landscape format",
+   "es": "formato horizontal",
+   "syn": {
+    "en": [
+     "horizontal"
+    ],
+    "es": [
+     "apaisado"
+    ]
+   }
+  },
+  {
+   "id": "square_format",
+   "parent": "orientation_img",
+   "kind": "tag",
+   "en": "square format",
+   "es": "formato cuadrado",
+   "syn": {
+    "en": [
+     "square"
+    ],
+    "es": [
+     "cuadrado"
+    ]
+   }
+  },
+  {
+   "id": "pose",
+   "parent": null,
+   "kind": "category",
+   "en": "Pose",
+   "es": "Pose",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "body_pose",
+   "parent": "pose",
+   "kind": "group",
+   "en": "Body pose",
+   "es": "Postura",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "standing",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "standing",
+   "es": "de pie",
+   "syn": {
+    "en": [
+     "upright"
+    ],
+    "es": [
+     "parada",
+     "erguida"
+    ]
+   }
+  },
+  {
+   "id": "contrapposto",
+   "parent": "standing",
+   "kind": "tag",
+   "en": "contrapposto",
+   "es": "contrapposto",
+   "syn": {
+    "en": [
+     "weight on one leg"
+    ],
+    "es": [
+     "peso en una pierna"
+    ]
+   }
+  },
+  {
+   "id": "leaning",
+   "parent": "standing",
+   "kind": "tag",
+   "en": "leaning",
+   "es": "apoyada",
+   "syn": {
+    "en": [
+     "leaning on wall"
+    ],
+    "es": [
+     "recostada en pared"
+    ]
+   }
+  },
+  {
+   "id": "sitting",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "sitting",
+   "es": "sentada",
+   "syn": {
+    "en": [
+     "seated"
+    ],
+    "es": [
+     "sentado"
+    ]
+   }
+  },
+  {
+   "id": "cross_legged",
+   "parent": "sitting",
+   "kind": "tag",
+   "en": "cross-legged",
+   "es": "con piernas cruzadas",
+   "syn": {
+    "en": [
+     "legs crossed"
+    ],
+    "es": [
+     "piernas cruzadas"
+    ]
+   }
+  },
+  {
+   "id": "sitting_on_floor",
+   "parent": "sitting",
+   "kind": "tag",
+   "en": "sitting on floor",
+   "es": "sentada en el suelo",
+   "syn": {
+    "en": [],
+    "es": [
+     "en el suelo"
+    ]
+   }
+  },
+  {
+   "id": "sitting_on_chair",
+   "parent": "sitting",
+   "kind": "tag",
+   "en": "sitting on chair",
+   "es": "sentada en silla",
+   "syn": {
+    "en": [
+     "on a chair"
+    ],
+    "es": [
+     "en una silla"
+    ]
+   }
+  },
+  {
+   "id": "lying",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "lying",
+   "es": "tumbada",
+   "syn": {
+    "en": [
+     "lying down",
+     "reclining"
+    ],
+    "es": [
+     "acostada",
+     "recostada"
+    ]
+   }
+  },
+  {
+   "id": "lying_on_back",
+   "parent": "lying",
+   "kind": "tag",
+   "en": "lying on back",
+   "es": "boca arriba",
+   "syn": {
+    "en": [
+     "supine"
+    ],
+    "es": [
+     "tumbada boca arriba"
+    ]
+   }
+  },
+  {
+   "id": "lying_on_stomach",
+   "parent": "lying",
+   "kind": "tag",
+   "en": "lying on stomach",
+   "es": "boca abajo",
+   "syn": {
+    "en": [
+     "prone"
+    ],
+    "es": [
+     "tumbada boca abajo"
+    ]
+   }
+  },
+  {
+   "id": "lying_on_side",
+   "parent": "lying",
+   "kind": "tag",
+   "en": "lying on side",
+   "es": "de lado tumbada",
+   "syn": {
+    "en": [
+     "side lying"
+    ],
+    "es": [
+     "tumbada de lado"
+    ]
+   }
+  },
+  {
+   "id": "kneeling",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "kneeling",
+   "es": "arrodillada",
+   "syn": {
+    "en": [
+     "on knees"
+    ],
+    "es": [
+     "de rodillas"
+    ]
+   }
+  },
+  {
+   "id": "squatting",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "squatting",
+   "es": "en cuclillas",
+   "syn": {
+    "en": [
+     "crouching"
+    ],
+    "es": [
+     "agachada"
+    ]
+   }
+  },
+  {
+   "id": "walking",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "walking",
+   "es": "caminando",
+   "syn": {
+    "en": [
+     "mid-stride"
+    ],
+    "es": [
+     "andando",
+     "paseando"
+    ]
+   }
+  },
+  {
+   "id": "running",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "running",
+   "es": "corriendo",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "jumping",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "jumping",
+   "es": "saltando",
+   "syn": {
+    "en": [
+     "mid-air"
+    ],
+    "es": [
+     "en el aire"
+    ]
+   }
+  },
+  {
+   "id": "dancing",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "dancing",
+   "es": "bailando",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "stretching",
+   "parent": "body_pose",
+   "kind": "tag",
+   "en": "stretching",
+   "es": "estirándose",
+   "syn": {
+    "en": [
+     "yoga pose"
+    ],
+    "es": [
+     "estiramiento",
+     "yoga"
+    ]
+   }
+  },
+  {
+   "id": "body_orientation",
+   "parent": "pose",
+   "kind": "group",
+   "en": "Body orientation",
+   "es": "Orientación del cuerpo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "front_view",
+   "parent": "body_orientation",
+   "kind": "tag",
+   "en": "front view",
+   "es": "de frente",
+   "syn": {
+    "en": [
+     "facing camera",
+     "frontal"
+    ],
+    "es": [
+     "frontal"
+    ]
+   }
+  },
+  {
+   "id": "three_quarter_view",
+   "parent": "body_orientation",
+   "kind": "tag",
+   "en": "three-quarter view",
+   "es": "tres cuartos",
+   "syn": {
+    "en": [
+     "3/4 view"
+    ],
+    "es": [
+     "vista tres cuartos"
+    ]
+   }
+  },
+  {
+   "id": "side_view",
+   "parent": "body_orientation",
+   "kind": "tag",
+   "en": "side view",
+   "es": "de perfil",
+   "syn": {
+    "en": [
+     "profile"
+    ],
+    "es": [
+     "perfil",
+     "lateral"
+    ]
+   }
+  },
+  {
+   "id": "back_view",
+   "parent": "body_orientation",
+   "kind": "tag",
+   "en": "back view",
+   "es": "de espaldas",
+   "syn": {
+    "en": [
+     "from behind",
+     "rear view"
+    ],
+    "es": [
+     "espalda",
+     "por detrás"
+    ]
+   }
+  },
+  {
+   "id": "arms",
+   "parent": "pose",
+   "kind": "group",
+   "en": "Arms",
+   "es": "Brazos",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "arms_down",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "arms down",
+   "es": "brazos abajo",
+   "syn": {
+    "en": [
+     "arms at sides"
+    ],
+    "es": [
+     "brazos a los lados"
+    ]
+   }
+  },
+  {
+   "id": "arms_up",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "arms up",
+   "es": "brazos arriba",
+   "syn": {
+    "en": [
+     "arms raised"
+    ],
+    "es": [
+     "brazos levantados"
+    ]
+   }
+  },
+  {
+   "id": "arms_crossed",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "arms crossed",
+   "es": "brazos cruzados",
+   "syn": {
+    "en": [
+     "folded arms"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "hands_on_hips",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hands on hips",
+   "es": "manos en la cintura",
+   "syn": {
+    "en": [
+     "akimbo"
+    ],
+    "es": [
+     "en jarras"
+    ]
+   }
+  },
+  {
+   "id": "hand_in_hair",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hand in hair",
+   "es": "mano en el pelo",
+   "syn": {
+    "en": [
+     "touching hair"
+    ],
+    "es": [
+     "tocándose el pelo"
+    ]
+   }
+  },
+  {
+   "id": "hands_behind_head",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hands behind head",
+   "es": "manos tras la cabeza",
+   "syn": {
+    "en": [],
+    "es": [
+     "manos detrás de la cabeza"
+    ]
+   }
+  },
+  {
+   "id": "hand_on_face",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hand on face",
+   "es": "mano en la cara",
+   "syn": {
+    "en": [
+     "hand on chin"
+    ],
+    "es": [
+     "mano en la barbilla"
+    ]
+   }
+  },
+  {
+   "id": "hands_behind_back",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hands behind back",
+   "es": "manos a la espalda",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "hands_in_pockets",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "hands in pockets",
+   "es": "manos en los bolsillos",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "holding_object",
+   "parent": "arms",
+   "kind": "tag",
+   "en": "holding object",
+   "es": "sosteniendo un objeto",
+   "syn": {
+    "en": [
+     "holding"
+    ],
+    "es": [
+     "sujetando"
+    ]
+   }
+  },
+  {
+   "id": "holding_phone",
+   "parent": "holding_object",
+   "kind": "tag",
+   "en": "holding phone",
+   "es": "con el móvil",
+   "syn": {
+    "en": [
+     "smartphone"
+    ],
+    "es": [
+     "teléfono"
+    ]
+   }
+  },
+  {
+   "id": "holding_drink",
+   "parent": "holding_object",
+   "kind": "tag",
+   "en": "holding drink",
+   "es": "con una bebida",
+   "syn": {
+    "en": [
+     "cup",
+     "glass"
+    ],
+    "es": [
+     "copa",
+     "taza"
+    ]
+   }
+  },
+  {
+   "id": "clothing",
+   "parent": null,
+   "kind": "category",
+   "en": "Clothing",
+   "es": "Ropa",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "coverage",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Coverage",
+   "es": "Cobertura",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "clothed",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "clothed",
+   "es": "vestida",
+   "syn": {
+    "en": [
+     "dressed",
+     "fully clothed"
+    ],
+    "es": [
+     "con ropa",
+     "tapada"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "partially_clothed",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "partially clothed",
+   "es": "semidesnuda",
+   "syn": {
+    "en": [
+     "semi-nude",
+     "half dressed"
+    ],
+    "es": [
+     "medio desnuda",
+     "parcialmente vestida"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "topless",
+   "parent": "partially_clothed",
+   "kind": "tag",
+   "en": "topless",
+   "es": "en topless",
+   "syn": {
+    "en": [
+     "top off"
+    ],
+    "es": [
+     "sin parte de arriba"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "bottomless",
+   "parent": "partially_clothed",
+   "kind": "tag",
+   "en": "bottomless",
+   "es": "sin parte de abajo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "underwear_only",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "underwear only",
+   "es": "solo ropa interior",
+   "syn": {
+    "en": [
+     "in lingerie"
+    ],
+    "es": [
+     "en lencería"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "swimwear_only",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "swimwear only",
+   "es": "solo bañador",
+   "syn": {
+    "en": [
+     "in swimwear"
+    ],
+    "es": [
+     "en bañador",
+     "en bikini"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "implied_nude",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "implied nude",
+   "es": "desnudo implícito",
+   "syn": {
+    "en": [
+     "covered nude",
+     "strategic covering"
+    ],
+    "es": [
+     "desnudo tapado",
+     "desnudo sugerido"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "nude",
+   "parent": "coverage",
+   "kind": "tag",
+   "en": "nude",
+   "es": "desnuda",
+   "syn": {
+    "en": [
+     "naked",
+     "unclothed"
+    ],
+    "es": [
+     "desnudo",
+     "sin ropa"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "tops",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Tops",
+   "es": "Partes de arriba",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "t_shirt",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "t-shirt",
+   "es": "camiseta",
+   "syn": {
+    "en": [
+     "tee"
+    ],
+    "es": [
+     "remera"
+    ]
+   }
+  },
+  {
+   "id": "crop_top",
+   "parent": "t_shirt",
+   "kind": "tag",
+   "en": "crop top",
+   "es": "top corto",
+   "syn": {
+    "en": [
+     "cropped top"
+    ],
+    "es": [
+     "camiseta corta"
+    ]
+   }
+  },
+  {
+   "id": "tank_top",
+   "parent": "t_shirt",
+   "kind": "tag",
+   "en": "tank top",
+   "es": "camiseta de tirantes",
+   "syn": {
+    "en": [
+     "sleeveless top"
+    ],
+    "es": [
+     "tirantes"
+    ]
+   }
+  },
+  {
+   "id": "blouse",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "blouse",
+   "es": "blusa",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "shirt",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "shirt",
+   "es": "camisa",
+   "syn": {
+    "en": [
+     "button-up"
+    ],
+    "es": [
+     "camisa abotonada"
+    ]
+   }
+  },
+  {
+   "id": "sweater",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "sweater",
+   "es": "jersey",
+   "syn": {
+    "en": [
+     "jumper",
+     "pullover",
+     "knit"
+    ],
+    "es": [
+     "suéter",
+     "punto"
+    ]
+   }
+  },
+  {
+   "id": "hoodie",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "hoodie",
+   "es": "sudadera",
+   "syn": {
+    "en": [
+     "sweatshirt"
+    ],
+    "es": [
+     "sudadera con capucha"
+    ]
+   }
+  },
+  {
+   "id": "bodysuit",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "bodysuit",
+   "es": "body",
+   "syn": {
+    "en": [
+     "leotard"
+    ],
+    "es": [
+     "maillot"
+    ]
+   }
+  },
+  {
+   "id": "corset",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "corset",
+   "es": "corsé",
+   "syn": {
+    "en": [
+     "bustier"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "tube_top",
+   "parent": "tops",
+   "kind": "tag",
+   "en": "tube top",
+   "es": "top palabra de honor",
+   "syn": {
+    "en": [
+     "bandeau"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "bottoms",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Bottoms",
+   "es": "Partes de abajo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "jeans",
+   "parent": "bottoms",
+   "kind": "tag",
+   "en": "jeans",
+   "es": "vaqueros",
+   "syn": {
+    "en": [
+     "denim pants"
+    ],
+    "es": [
+     "tejanos",
+     "jeans"
+    ]
+   }
+  },
+  {
+   "id": "denim_shorts",
+   "parent": "jeans",
+   "kind": "tag",
+   "en": "denim shorts",
+   "es": "shorts vaqueros",
+   "syn": {
+    "en": [
+     "jean shorts"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "trousers",
+   "parent": "bottoms",
+   "kind": "tag",
+   "en": "trousers",
+   "es": "pantalones",
+   "syn": {
+    "en": [
+     "pants",
+     "slacks"
+    ],
+    "es": [
+     "pantalón"
+    ]
+   }
+  },
+  {
+   "id": "leggings",
+   "parent": "bottoms",
+   "kind": "tag",
+   "en": "leggings",
+   "es": "mallas",
+   "syn": {
+    "en": [
+     "yoga pants"
+    ],
+    "es": [
+     "leggins"
+    ]
+   }
+  },
+  {
+   "id": "shorts",
+   "parent": "bottoms",
+   "kind": "tag",
+   "en": "shorts",
+   "es": "pantalón corto",
+   "syn": {
+    "en": [
+     "hot pants"
+    ],
+    "es": [
+     "shorts"
+    ]
+   }
+  },
+  {
+   "id": "skirt",
+   "parent": "bottoms",
+   "kind": "tag",
+   "en": "skirt",
+   "es": "falda",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "miniskirt",
+   "parent": "skirt",
+   "kind": "tag",
+   "en": "miniskirt",
+   "es": "minifalda",
+   "syn": {
+    "en": [
+     "mini skirt"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "midi_skirt",
+   "parent": "skirt",
+   "kind": "tag",
+   "en": "midi skirt",
+   "es": "falda midi",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "maxi_skirt",
+   "parent": "skirt",
+   "kind": "tag",
+   "en": "maxi skirt",
+   "es": "falda larga",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "pencil_skirt",
+   "parent": "skirt",
+   "kind": "tag",
+   "en": "pencil skirt",
+   "es": "falda lápiz",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "pleated_skirt",
+   "parent": "skirt",
+   "kind": "tag",
+   "en": "pleated skirt",
+   "es": "falda plisada",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "dresses",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Dresses",
+   "es": "Vestidos",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "dress",
+   "parent": "dresses",
+   "kind": "tag",
+   "en": "dress",
+   "es": "vestido",
+   "syn": {
+    "en": [
+     "gown"
+    ],
+    "es": [
+     "traje"
+    ]
+   }
+  },
+  {
+   "id": "mini_dress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "mini dress",
+   "es": "vestido corto",
+   "syn": {
+    "en": [
+     "short dress"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "midi_dress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "midi dress",
+   "es": "vestido midi",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "maxi_dress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "maxi dress",
+   "es": "vestido largo",
+   "syn": {
+    "en": [
+     "long dress"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "evening_gown",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "evening gown",
+   "es": "vestido de noche",
+   "syn": {
+    "en": [
+     "formal gown"
+    ],
+    "es": [
+     "vestido de gala"
+    ]
+   }
+  },
+  {
+   "id": "sundress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "sundress",
+   "es": "vestido de verano",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "bodycon_dress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "bodycon dress",
+   "es": "vestido ceñido",
+   "syn": {
+    "en": [
+     "fitted dress"
+    ],
+    "es": [
+     "vestido ajustado"
+    ]
+   }
+  },
+  {
+   "id": "wedding_dress",
+   "parent": "dress",
+   "kind": "tag",
+   "en": "wedding dress",
+   "es": "vestido de novia",
+   "syn": {
+    "en": [
+     "bridal"
+    ],
+    "es": [
+     "novia"
+    ]
+   }
+  },
+  {
+   "id": "jumpsuit",
+   "parent": "dresses",
+   "kind": "tag",
+   "en": "jumpsuit",
+   "es": "mono",
+   "syn": {
+    "en": [
+     "romper",
+     "playsuit"
+    ],
+    "es": [
+     "enterizo"
+    ]
+   }
+  },
+  {
+   "id": "swimwear",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Swimwear",
+   "es": "Ropa de baño",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "bikini",
+   "parent": "swimwear",
+   "kind": "tag",
+   "en": "bikini",
+   "es": "bikini",
+   "syn": {
+    "en": [
+     "two-piece"
+    ],
+    "es": [
+     "dos piezas"
+    ]
+   }
+  },
+  {
+   "id": "string_bikini",
+   "parent": "bikini",
+   "kind": "tag",
+   "en": "string bikini",
+   "es": "bikini de tiras",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "high_waist_bikini",
+   "parent": "bikini",
+   "kind": "tag",
+   "en": "high-waist bikini",
+   "es": "bikini de talle alto",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "one_piece_swimsuit",
+   "parent": "swimwear",
+   "kind": "tag",
+   "en": "one-piece swimsuit",
+   "es": "bañador",
+   "syn": {
+    "en": [
+     "swimsuit",
+     "maillot"
+    ],
+    "es": [
+     "traje de baño",
+     "bañador entero"
+    ]
+   }
+  },
+  {
+   "id": "monokini",
+   "parent": "swimwear",
+   "kind": "tag",
+   "en": "monokini",
+   "es": "trikini",
+   "syn": {
+    "en": [
+     "cut-out swimsuit"
+    ],
+    "es": [
+     "monokini"
+    ]
+   }
+  },
+  {
+   "id": "sarong",
+   "parent": "swimwear",
+   "kind": "tag",
+   "en": "sarong",
+   "es": "pareo",
+   "syn": {
+    "en": [
+     "beach wrap"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "lingerie",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Lingerie & underwear",
+   "es": "Lencería y ropa interior",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false,
+   "sensitive": true
+  },
+  {
+   "id": "bra",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "bra",
+   "es": "sujetador",
+   "syn": {
+    "en": [
+     "brassiere"
+    ],
+    "es": [
+     "sostén"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "bralette",
+   "parent": "bra",
+   "kind": "tag",
+   "en": "bralette",
+   "es": "bralette",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "sports_bra",
+   "parent": "bra",
+   "kind": "tag",
+   "en": "sports bra",
+   "es": "sujetador deportivo",
+   "syn": {
+    "en": [],
+    "es": [
+     "top deportivo"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "panties",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "panties",
+   "es": "braguitas",
+   "syn": {
+    "en": [
+     "briefs",
+     "knickers"
+    ],
+    "es": [
+     "bragas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thong",
+   "parent": "panties",
+   "kind": "tag",
+   "en": "thong",
+   "es": "tanga",
+   "syn": {
+    "en": [
+     "g-string"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "lingerie_set",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "lingerie set",
+   "es": "conjunto de lencería",
+   "syn": {
+    "en": [
+     "matching set"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "babydoll",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "babydoll",
+   "es": "picardías",
+   "syn": {
+    "en": [
+     "chemise",
+     "slip"
+    ],
+    "es": [
+     "camisón corto"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "teddy",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "teddy",
+   "es": "body de lencería",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "stockings",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "stockings",
+   "es": "medias",
+   "syn": {
+    "en": [
+     "thigh highs",
+     "pantyhose",
+     "tights"
+    ],
+    "es": [
+     "pantis"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "garter_belt",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "garter belt",
+   "es": "liguero",
+   "syn": {
+    "en": [
+     "suspenders"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "robe",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "robe",
+   "es": "bata",
+   "syn": {
+    "en": [
+     "kimono robe",
+     "dressing gown"
+    ],
+    "es": [
+     "albornoz"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "nightgown",
+   "parent": "lingerie",
+   "kind": "tag",
+   "en": "nightgown",
+   "es": "camisón",
+   "syn": {
+    "en": [
+     "nightie",
+     "pajamas"
+    ],
+    "es": [
+     "pijama"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "outerwear",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Outerwear",
+   "es": "Abrigo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "jacket",
+   "parent": "outerwear",
+   "kind": "tag",
+   "en": "jacket",
+   "es": "chaqueta",
+   "syn": {
+    "en": [],
+    "es": [
+     "cazadora"
+    ]
+   }
+  },
+  {
+   "id": "leather_jacket",
+   "parent": "jacket",
+   "kind": "tag",
+   "en": "leather jacket",
+   "es": "chaqueta de cuero",
+   "syn": {
+    "en": [
+     "biker jacket"
+    ],
+    "es": [
+     "cazadora de cuero"
+    ]
+   }
+  },
+  {
+   "id": "denim_jacket",
+   "parent": "jacket",
+   "kind": "tag",
+   "en": "denim jacket",
+   "es": "chaqueta vaquera",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "coat",
+   "parent": "outerwear",
+   "kind": "tag",
+   "en": "coat",
+   "es": "abrigo",
+   "syn": {
+    "en": [
+     "overcoat",
+     "trench coat"
+    ],
+    "es": [
+     "gabardina"
+    ]
+   }
+  },
+  {
+   "id": "blazer",
+   "parent": "outerwear",
+   "kind": "tag",
+   "en": "blazer",
+   "es": "americana",
+   "syn": {
+    "en": [
+     "suit jacket"
+    ],
+    "es": [
+     "blazer"
+    ]
+   }
+  },
+  {
+   "id": "cardigan",
+   "parent": "outerwear",
+   "kind": "tag",
+   "en": "cardigan",
+   "es": "rebeca",
+   "syn": {
+    "en": [],
+    "es": [
+     "chaqueta de punto"
+    ]
+   }
+  },
+  {
+   "id": "vest",
+   "parent": "outerwear",
+   "kind": "tag",
+   "en": "vest",
+   "es": "chaleco",
+   "syn": {
+    "en": [
+     "waistcoat"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "footwear",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Footwear",
+   "es": "Calzado",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "barefoot",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "barefoot",
+   "es": "descalza",
+   "syn": {
+    "en": [
+     "no shoes"
+    ],
+    "es": [
+     "sin zapatos"
+    ]
+   }
+  },
+  {
+   "id": "heels",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "high heels",
+   "es": "tacones",
+   "syn": {
+    "en": [
+     "stilettos",
+     "pumps"
+    ],
+    "es": [
+     "zapatos de tacón"
+    ]
+   }
+  },
+  {
+   "id": "platform_heels",
+   "parent": "heels",
+   "kind": "tag",
+   "en": "platform heels",
+   "es": "plataformas",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "boots",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "boots",
+   "es": "botas",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "ankle_boots",
+   "parent": "boots",
+   "kind": "tag",
+   "en": "ankle boots",
+   "es": "botines",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "knee_boots",
+   "parent": "boots",
+   "kind": "tag",
+   "en": "knee-high boots",
+   "es": "botas altas",
+   "syn": {
+    "en": [
+     "thigh-high boots"
+    ],
+    "es": [
+     "botas por la rodilla"
+    ]
+   }
+  },
+  {
+   "id": "sneakers",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "sneakers",
+   "es": "zapatillas",
+   "syn": {
+    "en": [
+     "trainers"
+    ],
+    "es": [
+     "deportivas"
+    ]
+   }
+  },
+  {
+   "id": "sandals",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "sandals",
+   "es": "sandalias",
+   "syn": {
+    "en": [
+     "flip-flops"
+    ],
+    "es": [
+     "chanclas"
+    ]
+   }
+  },
+  {
+   "id": "flats",
+   "parent": "footwear",
+   "kind": "tag",
+   "en": "flats",
+   "es": "bailarinas",
+   "syn": {
+    "en": [
+     "ballet flats",
+     "loafers"
+    ],
+    "es": [
+     "mocasines"
+    ]
+   }
+  },
+  {
+   "id": "accessories",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Accessories",
+   "es": "Accesorios",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "hat",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "hat",
+   "es": "sombrero",
+   "syn": {
+    "en": [
+     "cap",
+     "beanie"
+    ],
+    "es": [
+     "gorra",
+     "gorro"
+    ]
+   }
+  },
+  {
+   "id": "scarf",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "scarf",
+   "es": "bufanda",
+   "syn": {
+    "en": [
+     "shawl"
+    ],
+    "es": [
+     "pañuelo",
+     "chal"
+    ]
+   }
+  },
+  {
+   "id": "belt",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "belt",
+   "es": "cinturón",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "bag",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "bag",
+   "es": "bolso",
+   "syn": {
+    "en": [
+     "handbag",
+     "purse"
+    ],
+    "es": [
+     "cartera"
+    ]
+   }
+  },
+  {
+   "id": "necklace",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "necklace",
+   "es": "collar",
+   "syn": {
+    "en": [
+     "choker",
+     "pendant"
+    ],
+    "es": [
+     "gargantilla",
+     "colgante"
+    ]
+   }
+  },
+  {
+   "id": "earrings",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "earrings",
+   "es": "pendientes",
+   "syn": {
+    "en": [
+     "hoops"
+    ],
+    "es": [
+     "aros"
+    ]
+   }
+  },
+  {
+   "id": "bracelet",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "bracelet",
+   "es": "pulsera",
+   "syn": {
+    "en": [
+     "bangle"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "watch",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "watch",
+   "es": "reloj",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "ring",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "ring",
+   "es": "anillo",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "gloves",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "gloves",
+   "es": "guantes",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "hair_accessory",
+   "parent": "accessories",
+   "kind": "tag",
+   "en": "hair accessory",
+   "es": "accesorio de pelo",
+   "syn": {
+    "en": [
+     "headband",
+     "hair clip",
+     "bow"
+    ],
+    "es": [
+     "diadema",
+     "horquilla",
+     "lazo"
+    ]
+   }
+  },
+  {
+   "id": "garment_color",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Main garment colour",
+   "es": "Color de la prenda principal",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "color_black",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "black",
+   "es": "negro",
+   "syn": {
+    "en": [],
+    "es": [
+     "negra"
+    ]
+   }
+  },
+  {
+   "id": "color_white",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "white",
+   "es": "blanco",
+   "syn": {
+    "en": [
+     "ivory",
+     "cream"
+    ],
+    "es": [
+     "blanca",
+     "marfil",
+     "crema"
+    ]
+   }
+  },
+  {
+   "id": "color_grey",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "grey",
+   "es": "gris",
+   "syn": {
+    "en": [
+     "gray",
+     "silver"
+    ],
+    "es": [
+     "plateado"
+    ]
+   }
+  },
+  {
+   "id": "color_red",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "red",
+   "es": "rojo",
+   "syn": {
+    "en": [
+     "burgundy",
+     "maroon"
+    ],
+    "es": [
+     "roja",
+     "granate",
+     "burdeos"
+    ]
+   }
+  },
+  {
+   "id": "color_pink",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "pink",
+   "es": "rosa",
+   "syn": {
+    "en": [
+     "magenta",
+     "fuchsia"
+    ],
+    "es": [
+     "fucsia"
+    ]
+   }
+  },
+  {
+   "id": "color_orange",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "orange",
+   "es": "naranja",
+   "syn": {
+    "en": [
+     "coral"
+    ],
+    "es": [
+     "coral"
+    ]
+   }
+  },
+  {
+   "id": "color_yellow",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "yellow",
+   "es": "amarillo",
+   "syn": {
+    "en": [
+     "gold",
+     "mustard"
+    ],
+    "es": [
+     "amarilla",
+     "dorado",
+     "mostaza"
+    ]
+   }
+  },
+  {
+   "id": "color_green",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "green",
+   "es": "verde",
+   "syn": {
+    "en": [
+     "olive",
+     "emerald",
+     "mint"
+    ],
+    "es": [
+     "oliva",
+     "esmeralda"
+    ]
+   }
+  },
+  {
+   "id": "color_blue",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "blue",
+   "es": "azul",
+   "syn": {
+    "en": [
+     "navy",
+     "turquoise",
+     "denim blue"
+    ],
+    "es": [
+     "marino",
+     "turquesa"
+    ]
+   }
+  },
+  {
+   "id": "color_purple",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "purple",
+   "es": "morado",
+   "syn": {
+    "en": [
+     "violet",
+     "lilac",
+     "lavender"
+    ],
+    "es": [
+     "violeta",
+     "lila"
+    ]
+   }
+  },
+  {
+   "id": "color_brown",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "brown",
+   "es": "marrón",
+   "syn": {
+    "en": [
+     "tan",
+     "camel",
+     "chocolate"
+    ],
+    "es": [
+     "café",
+     "camel"
+    ]
+   }
+  },
+  {
+   "id": "color_beige",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "beige",
+   "es": "beis",
+   "syn": {
+    "en": [
+     "nude tone",
+     "khaki"
+    ],
+    "es": [
+     "beige",
+     "caqui"
+    ]
+   }
+  },
+  {
+   "id": "color_multi",
+   "parent": "garment_color",
+   "kind": "tag",
+   "en": "multicoloured",
+   "es": "multicolor",
+   "syn": {
+    "en": [
+     "colorful"
+    ],
+    "es": [
+     "colorido",
+     "de colores"
+    ]
+   }
+  },
+  {
+   "id": "garment_pattern",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Main garment pattern",
+   "es": "Estampado de la prenda principal",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "solid",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "solid colour",
+   "es": "liso",
+   "syn": {
+    "en": [
+     "plain"
+    ],
+    "es": [
+     "un solo color"
+    ]
+   }
+  },
+  {
+   "id": "striped",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "striped",
+   "es": "de rayas",
+   "syn": {
+    "en": [
+     "stripes"
+    ],
+    "es": [
+     "rayas"
+    ]
+   }
+  },
+  {
+   "id": "floral",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "floral",
+   "es": "de flores",
+   "syn": {
+    "en": [
+     "flower print"
+    ],
+    "es": [
+     "floral",
+     "flores"
+    ]
+   }
+  },
+  {
+   "id": "polka_dot",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "polka dot",
+   "es": "de lunares",
+   "syn": {
+    "en": [
+     "dots"
+    ],
+    "es": [
+     "lunares"
+    ]
+   }
+  },
+  {
+   "id": "plaid",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "plaid",
+   "es": "de cuadros",
+   "syn": {
+    "en": [
+     "checked",
+     "tartan"
+    ],
+    "es": [
+     "cuadros",
+     "escocés"
+    ]
+   }
+  },
+  {
+   "id": "animal_print",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "animal print",
+   "es": "estampado animal",
+   "syn": {
+    "en": [
+     "leopard",
+     "zebra"
+    ],
+    "es": [
+     "leopardo",
+     "cebra"
+    ]
+   }
+  },
+  {
+   "id": "lace",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "lace",
+   "es": "encaje",
+   "syn": {
+    "en": [],
+    "es": [
+     "de encaje"
+    ]
+   }
+  },
+  {
+   "id": "sheer",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "sheer",
+   "es": "transparente",
+   "syn": {
+    "en": [
+     "see-through",
+     "mesh"
+    ],
+    "es": [
+     "semitransparente",
+     "rejilla"
+    ]
+   }
+  },
+  {
+   "id": "sequins",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "sequins",
+   "es": "lentejuelas",
+   "syn": {
+    "en": [
+     "glitter"
+    ],
+    "es": [
+     "brillos"
+    ]
+   }
+  },
+  {
+   "id": "graphic_print",
+   "parent": "garment_pattern",
+   "kind": "tag",
+   "en": "graphic print",
+   "es": "estampado gráfico",
+   "syn": {
+    "en": [
+     "logo",
+     "text print"
+    ],
+    "es": [
+     "logotipo"
+    ]
+   }
+  },
+  {
+   "id": "garment_fit",
+   "parent": "clothing",
+   "kind": "group",
+   "en": "Fit & material",
+   "es": "Corte y material",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "tight_fit",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "tight fit",
+   "es": "ajustado",
+   "syn": {
+    "en": [
+     "form-fitting",
+     "fitted"
+    ],
+    "es": [
+     "ceñido"
+    ]
+   }
+  },
+  {
+   "id": "loose_fit",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "loose fit",
+   "es": "holgado",
+   "syn": {
+    "en": [
+     "oversized",
+     "baggy"
+    ],
+    "es": [
+     "ancho",
+     "suelto"
+    ]
+   }
+  },
+  {
+   "id": "leather",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "leather",
+   "es": "cuero",
+   "syn": {
+    "en": [
+     "latex",
+     "vinyl"
+    ],
+    "es": [
+     "piel",
+     "látex"
+    ]
+   }
+  },
+  {
+   "id": "denim",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "denim",
+   "es": "tela vaquera",
+   "syn": {
+    "en": [],
+    "es": [
+     "denim"
+    ]
+   }
+  },
+  {
+   "id": "knit",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "knit",
+   "es": "punto",
+   "syn": {
+    "en": [
+     "wool"
+    ],
+    "es": [
+     "lana"
+    ]
+   }
+  },
+  {
+   "id": "satin",
+   "parent": "garment_fit",
+   "kind": "tag",
+   "en": "satin",
+   "es": "satén",
+   "syn": {
+    "en": [
+     "silk"
+    ],
+    "es": [
+     "seda"
+    ]
+   }
+  },
+  {
+   "id": "hair",
+   "parent": null,
+   "kind": "category",
+   "en": "Hair",
+   "es": "Pelo",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "hair_length",
+   "parent": "hair",
+   "kind": "group",
+   "en": "Hair length",
+   "es": "Largo del pelo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "hair_very_short",
+   "parent": "hair_length",
+   "kind": "tag",
+   "en": "very short hair",
+   "es": "pelo muy corto",
+   "syn": {
+    "en": [
+     "pixie cut",
+     "buzz cut"
+    ],
+    "es": [
+     "pixie",
+     "rapado"
+    ]
+   }
+  },
+  {
+   "id": "hair_short",
+   "parent": "hair_length",
+   "kind": "tag",
+   "en": "short hair",
+   "es": "pelo corto",
+   "syn": {
+    "en": [
+     "bob"
+    ],
+    "es": [
+     "melena corta",
+     "bob"
+    ]
+   }
+  },
+  {
+   "id": "hair_medium",
+   "parent": "hair_length",
+   "kind": "tag",
+   "en": "medium hair",
+   "es": "pelo media melena",
+   "syn": {
+    "en": [
+     "shoulder-length hair",
+     "mid-length"
+    ],
+    "es": [
+     "media melena",
+     "pelo por los hombros"
+    ]
+   }
+  },
+  {
+   "id": "hair_long",
+   "parent": "hair_length",
+   "kind": "tag",
+   "en": "long hair",
+   "es": "pelo largo",
+   "syn": {
+    "en": [],
+    "es": [
+     "melena larga"
+    ]
+   }
+  },
+  {
+   "id": "hair_very_long",
+   "parent": "hair_length",
+   "kind": "tag",
+   "en": "very long hair",
+   "es": "pelo muy largo",
+   "syn": {
+    "en": [
+     "waist-length hair"
+    ],
+    "es": [
+     "pelo hasta la cintura"
+    ]
+   }
+  },
+  {
+   "id": "hair_color",
+   "parent": "hair",
+   "kind": "group",
+   "en": "Hair colour",
+   "es": "Color de pelo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "hair_black",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "black hair",
+   "es": "pelo negro",
+   "syn": {
+    "en": [
+     "raven hair"
+    ],
+    "es": [
+     "morena"
+    ]
+   }
+  },
+  {
+   "id": "hair_brown",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "brown hair",
+   "es": "pelo castaño",
+   "syn": {
+    "en": [
+     "brunette",
+     "chestnut"
+    ],
+    "es": [
+     "castaña",
+     "morena clara"
+    ]
+   }
+  },
+  {
+   "id": "hair_blonde",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "blonde hair",
+   "es": "pelo rubio",
+   "syn": {
+    "en": [
+     "blond",
+     "platinum",
+     "golden"
+    ],
+    "es": [
+     "rubia",
+     "platino"
+    ]
+   }
+  },
+  {
+   "id": "hair_red",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "red hair",
+   "es": "pelo pelirrojo",
+   "syn": {
+    "en": [
+     "ginger",
+     "auburn",
+     "copper"
+    ],
+    "es": [
+     "pelirroja",
+     "cobrizo"
+    ]
+   }
+  },
+  {
+   "id": "hair_grey",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "grey hair",
+   "es": "pelo canoso",
+   "syn": {
+    "en": [
+     "silver hair",
+     "white hair"
+    ],
+    "es": [
+     "canas",
+     "pelo gris",
+     "pelo blanco"
+    ]
+   }
+  },
+  {
+   "id": "hair_dyed",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "dyed fantasy colour",
+   "es": "pelo teñido de fantasía",
+   "syn": {
+    "en": [
+     "pink hair",
+     "blue hair",
+     "pastel hair"
+    ],
+    "es": [
+     "pelo rosa",
+     "pelo azul"
+    ]
+   }
+  },
+  {
+   "id": "hair_ombre",
+   "parent": "hair_color",
+   "kind": "tag",
+   "en": "ombré / highlights",
+   "es": "mechas",
+   "syn": {
+    "en": [
+     "balayage",
+     "highlights"
+    ],
+    "es": [
+     "degradado",
+     "balayage"
+    ]
+   }
+  },
+  {
+   "id": "hair_style",
+   "parent": "hair",
+   "kind": "group",
+   "en": "Hair style",
+   "es": "Peinado",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "hair_down",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "hair down",
+   "es": "pelo suelto",
+   "syn": {
+    "en": [
+     "loose hair"
+    ],
+    "es": [
+     "melena suelta"
+    ]
+   }
+  },
+  {
+   "id": "ponytail",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "ponytail",
+   "es": "coleta",
+   "syn": {
+    "en": [
+     "high ponytail"
+    ],
+    "es": [
+     "cola de caballo"
+    ]
+   }
+  },
+  {
+   "id": "bun",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "bun",
+   "es": "moño",
+   "syn": {
+    "en": [
+     "updo",
+     "top knot"
+    ],
+    "es": [
+     "recogido"
+    ]
+   }
+  },
+  {
+   "id": "braid",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "braid",
+   "es": "trenza",
+   "syn": {
+    "en": [
+     "braids",
+     "plait"
+    ],
+    "es": [
+     "trenzas"
+    ]
+   }
+  },
+  {
+   "id": "pigtails",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "pigtails",
+   "es": "dos coletas",
+   "syn": {
+    "en": [
+     "twin tails"
+    ],
+    "es": [
+     "coletas"
+    ]
+   }
+  },
+  {
+   "id": "bangs",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "bangs",
+   "es": "flequillo",
+   "syn": {
+    "en": [
+     "fringe"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "side_part",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "side part",
+   "es": "raya al lado",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "wet_hair",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "wet hair",
+   "es": "pelo mojado",
+   "syn": {
+    "en": [],
+    "es": [
+     "pelo húmedo"
+    ]
+   }
+  },
+  {
+   "id": "messy_hair",
+   "parent": "hair_style",
+   "kind": "tag",
+   "en": "messy hair",
+   "es": "pelo despeinado",
+   "syn": {
+    "en": [
+     "tousled"
+    ],
+    "es": [
+     "despeinada"
+    ]
+   }
+  },
+  {
+   "id": "hair_texture",
+   "parent": "hair",
+   "kind": "group",
+   "en": "Hair texture",
+   "es": "Textura del pelo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "hair_straight",
+   "parent": "hair_texture",
+   "kind": "tag",
+   "en": "straight hair",
+   "es": "pelo liso",
+   "syn": {
+    "en": [
+     "sleek"
+    ],
+    "es": [
+     "lacio"
+    ]
+   }
+  },
+  {
+   "id": "hair_wavy",
+   "parent": "hair_texture",
+   "kind": "tag",
+   "en": "wavy hair",
+   "es": "pelo ondulado",
+   "syn": {
+    "en": [
+     "waves"
+    ],
+    "es": [
+     "ondas"
+    ]
+   }
+  },
+  {
+   "id": "hair_curly",
+   "parent": "hair_texture",
+   "kind": "tag",
+   "en": "curly hair",
+   "es": "pelo rizado",
+   "syn": {
+    "en": [
+     "curls",
+     "ringlets"
+    ],
+    "es": [
+     "rizos"
+    ]
+   }
+  },
+  {
+   "id": "hair_coily",
+   "parent": "hair_texture",
+   "kind": "tag",
+   "en": "coily hair",
+   "es": "pelo afro",
+   "syn": {
+    "en": [
+     "afro",
+     "kinky"
+    ],
+    "es": [
+     "afro",
+     "muy rizado"
+    ]
+   }
+  },
+  {
+   "id": "body",
+   "parent": null,
+   "kind": "category",
+   "en": "Body",
+   "es": "Cuerpo",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "body_type",
+   "parent": "body",
+   "kind": "group",
+   "en": "Body type",
+   "es": "Tipo de cuerpo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "body_slim",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "slim",
+   "es": "delgada",
+   "syn": {
+    "en": [
+     "slender",
+     "thin",
+     "lean"
+    ],
+    "es": [
+     "esbelta",
+     "fina"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_petite",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "petite",
+   "es": "menuda",
+   "syn": {
+    "en": [
+     "small frame"
+    ],
+    "es": [
+     "pequeña",
+     "complexión pequeña"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_athletic",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "athletic",
+   "es": "atlética",
+   "syn": {
+    "en": [
+     "fit",
+     "toned",
+     "sporty"
+    ],
+    "es": [
+     "tonificada",
+     "deportista"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_muscular",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "muscular",
+   "es": "musculosa",
+   "syn": {
+    "en": [
+     "bodybuilder",
+     "strong"
+    ],
+    "es": [
+     "fuerte",
+     "culturista"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_average",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "average build",
+   "es": "complexión media",
+   "syn": {
+    "en": [
+     "medium build"
+    ],
+    "es": [
+     "normal"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_curvy",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "curvy",
+   "es": "con curvas",
+   "syn": {
+    "en": [
+     "voluptuous",
+     "full-figured"
+    ],
+    "es": [
+     "curvilínea",
+     "voluptuosa"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_hourglass",
+   "parent": "body_curvy",
+   "kind": "tag",
+   "en": "hourglass",
+   "es": "reloj de arena",
+   "syn": {
+    "en": [
+     "hourglass figure",
+     "balanced curves"
+    ],
+    "es": [
+     "figura de reloj de arena",
+     "arena"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_pear",
+   "parent": "body_curvy",
+   "kind": "tag",
+   "en": "pear",
+   "es": "pera",
+   "syn": {
+    "en": [
+     "triangle",
+     "spoon"
+    ],
+    "es": [
+     "triángulo",
+     "forma de pera"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_apple",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "apple",
+   "es": "manzana",
+   "syn": {
+    "en": [
+     "round midsection"
+    ],
+    "es": [
+     "forma de manzana",
+     "ovalada"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_inverted_triangle",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "inverted triangle",
+   "es": "triángulo invertido",
+   "syn": {
+    "en": [
+     "broad shoulders"
+    ],
+    "es": [
+     "hombros anchos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_rectangle",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "rectangle",
+   "es": "rectángulo",
+   "syn": {
+    "en": [
+     "straight figure",
+     "banana"
+    ],
+    "es": [
+     "figura recta",
+     "plátano"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "body_plus_size",
+   "parent": "body_type",
+   "kind": "tag",
+   "en": "plus-size",
+   "es": "talla grande",
+   "syn": {
+    "en": [
+     "plus size",
+     "full figure",
+     "larger body"
+    ],
+    "es": [
+     "tallas grandes",
+     "cuerpo grande"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "height_impression",
+   "parent": "body",
+   "kind": "group",
+   "en": "Height impression",
+   "es": "Impresión de altura",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "height_short",
+   "parent": "height_impression",
+   "kind": "tag",
+   "en": "appears short",
+   "es": "parece baja",
+   "syn": {
+    "en": [
+     "petite height"
+    ],
+    "es": [
+     "baja estatura"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "height_average",
+   "parent": "height_impression",
+   "kind": "tag",
+   "en": "appears average height",
+   "es": "estatura media",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "height_tall",
+   "parent": "height_impression",
+   "kind": "tag",
+   "en": "appears tall",
+   "es": "parece alta",
+   "syn": {
+    "en": [
+     "long legs"
+    ],
+    "es": [
+     "alta",
+     "piernas largas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "bust_impression",
+   "parent": "body",
+   "kind": "group",
+   "en": "Bust impression",
+   "es": "Impresión del pecho",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "bust_small",
+   "parent": "bust_impression",
+   "kind": "tag",
+   "en": "small bust",
+   "es": "pecho pequeño",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "bust_medium",
+   "parent": "bust_impression",
+   "kind": "tag",
+   "en": "medium bust",
+   "es": "pecho mediano",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "bust_large",
+   "parent": "bust_impression",
+   "kind": "tag",
+   "en": "large bust",
+   "es": "pecho grande",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "hip_impression",
+   "parent": "body",
+   "kind": "group",
+   "en": "Hip impression",
+   "es": "Impresión de caderas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "hips_narrow",
+   "parent": "hip_impression",
+   "kind": "tag",
+   "en": "narrow hips",
+   "es": "caderas estrechas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "hips_medium",
+   "parent": "hip_impression",
+   "kind": "tag",
+   "en": "medium hips",
+   "es": "caderas medias",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "hips_wide",
+   "parent": "hip_impression",
+   "kind": "tag",
+   "en": "wide hips",
+   "es": "caderas anchas",
+   "syn": {
+    "en": [
+     "full hips"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "waist_definition",
+   "parent": "body",
+   "kind": "group",
+   "en": "Waist definition",
+   "es": "Definición de cintura",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "waist_very_defined",
+   "parent": "waist_definition",
+   "kind": "tag",
+   "en": "very defined waist",
+   "es": "cintura muy marcada",
+   "syn": {
+    "en": [
+     "very narrow waist",
+     "wasp waist"
+    ],
+    "es": [
+     "cintura de avispa",
+     "cintura muy estrecha"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "waist_defined",
+   "parent": "waist_definition",
+   "kind": "tag",
+   "en": "defined waist",
+   "es": "cintura marcada",
+   "syn": {
+    "en": [
+     "narrow waist"
+    ],
+    "es": [
+     "cintura estrecha",
+     "cintura definida"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "waist_straight",
+   "parent": "waist_definition",
+   "kind": "tag",
+   "en": "straight waist",
+   "es": "cintura recta",
+   "syn": {
+    "en": [
+     "undefined waist"
+    ],
+    "es": [
+     "cintura poco marcada"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "build_scale",
+   "parent": "body",
+   "kind": "group",
+   "en": "Overall build",
+   "es": "Complexión general",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "build_very_slim",
+   "parent": "build_scale",
+   "kind": "tag",
+   "en": "very slim build",
+   "es": "complexión muy delgada",
+   "syn": {
+    "en": [
+     "very thin",
+     "slender"
+    ],
+    "es": [
+     "muy delgada",
+     "esbelta"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "build_slim",
+   "parent": "build_scale",
+   "kind": "tag",
+   "en": "slim build",
+   "es": "complexión delgada",
+   "syn": {
+    "en": [
+     "thin",
+     "lean"
+    ],
+    "es": [
+     "delgada"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "build_average",
+   "parent": "build_scale",
+   "kind": "tag",
+   "en": "average build",
+   "es": "complexión media",
+   "syn": {
+    "en": [
+     "medium build"
+    ],
+    "es": [
+     "normal",
+     "media"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "build_full",
+   "parent": "build_scale",
+   "kind": "tag",
+   "en": "full build",
+   "es": "complexión llena",
+   "syn": {
+    "en": [
+     "fuller figure",
+     "soft build"
+    ],
+    "es": [
+     "rellenita",
+     "llenita"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "build_plus",
+   "parent": "build_scale",
+   "kind": "tag",
+   "en": "plus-size build",
+   "es": "complexión de talla grande",
+   "syn": {
+    "en": [
+     "plus size",
+     "large build"
+    ],
+    "es": [
+     "talla grande",
+     "grande"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "curvature",
+   "parent": "body",
+   "kind": "group",
+   "en": "Curvature",
+   "es": "Curvatura",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "curves_low",
+   "parent": "curvature",
+   "kind": "tag",
+   "en": "low curvature",
+   "es": "pocas curvas",
+   "syn": {
+    "en": [
+     "straight silhouette"
+    ],
+    "es": [
+     "silueta recta"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "curves_medium",
+   "parent": "curvature",
+   "kind": "tag",
+   "en": "moderate curvature",
+   "es": "curvas moderadas",
+   "syn": {
+    "en": [],
+    "es": [
+     "algo de curvas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "curves_high",
+   "parent": "curvature",
+   "kind": "tag",
+   "en": "high curvature",
+   "es": "muchas curvas",
+   "syn": {
+    "en": [
+     "very curvy"
+    ],
+    "es": [
+     "muy curvilínea",
+     "curvilínea"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "muscle_tone",
+   "parent": "body",
+   "kind": "group",
+   "en": "Muscle tone impression",
+   "es": "Impresión de tono muscular",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "tone_soft",
+   "parent": "muscle_tone",
+   "kind": "tag",
+   "en": "soft muscle tone",
+   "es": "tono muscular suave",
+   "syn": {
+    "en": [
+     "soft"
+    ],
+    "es": [
+     "suave"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "tone_toned",
+   "parent": "muscle_tone",
+   "kind": "tag",
+   "en": "toned",
+   "es": "tonificada",
+   "syn": {
+    "en": [
+     "fit",
+     "firm"
+    ],
+    "es": [
+     "en forma",
+     "firme"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "tone_defined",
+   "parent": "muscle_tone",
+   "kind": "tag",
+   "en": "defined muscles",
+   "es": "músculos definidos",
+   "syn": {
+    "en": [
+     "visible abs",
+     "muscular definition"
+    ],
+    "es": [
+     "abdominales marcados",
+     "definida"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "leg_shape",
+   "parent": "body",
+   "kind": "group",
+   "en": "Leg shape",
+   "es": "Forma de las piernas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false,
+   "sensitive": true
+  },
+  {
+   "id": "legs_long",
+   "parent": "leg_shape",
+   "kind": "tag",
+   "en": "long legs",
+   "es": "piernas largas",
+   "syn": {
+    "en": [
+     "leggy"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "legs_short",
+   "parent": "leg_shape",
+   "kind": "tag",
+   "en": "short legs",
+   "es": "piernas cortas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "legs_slender",
+   "parent": "leg_shape",
+   "kind": "tag",
+   "en": "slender legs",
+   "es": "piernas delgadas",
+   "syn": {
+    "en": [
+     "thin legs"
+    ],
+    "es": [
+     "piernas finas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "legs_full",
+   "parent": "leg_shape",
+   "kind": "tag",
+   "en": "full thighs",
+   "es": "muslos llenos",
+   "syn": {
+    "en": [
+     "thick thighs"
+    ],
+    "es": [
+     "muslos anchos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "legs_athletic",
+   "parent": "leg_shape",
+   "kind": "tag",
+   "en": "athletic legs",
+   "es": "piernas atléticas",
+   "syn": {
+    "en": [
+     "muscular legs"
+    ],
+    "es": [
+     "piernas musculosas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_shape",
+   "parent": "body",
+   "kind": "group",
+   "en": "Thigh shape",
+   "es": "Forma de los muslos",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "thigh_slim",
+   "parent": "thigh_shape",
+   "kind": "tag",
+   "en": "slim / straight thighs",
+   "es": "muslos delgados / rectos",
+   "syn": {
+    "en": [
+     "slim thighs",
+     "straight thighs"
+    ],
+    "es": [
+     "muslos finos",
+     "muslos rectos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_athletic",
+   "parent": "thigh_shape",
+   "kind": "tag",
+   "en": "athletic thighs",
+   "es": "muslos atléticos",
+   "syn": {
+    "en": [
+     "muscular thighs"
+    ],
+    "es": [
+     "muslos musculosos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_full",
+   "parent": "thigh_shape",
+   "kind": "tag",
+   "en": "full thighs",
+   "es": "muslos llenos",
+   "syn": {
+    "en": [
+     "thick thighs"
+    ],
+    "es": [
+     "muslos gruesos",
+     "muslos anchos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_curvy",
+   "parent": "thigh_shape",
+   "kind": "tag",
+   "en": "curvy thighs",
+   "es": "muslos curvilíneos",
+   "syn": {
+    "en": [
+     "rounded thighs"
+    ],
+    "es": [
+     "muslos redondeados"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_gap",
+   "parent": "body",
+   "kind": "group",
+   "en": "Inner-thigh gap",
+   "es": "Separación interior de muslos",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "thigh_gap_none",
+   "parent": "thigh_gap",
+   "kind": "tag",
+   "en": "no thigh gap",
+   "es": "sin separación entre muslos",
+   "syn": {
+    "en": [
+     "thighs touch"
+    ],
+    "es": [
+     "muslos juntos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_gap_slight",
+   "parent": "thigh_gap",
+   "kind": "tag",
+   "en": "slight thigh gap",
+   "es": "separación leve entre muslos",
+   "syn": {
+    "en": [],
+    "es": [
+     "hueco leve"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_gap_moderate",
+   "parent": "thigh_gap",
+   "kind": "tag",
+   "en": "moderate thigh gap",
+   "es": "separación moderada entre muslos",
+   "syn": {
+    "en": [
+     "thigh gap"
+    ],
+    "es": [
+     "hueco entre muslos"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "thigh_gap_wide",
+   "parent": "thigh_gap",
+   "kind": "tag",
+   "en": "wide thigh gap",
+   "es": "separación amplia entre muslos",
+   "syn": {
+    "en": [],
+    "es": [
+     "hueco amplio"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "torso_proportion",
+   "parent": "body",
+   "kind": "group",
+   "en": "Torso / leg proportion",
+   "es": "Proporción torso / piernas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "torso_short",
+   "parent": "torso_proportion",
+   "kind": "tag",
+   "en": "short torso, long legs",
+   "es": "torso corto, piernas largas",
+   "syn": {
+    "en": [
+     "long-legged proportion"
+    ],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "torso_balanced",
+   "parent": "torso_proportion",
+   "kind": "tag",
+   "en": "balanced torso and legs",
+   "es": "torso y piernas equilibrados",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "torso_long",
+   "parent": "torso_proportion",
+   "kind": "tag",
+   "en": "long torso, shorter legs",
+   "es": "torso largo, piernas más cortas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "sensitive": true
+  },
+  {
+   "id": "measurability",
+   "parent": "body",
+   "kind": "group",
+   "en": "Body measurement",
+   "es": "Medición corporal",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true,
+   "sensitive": true
+  },
+  {
+   "id": "shape_measured",
+   "parent": "measurability",
+   "kind": "tag",
+   "en": "body shape measured (estimate)",
+   "es": "forma corporal medida (estimación)",
+   "syn": {
+    "en": [
+     "measured"
+    ],
+    "es": [
+     "medida",
+     "medidas estimadas"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "shape_not_measurable",
+   "parent": "measurability",
+   "kind": "tag",
+   "en": "body shape not measurable",
+   "es": "forma corporal no medible",
+   "syn": {
+    "en": [],
+    "es": [
+     "no medible"
+    ]
+   },
+   "sensitive": true
+  },
+  {
+   "id": "skin_tone",
+   "parent": "body",
+   "kind": "group",
+   "en": "Skin tone",
+   "es": "Tono de piel",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "skin_1",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "very light skin",
+   "es": "piel muy clara",
+   "syn": {
+    "en": [
+     "fair",
+     "porcelain"
+    ],
+    "es": [
+     "muy blanca",
+     "porcelana"
+    ]
+   }
+  },
+  {
+   "id": "skin_2",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "light skin",
+   "es": "piel clara",
+   "syn": {
+    "en": [],
+    "es": [
+     "clara"
+    ]
+   }
+  },
+  {
+   "id": "skin_3",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "light-medium skin",
+   "es": "piel media clara",
+   "syn": {
+    "en": [
+     "olive"
+    ],
+    "es": [
+     "oliva"
+    ]
+   }
+  },
+  {
+   "id": "skin_4",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "medium skin",
+   "es": "piel media",
+   "syn": {
+    "en": [
+     "tan",
+     "tanned"
+    ],
+    "es": [
+     "morena",
+     "bronceada"
+    ]
+   }
+  },
+  {
+   "id": "skin_5",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "medium-deep skin",
+   "es": "piel media oscura",
+   "syn": {
+    "en": [
+     "brown skin"
+    ],
+    "es": [
+     "piel morena oscura"
+    ]
+   }
+  },
+  {
+   "id": "skin_6",
+   "parent": "skin_tone",
+   "kind": "tag",
+   "en": "deep skin",
+   "es": "piel oscura",
+   "syn": {
+    "en": [
+     "dark skin"
+    ],
+    "es": [
+     "muy oscura"
+    ]
+   }
+  },
+  {
+   "id": "age_band",
+   "parent": "body",
+   "kind": "group",
+   "en": "Apparent age (estimated)",
+   "es": "Edad aparente (estimada)",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "age_18_24",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 18–24",
+   "es": "edad aparente 18–24",
+   "syn": {
+    "en": [
+     "young adult"
+    ],
+    "es": [
+     "joven adulta",
+     "adulta joven"
+    ]
+   }
+  },
+  {
+   "id": "age_25_34",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 25–34",
+   "es": "edad aparente 25–34",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "age_35_44",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 35–44",
+   "es": "edad aparente 35–44",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "age_45_54",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 45–54",
+   "es": "edad aparente 45–54",
+   "syn": {
+    "en": [
+     "middle-aged"
+    ],
+    "es": [
+     "mediana edad"
+    ]
+   }
+  },
+  {
+   "id": "age_55_64",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 55–64",
+   "es": "edad aparente 55–64",
+   "syn": {
+    "en": [
+     "mature"
+    ],
+    "es": [
+     "madura"
+    ]
+   }
+  },
+  {
+   "id": "age_65_plus",
+   "parent": "age_band",
+   "kind": "tag",
+   "en": "apparent age 65+",
+   "es": "edad aparente 65+",
+   "syn": {
+    "en": [
+     "older adult",
+     "senior"
+    ],
+    "es": [
+     "mayor"
+    ]
+   }
+  },
+  {
+   "id": "body_marks",
+   "parent": "body",
+   "kind": "group",
+   "en": "Tattoos & piercings",
+   "es": "Tatuajes y piercings",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "tattoo",
+   "parent": "body_marks",
+   "kind": "tag",
+   "en": "tattoo",
+   "es": "tatuaje",
+   "syn": {
+    "en": [
+     "tattooed",
+     "ink"
+    ],
+    "es": [
+     "tatuada",
+     "tattoo"
+    ]
+   }
+  },
+  {
+   "id": "tattoo_arm",
+   "parent": "tattoo",
+   "kind": "tag",
+   "en": "arm tattoo",
+   "es": "tatuaje en el brazo",
+   "syn": {
+    "en": [
+     "sleeve tattoo"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "tattoo_leg",
+   "parent": "tattoo",
+   "kind": "tag",
+   "en": "leg tattoo",
+   "es": "tatuaje en la pierna",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "tattoo_back",
+   "parent": "tattoo",
+   "kind": "tag",
+   "en": "back tattoo",
+   "es": "tatuaje en la espalda",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "tattoo_small",
+   "parent": "tattoo",
+   "kind": "tag",
+   "en": "small tattoo",
+   "es": "tatuaje pequeño",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "piercing",
+   "parent": "body_marks",
+   "kind": "tag",
+   "en": "piercing",
+   "es": "piercing",
+   "syn": {
+    "en": [
+     "pierced"
+    ],
+    "es": [
+     "pendiente"
+    ]
+   }
+  },
+  {
+   "id": "piercing_nose",
+   "parent": "piercing",
+   "kind": "tag",
+   "en": "nose piercing",
+   "es": "piercing en la nariz",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "piercing_navel",
+   "parent": "piercing",
+   "kind": "tag",
+   "en": "navel piercing",
+   "es": "piercing en el ombligo",
+   "syn": {
+    "en": [
+     "belly piercing"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "piercing_ear",
+   "parent": "piercing",
+   "kind": "tag",
+   "en": "ear piercings",
+   "es": "piercings en la oreja",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "freckles",
+   "parent": "body_marks",
+   "kind": "tag",
+   "en": "freckles",
+   "es": "pecas",
+   "syn": {
+    "en": [],
+    "es": [
+     "pecosa"
+    ]
+   }
+  },
+  {
+   "id": "beauty_mark",
+   "parent": "body_marks",
+   "kind": "tag",
+   "en": "beauty mark",
+   "es": "lunar",
+   "syn": {
+    "en": [
+     "mole"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "face",
+   "parent": null,
+   "kind": "category",
+   "en": "Face & expression",
+   "es": "Cara y expresión",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "expression",
+   "parent": "face",
+   "kind": "group",
+   "en": "Expression",
+   "es": "Expresión",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "smile",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "smiling",
+   "es": "sonriendo",
+   "syn": {
+    "en": [
+     "smile",
+     "grin"
+    ],
+    "es": [
+     "sonrisa",
+     "sonriente"
+    ]
+   }
+  },
+  {
+   "id": "laughing",
+   "parent": "smile",
+   "kind": "tag",
+   "en": "laughing",
+   "es": "riendo",
+   "syn": {
+    "en": [],
+    "es": [
+     "carcajada"
+    ]
+   }
+  },
+  {
+   "id": "neutral_expr",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "neutral expression",
+   "es": "expresión neutra",
+   "syn": {
+    "en": [
+     "serious"
+    ],
+    "es": [
+     "seria"
+    ]
+   }
+  },
+  {
+   "id": "pensive",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "pensive",
+   "es": "pensativa",
+   "syn": {
+    "en": [
+     "thoughtful",
+     "dreamy"
+    ],
+    "es": [
+     "soñadora"
+    ]
+   }
+  },
+  {
+   "id": "confident",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "confident",
+   "es": "segura",
+   "syn": {
+    "en": [
+     "fierce"
+    ],
+    "es": [
+     "desafiante"
+    ]
+   }
+  },
+  {
+   "id": "playful",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "playful",
+   "es": "juguetona",
+   "syn": {
+    "en": [
+     "wink",
+     "tongue out"
+    ],
+    "es": [
+     "guiño",
+     "pícara"
+    ]
+   }
+  },
+  {
+   "id": "sad",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "sad",
+   "es": "triste",
+   "syn": {
+    "en": [
+     "melancholic"
+    ],
+    "es": [
+     "melancólica"
+    ]
+   }
+  },
+  {
+   "id": "surprised",
+   "parent": "expression",
+   "kind": "tag",
+   "en": "surprised",
+   "es": "sorprendida",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "gaze",
+   "parent": "face",
+   "kind": "group",
+   "en": "Gaze",
+   "es": "Mirada",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "gaze_camera",
+   "parent": "gaze",
+   "kind": "tag",
+   "en": "looking at camera",
+   "es": "mirando a cámara",
+   "syn": {
+    "en": [
+     "eye contact"
+    ],
+    "es": [
+     "mirando al objetivo"
+    ]
+   }
+  },
+  {
+   "id": "gaze_away",
+   "parent": "gaze",
+   "kind": "tag",
+   "en": "looking away",
+   "es": "mirando a otro lado",
+   "syn": {
+    "en": [
+     "looking aside"
+    ],
+    "es": [
+     "mirada perdida"
+    ]
+   }
+  },
+  {
+   "id": "gaze_down",
+   "parent": "gaze",
+   "kind": "tag",
+   "en": "looking down",
+   "es": "mirando abajo",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "gaze_up",
+   "parent": "gaze",
+   "kind": "tag",
+   "en": "looking up",
+   "es": "mirando arriba",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "eyes_closed",
+   "parent": "gaze",
+   "kind": "tag",
+   "en": "eyes closed",
+   "es": "ojos cerrados",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "makeup",
+   "parent": "face",
+   "kind": "group",
+   "en": "Makeup",
+   "es": "Maquillaje",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "makeup_none",
+   "parent": "makeup",
+   "kind": "tag",
+   "en": "no makeup",
+   "es": "sin maquillaje",
+   "syn": {
+    "en": [
+     "natural face"
+    ],
+    "es": [
+     "cara lavada"
+    ]
+   }
+  },
+  {
+   "id": "makeup_natural",
+   "parent": "makeup",
+   "kind": "tag",
+   "en": "natural makeup",
+   "es": "maquillaje natural",
+   "syn": {
+    "en": [
+     "light makeup"
+    ],
+    "es": [
+     "maquillaje suave"
+    ]
+   }
+  },
+  {
+   "id": "makeup_glam",
+   "parent": "makeup",
+   "kind": "tag",
+   "en": "glamour makeup",
+   "es": "maquillaje glamuroso",
+   "syn": {
+    "en": [
+     "full makeup",
+     "smoky eyes"
+    ],
+    "es": [
+     "maquillaje intenso",
+     "ojos ahumados"
+    ]
+   }
+  },
+  {
+   "id": "makeup_artistic",
+   "parent": "makeup",
+   "kind": "tag",
+   "en": "artistic makeup",
+   "es": "maquillaje artístico",
+   "syn": {
+    "en": [
+     "face paint",
+     "editorial"
+    ],
+    "es": [
+     "pintura facial"
+    ]
+   }
+  },
+  {
+   "id": "lips",
+   "parent": "face",
+   "kind": "group",
+   "en": "Lip colour",
+   "es": "Color de labios",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "lips_red",
+   "parent": "lips",
+   "kind": "tag",
+   "en": "red lipstick",
+   "es": "labios rojos",
+   "syn": {
+    "en": [],
+    "es": [
+     "pintalabios rojo"
+    ]
+   }
+  },
+  {
+   "id": "lips_nude",
+   "parent": "lips",
+   "kind": "tag",
+   "en": "nude lipstick",
+   "es": "labios nude",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "lips_pink",
+   "parent": "lips",
+   "kind": "tag",
+   "en": "pink lipstick",
+   "es": "labios rosas",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "lips_dark",
+   "parent": "lips",
+   "kind": "tag",
+   "en": "dark lipstick",
+   "es": "labios oscuros",
+   "syn": {
+    "en": [
+     "berry",
+     "plum"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "eyewear",
+   "parent": "face",
+   "kind": "group",
+   "en": "Eyewear",
+   "es": "Gafas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "glasses",
+   "parent": "eyewear",
+   "kind": "tag",
+   "en": "glasses",
+   "es": "gafas",
+   "syn": {
+    "en": [
+     "eyeglasses",
+     "spectacles"
+    ],
+    "es": [
+     "anteojos",
+     "lentes"
+    ]
+   }
+  },
+  {
+   "id": "sunglasses",
+   "parent": "eyewear",
+   "kind": "tag",
+   "en": "sunglasses",
+   "es": "gafas de sol",
+   "syn": {
+    "en": [
+     "shades"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "no_glasses",
+   "parent": "eyewear",
+   "kind": "tag",
+   "en": "no glasses",
+   "es": "sin gafas",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "setting",
+   "parent": null,
+   "kind": "category",
+   "en": "Setting",
+   "es": "Escenario",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "place_type",
+   "parent": "setting",
+   "kind": "group",
+   "en": "Indoor / outdoor",
+   "es": "Interior / exterior",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "indoor",
+   "parent": "place_type",
+   "kind": "tag",
+   "en": "indoor",
+   "es": "interior",
+   "syn": {
+    "en": [
+     "inside"
+    ],
+    "es": [
+     "dentro"
+    ]
+   }
+  },
+  {
+   "id": "outdoor",
+   "parent": "place_type",
+   "kind": "tag",
+   "en": "outdoor",
+   "es": "exterior",
+   "syn": {
+    "en": [
+     "outside"
+    ],
+    "es": [
+     "fuera",
+     "al aire libre"
+    ]
+   }
+  },
+  {
+   "id": "location",
+   "parent": "setting",
+   "kind": "group",
+   "en": "Location",
+   "es": "Lugar",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "bedroom",
+   "parent": "location",
+   "kind": "tag",
+   "en": "bedroom",
+   "es": "dormitorio",
+   "syn": {
+    "en": [
+     "bed"
+    ],
+    "es": [
+     "habitación",
+     "cama"
+    ]
+   }
+  },
+  {
+   "id": "bathroom",
+   "parent": "location",
+   "kind": "tag",
+   "en": "bathroom",
+   "es": "baño",
+   "syn": {
+    "en": [
+     "bathtub",
+     "shower"
+    ],
+    "es": [
+     "bañera",
+     "ducha"
+    ]
+   }
+  },
+  {
+   "id": "living_room",
+   "parent": "location",
+   "kind": "tag",
+   "en": "living room",
+   "es": "salón",
+   "syn": {
+    "en": [
+     "sofa",
+     "couch"
+    ],
+    "es": [
+     "sofá"
+    ]
+   }
+  },
+  {
+   "id": "kitchen",
+   "parent": "location",
+   "kind": "tag",
+   "en": "kitchen",
+   "es": "cocina",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "studio",
+   "parent": "location",
+   "kind": "tag",
+   "en": "studio",
+   "es": "estudio",
+   "syn": {
+    "en": [
+     "photo studio",
+     "backdrop"
+    ],
+    "es": [
+     "plató"
+    ]
+   }
+  },
+  {
+   "id": "office",
+   "parent": "location",
+   "kind": "tag",
+   "en": "office",
+   "es": "oficina",
+   "syn": {
+    "en": [],
+    "es": [
+     "despacho"
+    ]
+   }
+  },
+  {
+   "id": "gym",
+   "parent": "location",
+   "kind": "tag",
+   "en": "gym",
+   "es": "gimnasio",
+   "syn": {
+    "en": [
+     "fitness"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "beach",
+   "parent": "location",
+   "kind": "tag",
+   "en": "beach",
+   "es": "playa",
+   "syn": {
+    "en": [
+     "seaside",
+     "sand",
+     "shore"
+    ],
+    "es": [
+     "costa",
+     "orilla"
+    ]
+   }
+  },
+  {
+   "id": "pool",
+   "parent": "location",
+   "kind": "tag",
+   "en": "pool",
+   "es": "piscina",
+   "syn": {
+    "en": [
+     "swimming pool"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "street",
+   "parent": "location",
+   "kind": "tag",
+   "en": "street",
+   "es": "calle",
+   "syn": {
+    "en": [
+     "urban",
+     "city"
+    ],
+    "es": [
+     "ciudad",
+     "urbano"
+    ]
+   }
+  },
+  {
+   "id": "nature",
+   "parent": "location",
+   "kind": "tag",
+   "en": "nature",
+   "es": "naturaleza",
+   "syn": {
+    "en": [
+     "forest",
+     "field",
+     "park",
+     "garden"
+    ],
+    "es": [
+     "bosque",
+     "campo",
+     "parque",
+     "jardín"
+    ]
+   }
+  },
+  {
+   "id": "mountain",
+   "parent": "location",
+   "kind": "tag",
+   "en": "mountains",
+   "es": "montaña",
+   "syn": {
+    "en": [],
+    "es": [
+     "montañas"
+    ]
+   }
+  },
+  {
+   "id": "car",
+   "parent": "location",
+   "kind": "tag",
+   "en": "car",
+   "es": "coche",
+   "syn": {
+    "en": [
+     "vehicle"
+    ],
+    "es": [
+     "auto",
+     "vehículo"
+    ]
+   }
+  },
+  {
+   "id": "restaurant_bar",
+   "parent": "location",
+   "kind": "tag",
+   "en": "restaurant / bar",
+   "es": "restaurante / bar",
+   "syn": {
+    "en": [
+     "cafe",
+     "club"
+    ],
+    "es": [
+     "cafetería",
+     "discoteca"
+    ]
+   }
+  },
+  {
+   "id": "hotel",
+   "parent": "location",
+   "kind": "tag",
+   "en": "hotel room",
+   "es": "habitación de hotel",
+   "syn": {
+    "en": [],
+    "es": [
+     "hotel"
+    ]
+   }
+  },
+  {
+   "id": "lighting",
+   "parent": "setting",
+   "kind": "group",
+   "en": "Lighting",
+   "es": "Iluminación",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "natural_light",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "natural light",
+   "es": "luz natural",
+   "syn": {
+    "en": [
+     "daylight",
+     "window light"
+    ],
+    "es": [
+     "luz de día",
+     "luz de ventana"
+    ]
+   }
+  },
+  {
+   "id": "golden_hour",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "golden hour",
+   "es": "hora dorada",
+   "syn": {
+    "en": [
+     "sunset",
+     "sunrise"
+    ],
+    "es": [
+     "atardecer",
+     "amanecer"
+    ]
+   }
+  },
+  {
+   "id": "studio_light",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "studio lighting",
+   "es": "luz de estudio",
+   "syn": {
+    "en": [
+     "softbox",
+     "flash"
+    ],
+    "es": []
+   }
+  },
+  {
+   "id": "low_key",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "low key",
+   "es": "clave baja",
+   "syn": {
+    "en": [
+     "dark",
+     "moody"
+    ],
+    "es": [
+     "oscuro",
+     "dramático"
+    ]
+   }
+  },
+  {
+   "id": "high_key",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "high key",
+   "es": "clave alta",
+   "syn": {
+    "en": [
+     "bright",
+     "airy"
+    ],
+    "es": [
+     "luminoso"
+    ]
+   }
+  },
+  {
+   "id": "backlit",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "backlit",
+   "es": "contraluz",
+   "syn": {
+    "en": [
+     "rim light",
+     "silhouette"
+    ],
+    "es": [
+     "silueta"
+    ]
+   }
+  },
+  {
+   "id": "neon",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "neon light",
+   "es": "luz de neón",
+   "syn": {
+    "en": [
+     "colored lights"
+    ],
+    "es": [
+     "luces de colores"
+    ]
+   }
+  },
+  {
+   "id": "night",
+   "parent": "lighting",
+   "kind": "tag",
+   "en": "night",
+   "es": "noche",
+   "syn": {
+    "en": [],
+    "es": [
+     "nocturna"
+    ]
+   }
+  },
+  {
+   "id": "background",
+   "parent": "setting",
+   "kind": "group",
+   "en": "Background",
+   "es": "Fondo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "bg_plain",
+   "parent": "background",
+   "kind": "tag",
+   "en": "plain background",
+   "es": "fondo liso",
+   "syn": {
+    "en": [
+     "seamless",
+     "solid background"
+    ],
+    "es": [
+     "fondo de un color"
+    ]
+   }
+  },
+  {
+   "id": "bg_white",
+   "parent": "background",
+   "kind": "tag",
+   "en": "white background",
+   "es": "fondo blanco",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "bg_dark",
+   "parent": "background",
+   "kind": "tag",
+   "en": "dark background",
+   "es": "fondo oscuro",
+   "syn": {
+    "en": [
+     "black background"
+    ],
+    "es": [
+     "fondo negro"
+    ]
+   }
+  },
+  {
+   "id": "bg_blurred",
+   "parent": "background",
+   "kind": "tag",
+   "en": "blurred background",
+   "es": "fondo desenfocado",
+   "syn": {
+    "en": [
+     "bokeh"
+    ],
+    "es": [
+     "bokeh"
+    ]
+   }
+  },
+  {
+   "id": "bg_busy",
+   "parent": "background",
+   "kind": "tag",
+   "en": "detailed background",
+   "es": "fondo detallado",
+   "syn": {
+    "en": [
+     "busy background"
+    ],
+    "es": [
+     "fondo cargado"
+    ]
+   }
+  },
+  {
+   "id": "style",
+   "parent": null,
+   "kind": "category",
+   "en": "Photo style",
+   "es": "Estilo de foto",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "photo_style",
+   "parent": "style",
+   "kind": "group",
+   "en": "Photo style",
+   "es": "Estilo",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "style_studio",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "studio photo",
+   "es": "foto de estudio",
+   "syn": {
+    "en": [
+     "professional",
+     "editorial"
+    ],
+    "es": [
+     "profesional"
+    ]
+   }
+  },
+  {
+   "id": "style_selfie",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "selfie",
+   "es": "selfi",
+   "syn": {
+    "en": [
+     "self portrait"
+    ],
+    "es": [
+     "autorretrato",
+     "selfie"
+    ]
+   }
+  },
+  {
+   "id": "mirror_selfie",
+   "parent": "style_selfie",
+   "kind": "tag",
+   "en": "mirror selfie",
+   "es": "selfi en el espejo",
+   "syn": {
+    "en": [
+     "mirror"
+    ],
+    "es": [
+     "espejo"
+    ]
+   }
+  },
+  {
+   "id": "style_candid",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "candid",
+   "es": "espontánea",
+   "syn": {
+    "en": [
+     "snapshot",
+     "amateur"
+    ],
+    "es": [
+     "robado",
+     "casual"
+    ]
+   }
+  },
+  {
+   "id": "style_fashion",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "fashion photo",
+   "es": "foto de moda",
+   "syn": {
+    "en": [
+     "catalog",
+     "lookbook"
+    ],
+    "es": [
+     "catálogo"
+    ]
+   }
+  },
+  {
+   "id": "style_glamour",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "glamour photo",
+   "es": "foto glamour",
+   "syn": {
+    "en": [
+     "boudoir"
+    ],
+    "es": [
+     "boudoir"
+    ]
+   }
+  },
+  {
+   "id": "style_fitness",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "fitness photo",
+   "es": "foto fitness",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "style_artistic",
+   "parent": "photo_style",
+   "kind": "tag",
+   "en": "artistic / fine art",
+   "es": "artística",
+   "syn": {
+    "en": [
+     "fine art"
+    ],
+    "es": [
+     "arte"
+    ]
+   }
+  },
+  {
+   "id": "medium",
+   "parent": "style",
+   "kind": "group",
+   "en": "Medium",
+   "es": "Medio",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "photo_real",
+   "parent": "medium",
+   "kind": "tag",
+   "en": "photograph",
+   "es": "fotografía",
+   "syn": {
+    "en": [
+     "photo",
+     "realistic"
+    ],
+    "es": [
+     "foto",
+     "realista"
+    ]
+   }
+  },
+  {
+   "id": "ai_generated_look",
+   "parent": "medium",
+   "kind": "tag",
+   "en": "AI-generated look",
+   "es": "aspecto de IA",
+   "syn": {
+    "en": [
+     "ai art",
+     "render",
+     "cgi"
+    ],
+    "es": [
+     "generada por IA",
+     "render"
+    ]
+   }
+  },
+  {
+   "id": "illustration",
+   "parent": "medium",
+   "kind": "tag",
+   "en": "illustration",
+   "es": "ilustración",
+   "syn": {
+    "en": [
+     "drawing",
+     "anime"
+    ],
+    "es": [
+     "dibujo"
+    ]
+   }
+  },
+  {
+   "id": "color_grade",
+   "parent": "style",
+   "kind": "group",
+   "en": "Colour",
+   "es": "Color",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "full_color",
+   "parent": "color_grade",
+   "kind": "tag",
+   "en": "colour",
+   "es": "color",
+   "syn": {
+    "en": [],
+    "es": [
+     "a color"
+    ]
+   }
+  },
+  {
+   "id": "black_white",
+   "parent": "color_grade",
+   "kind": "tag",
+   "en": "black and white",
+   "es": "blanco y negro",
+   "syn": {
+    "en": [
+     "monochrome",
+     "b&w"
+    ],
+    "es": [
+     "monocromo",
+     "b/n"
+    ]
+   }
+  },
+  {
+   "id": "warm_tone",
+   "parent": "color_grade",
+   "kind": "tag",
+   "en": "warm tones",
+   "es": "tonos cálidos",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "cool_tone",
+   "parent": "color_grade",
+   "kind": "tag",
+   "en": "cool tones",
+   "es": "tonos fríos",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "people_count",
+   "parent": "style",
+   "kind": "group",
+   "en": "People",
+   "es": "Personas",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": true
+  },
+  {
+   "id": "solo",
+   "parent": "people_count",
+   "kind": "tag",
+   "en": "one person",
+   "es": "una persona",
+   "syn": {
+    "en": [
+     "solo",
+     "single"
+    ],
+    "es": [
+     "sola"
+    ]
+   }
+  },
+  {
+   "id": "two_people",
+   "parent": "people_count",
+   "kind": "tag",
+   "en": "two people",
+   "es": "dos personas",
+   "syn": {
+    "en": [
+     "couple",
+     "pair"
+    ],
+    "es": [
+     "pareja"
+    ]
+   }
+  },
+  {
+   "id": "group",
+   "parent": "people_count",
+   "kind": "tag",
+   "en": "group",
+   "es": "grupo",
+   "syn": {
+    "en": [
+     "three or more"
+    ],
+    "es": [
+     "varias personas"
+    ]
+   }
+  },
+  {
+   "id": "no_people",
+   "parent": "people_count",
+   "kind": "tag",
+   "en": "no people",
+   "es": "sin personas",
+   "syn": {
+    "en": [
+     "empty"
+    ],
+    "es": [
+     "vacío"
+    ]
+   }
+  },
+  {
+   "id": "review",
+   "parent": null,
+   "kind": "category",
+   "en": "Review",
+   "es": "Revisión",
+   "syn": {
+    "en": [],
+    "es": []
+   }
+  },
+  {
+   "id": "safety",
+   "parent": "review",
+   "kind": "group",
+   "en": "Safety",
+   "es": "Seguridad",
+   "syn": {
+    "en": [],
+    "es": []
+   },
+   "exclusive": false
+  },
+  {
+   "id": "appears_minor",
+   "parent": "safety",
+   "kind": "tag",
+   "en": "may be under 18 (review)",
+   "es": "podría ser menor (revisar)",
+   "syn": {
+    "en": [
+     "minor review",
+     "underage check"
+    ],
+    "es": [
+     "revisar edad",
+     "posible menor"
+    ]
+   }
+  },
+  {
+   "id": "needs_review",
+   "parent": "safety",
+   "kind": "tag",
+   "en": "needs review",
+   "es": "pendiente de revisar",
+   "syn": {
+    "en": [
+     "uncertain"
+    ],
+    "es": [
+     "dudosa"
+    ]
+   }
+  },
+  {
+   "id": "explicit_content",
+   "parent": "safety",
+   "kind": "tag",
+   "en": "explicit content (review)",
+   "es": "contenido explícito (revisar)",
+   "syn": {
+    "en": [
+     "explicit"
+    ],
+    "es": [
+     "explícito"
+    ]
+   }
+  }
+ ]
+}

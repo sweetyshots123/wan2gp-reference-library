@@ -1,0 +1,9 @@
+# reflib_core: the library itself needs only Pillow (and ffmpeg/ffprobe on PATH for videos).
+Pillow>=9.0
+# --- auto-tagger, local models (install what the chosen backend needs) ---
+# WD-EVA02 tagger:            onnxruntime-gpu (or onnxruntime), numpy, huggingface_hub
+# Qwen2.5-VL / body shape:    torch (CUDA), transformers>=4.49 (WanGP ships 4.54.0), accelerate, huggingface_hub
+#                             (body shape: ViTPose via transformers>=4.48; BiRefNet remote code needs timm, torchvision, einops, kornia)
+# Jev:                        jevimage==0.1.20            (client only: talks to `jevimage serve`, needs just Pillow)
+#                             jevimage[local]==0.1.20     (in-process: needs transformers>=4.56, so NOT inside WanGP's venv)
+# cloud backends use the standard library only (urllib); keys from env vars or settings.
