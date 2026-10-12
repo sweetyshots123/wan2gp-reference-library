@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.5.7 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.5.8 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -104,6 +104,10 @@ Provider policies (read them before sending nude photos):
 - Right-click a card (or use the preview button) for **Show in folder**. It only works when the browser runs on the WanGP PC.
 - **My tags** is a tree: create your own top-level categories, sub-categories at any depth (also inside built-in ones) and tags at any level. Drag to move nodes, and every change can be undone.
 - Images where a model reports explicit sexual activity get a single **Review › explicit content** flag and no body-shape measurements, so you can find and remove them.
+
+## Export / import your taxonomy (1.5.8)
+
+In **Auto-tag settings › My tags**: **Export taxonomy** downloads the full taxonomy (built-in + yours, bilingual, with synonyms) or only yours, as JSON or CSV (`path, es, en, synonyms`). **Import…** takes a JSON export (or a `user_taxonomy.json`) and either merges it or replaces your own nodes. Every node passes the same checks and blocklist as the editor; rejected ones are listed with the reason. You confirm the counts first, and you can undo. Your tags are stored in `user_taxonomy.json` in the plugin folder (`plugins/wan2gp-reference-library/`).
 
 ## Filters, autocomplete and your own tags (1.5.1)
 

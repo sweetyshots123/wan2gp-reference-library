@@ -655,7 +655,7 @@
             ut_title: "My tags", ut_hint: "Your own groups and tags, saved in user_taxonomy.json (kept across updates).", ut_parent: "Under",
             ut_kind_tag: "Tag", ut_kind_group: "Group", ut_es: "Spanish name", ut_en: "English name", ut_syn_es: "Synonyms ES (comma)", ut_syn_en: "Synonyms EN (comma)",
             ut_excl: "One choice per image (exclusive)", ut_create: "Create", ut_save: "Save", ut_delete: "Delete", ut_undo: "Undo", ut_none: "No custom tags yet.",
-            ut_created: "Created \"{name}\"", ut_saved: "Saved", ut_deleted: "Deleted \"{name}\"", ut_undone: "Undone",
+            utx_export: "Export taxonomy", utx_full_json: "Full (built-in + mine) · JSON", utx_mine_json: "Only mine · JSON", utx_full_csv: "Full · CSV", utx_mine_csv: "Only mine · CSV", utx_import: "Import…", utx_merge: "Merge", utx_replace: "Replace mine", utx_exported: "Exported {file}", utx_toobig: "File too large (max 2 MB).", utx_badjson: "Not a JSON file.", utx_confirm: "Import taxonomy ({mode}): {added} new, {updated} updated{removed}{rejected}. Continue?", utx_removed: ", {n} of yours removed", utx_rejected: ", {n} rejected", utx_nothing: "Nothing to import{rejected}.", utx_done: "Imported: {added} new, {updated} updated{removed}{rejected}", utx_rej_list: "Rejected:", utx_ok: "Import", ut_created: "Created \"{name}\"", ut_saved: "Saved", ut_deleted: "Deleted \"{name}\"", ut_undone: "Undone",
             ut_newcat: "New category", ut_sub: "Sub", ut_newsub: "New sub-category here", ut_newtag: "New tag here", ut_rename: "Rename / edit",
             ut_move: "Move (or drag it)", ut_one: "one", ut_toplevel: "top level", ut_editing: "Editing", ut_new_category: "New category",
             ut_new_group: "New sub-category", ut_new_tag: "New tag", ut_move_hint: "Click the new place for \"{name}\" (or drag it there)",
@@ -740,7 +740,7 @@
             ut_title: "Mis etiquetas", ut_hint: "Tus propios grupos y etiquetas, guardados en user_taxonomy.json (se conservan al actualizar).", ut_parent: "Dentro de",
             ut_kind_tag: "Etiqueta", ut_kind_group: "Grupo", ut_es: "Nombre en español", ut_en: "Nombre en inglés", ut_syn_es: "Sinónimos ES (coma)", ut_syn_en: "Sinónimos EN (coma)",
             ut_excl: "Una sola opción por imagen (exclusivo)", ut_create: "Crear", ut_save: "Guardar", ut_delete: "Borrar", ut_undo: "Deshacer", ut_none: "Aún no hay etiquetas propias.",
-            ut_created: "Creada «{name}»", ut_saved: "Guardado", ut_deleted: "Borrada «{name}»", ut_undone: "Deshecho",
+            utx_export: "Exportar taxonomía", utx_full_json: "Completa (de serie + mías) · JSON", utx_mine_json: "Solo mías · JSON", utx_full_csv: "Completa · CSV", utx_mine_csv: "Solo mías · CSV", utx_import: "Importar…", utx_merge: "Combinar", utx_replace: "Reemplazar las mías", utx_exported: "Exportado {file}", utx_toobig: "Archivo demasiado grande (máx. 2 MB).", utx_badjson: "No es un archivo JSON.", utx_confirm: "Importar taxonomía ({mode}): {added} nuevas, {updated} actualizadas{removed}{rejected}. ¿Continuar?", utx_removed: ", {n} tuyas eliminadas", utx_rejected: ", {n} rechazadas", utx_nothing: "Nada que importar{rejected}.", utx_done: "Importado: {added} nuevas, {updated} actualizadas{removed}{rejected}", utx_rej_list: "Rechazadas:", utx_ok: "Importar", ut_created: "Creada «{name}»", ut_saved: "Guardado", ut_deleted: "Borrada «{name}»", ut_undone: "Deshecho",
             ut_newcat: "Nueva categoría", ut_sub: "Subcategoría", ut_newsub: "Nueva subcategoría aquí", ut_newtag: "Nueva etiqueta aquí", ut_rename: "Renombrar / editar",
             ut_move: "Mover (o arrástrala)", ut_one: "una", ut_toplevel: "nivel superior", ut_editing: "Editando", ut_new_category: "Nueva categoría",
             ut_new_group: "Nueva subcategoría", ut_new_tag: "Nueva etiqueta", ut_move_hint: "Pulsa el nuevo lugar para «{name}» (o arrástrala allí)",
@@ -1659,7 +1659,9 @@
         const mv = ut.move ? `<div class="reflib-ib-utmove">${esc(it("ut_move_hint", { name: tlabel(ut.move) }))} <button type="button" data-act="atutmovecancel">${esc(it("cancel_btn"))}</button></div>` : "";
         return `<div class="reflib-ib-utax"><b>${esc(it("ut_title"))}</b> <span class="reflib-ib-muted">${esc(it("ut_hint"))}</span>
             <div class="reflib-ib-uttop"><button type="button" class="reflib-ib-btn" data-act="atutnew" data-parent="" data-kind="category">+ ${esc(it("ut_newcat"))}</button>
-              <button type="button" class="reflib-ib-btn" data-act="atutundo">↶ ${esc(it("ut_undo"))}</button></div>
+              <button type="button" class="reflib-ib-btn" data-act="atutundo">↶ ${esc(it("ut_undo"))}</button>
+              <span class="reflib-ib-utio"><select data-utx="what" aria-label="${esc(it("utx_export"))}">${["full_json", "mine_json", "full_csv", "mine_csv"].map(k => `<option value="${k}">${esc(it("utx_" + k))}</option>`).join("")}</select><button type="button" class="reflib-ib-btn" data-act="atutexport">⤓ ${esc(it("utx_export"))}</button></span>
+              <span class="reflib-ib-utio"><select data-utx="mode" aria-label="${esc(it("utx_import"))}"><option value="merge">${esc(it("utx_merge"))}</option><option value="replace">${esc(it("utx_replace"))}</option></select><button type="button" class="reflib-ib-btn" data-act="atutimport">⤒ ${esc(it("utx_import"))}</button></span></div>
             ${mv}${form}<div class="reflib-ib-uterr" role="alert"></div>
             <div class="reflib-ib-uttree">${rows.join("")}</div></div>`;
     }
@@ -1674,6 +1676,50 @@
             if (ilib.preview) loadAutoImage(ilib.preview);
             return true;
         }).catch(() => false);
+    }
+    // ---- 1.5.8 export / import of the taxonomy (download through the browser; import validated server-side, undoable)
+    function utDownload(name, text, mime) {
+        const url = URL.createObjectURL(new Blob([text], { type: mime }));
+        const a = document.createElement("a"); a.href = url; a.download = name; a.style.display = "none";
+        document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+    }
+    function utExport(what) {
+        const [scope, fmt] = String(what || "full_json").split("_");
+        sendIlib({ action: "at_tax_export", scope, fmt }).then(r => {
+            if (!r || !r.ok) { toast((r && r.error) || "error", "error"); return; }
+            const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+            const file = `reflib-taxonomy-${scope}-${stamp}.${r.fmt}`;
+            utDownload(file, r.fmt === "csv" ? r.data : JSON.stringify(r.data, null, 1), r.fmt === "csv" ? "text/csv;charset=utf-8" : "application/json");
+            toast(it("utx_exported", { file }), "ok");
+        }).catch(() => toast("error", "error"));
+    }
+    function utSummary(r) {
+        return { added: r.added, updated: r.updated, mode: it(r.mode === "replace" ? "utx_replace" : "utx_merge"),
+                 removed: r.removed ? it("utx_removed", { n: r.removed }) : "", rejected: r.n_rejected ? it("utx_rejected", { n: r.n_rejected }) : "" };
+    }
+    function utShowRejects(r) {
+        const err = ilib.root.querySelector(".reflib-ib-uterr");
+        if (err) err.textContent = r.n_rejected ? it("utx_rej_list") + " " + r.rejected.slice(0, 12).map(x => `${x.label || x.id} (${x.reason})`).join(" · ") + (r.n_rejected > 12 ? " …" : "") : "";
+    }
+    function utImportPick(mode) {
+        const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".json,application/json"; inp.className = "reflib-ib-utfile"; inp.style.display = "none";
+        document.body.appendChild(inp);
+        inp.addEventListener("change", () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) utImportFile(f, mode); });
+        inp.click();
+    }
+    async function utImportFile(file, mode) {
+        if (file.size > 2 * 1024 * 1024) { toast(it("utx_toobig"), "error"); return; }
+        let data; try { data = JSON.parse((await file.text()).replace(/^\uFEFF/, "")); } catch (e) { toast(it("utx_badjson"), "error"); return; }
+        const pre = await sendIlib({ action: "at_tax_import", data, mode, dry_run: true }).catch(() => null);
+        if (!pre || !pre.ok) { toast((pre && pre.error) || "error", "error"); return; }
+        const r0 = pre.r; utShowRejects(r0);
+        if (!(r0.added || r0.updated || r0.removed)) { toast(it("utx_nothing", { rejected: utSummary(r0).rejected }), "info"); return; }
+        if (!(await confirmDlg(it("utx_confirm", utSummary(r0)), it("utx_ok")))) return;
+        const ok = await utSend({ action: "at_tax_import", data, mode }, () => "");
+        if (ok) {
+            utShowRejects(r0);
+            toast(it("utx_done", utSummary(r0)), "ok", [{ label: it("ut_undo"), onClick: () => utSend({ action: "at_tax_undo" }, () => it("ut_undone")) }], 12000);
+        }
     }
     function utMoveTo(tid, parent) {
         if (!tid || !parent || tid === parent) return;
@@ -1692,6 +1738,8 @@
         if (act === "atutcancel") { ut.form = null; renderAtSettings(false); return true; }
         if (act === "atutmove") { ut.move = tid; ut.form = null; renderAtSettings(false); return true; }
         if (act === "atutmovecancel") { ut.move = null; renderAtSettings(false); return true; }
+        if (act === "atutexport") { utExport(box.querySelector('[data-utx="what"]').value); return true; }
+        if (act === "atutimport") { utImportPick(box.querySelector('[data-utx="mode"]').value); return true; }
         if (act === "atutundo") { utSend({ action: "at_tax_undo" }, () => it("ut_undone")); return true; }
         if (act === "atutdel") { const name = tlabel(tid); utSend({ action: "at_tax_delete", tid }, () => it("ut_deleted", { name })); return true; }
         const v = (k) => { const x = box.querySelector(`.reflib-ib-utform [data-utn="${k}"]`); return x ? (x.type === "checkbox" ? x.checked : x.value) : undefined; };
@@ -1891,6 +1939,7 @@
             ilib.at.setOpen = !ilib.at.setOpen;
             if (ilib.at.setOpen) sendIlib({ action: "at_settings" }).then(r => { if (r && r.ok) { ilib.at.settings = r.settings; ilib.at.models = r.models; ilib.at.cloud = r.cloud; ilib.at.policies = r.policies; renderAtSettings(); } }).catch(() => {});
             renderAtSettings();
+            if (!ilib.at.setOpen) requestAnimationFrame(() => render());   // 1.5.8: the virtual grid re-measures once the panel is gone (was left blank)
             return true;
         }
         if (act === "atsave") {

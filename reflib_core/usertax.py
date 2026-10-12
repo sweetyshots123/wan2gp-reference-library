@@ -241,3 +241,142 @@ def undo() -> str:
 def listing() -> Dict:
     d = read()
     return {"nodes": d["nodes"], "undo": len(d.get("undo") or []), "last": (d["undo"][-1]["what"] if d.get("undo") else None)}
+
+
+# ---- 1.5.8: export / import -------------------------------------------------------------------------------
+EXPORT_FORMAT = "reflib-taxonomy"
+MAX_IMPORT_NODES = 5000
+MSG.update({
+    "badfile": {"es": "El archivo no es una taxonomía válida de Reference Library (JSON).", "en": "The file is not a valid Reference Library taxonomy (JSON)."},
+    "toomany": {"es": "Demasiados nodos en el archivo (máx. 5000).", "en": "Too many nodes in the file (max 5000)."},
+})
+
+
+def _paths(nodes_by_id: Dict, nid: str, key: str) -> List[str]:
+    out, seen, n = [], set(), nodes_by_id.get(nid)
+    while n and n["id"] not in seen:
+        seen.add(n["id"]); out.append(n.get(key) or n["id"]); n = nodes_by_id.get(n.get("parent"))
+    return out[::-1]
+
+
+def export(scope: str = "full", fmt: str = "json"):
+    """scope 'full' = built-in + mine (merged as loaded, with synonyms, bilingual); 'mine' = custom nodes only.
+    fmt 'json' -> dict (re-importable), 'csv' -> str with columns path, es, en, synonyms."""
+    from . import taxonomy
+    t = taxonomy.load()
+    mine_ids = {x["id"] for x in read()["nodes"]}
+    order = [n["id"] for n in t["raw"]["nodes"]]
+    ids = [i for i in order if i in t["nodes"] and (scope != "mine" or i in mine_ids)]
+    nodes = []
+    for i in ids:
+        n = t["nodes"][i]
+        e = {"id": i, "parent": n.get("parent") or None, "kind": n["kind"], "es": n.get("es", ""), "en": n.get("en", ""),
+             "syn": {"es": list((n.get("syn") or {}).get("es") or []), "en": list((n.get("syn") or {}).get("en") or [])}}
+        if n["kind"] == "group" and n.get("exclusive"):
+            e["exclusive"] = True
+        if i in mine_ids:
+            e["custom"] = True
+        e["path_es"] = " › ".join(_paths(t["nodes"], i, "es")); e["path_en"] = " › ".join(_paths(t["nodes"], i, "en"))
+        nodes.append(e)
+    if fmt == "csv":
+        import csv, io
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["path", "es", "en", "synonyms"])
+        for e in nodes:
+            syn = "; ".join(x for x in ("es: " + ", ".join(e["syn"]["es"]) if e["syn"]["es"] else "",
+                                        "en: " + ", ".join(e["syn"]["en"]) if e["syn"]["en"] else "") if x)
+            w.writerow(["/".join(_paths(t["nodes"], e["id"], "id")), e["es"], e["en"], syn])
+        return "\ufeff" + buf.getvalue()   # BOM so Excel reads UTF-8
+    return {"format": EXPORT_FORMAT, "version": FORMAT, "scope": "mine" if scope == "mine" else "full",
+            "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "nodes": nodes}
+
+
+def import_(data, mode: str = "merge", dry_run: bool = False) -> Dict:
+    """Import custom nodes from an export (ours: 'mine' or 'full' - built-in nodes are skipped) or a raw
+    user_taxonomy.json. mode 'merge' adds new nodes and updates same-id custom ones; 'replace' swaps all custom nodes.
+    Every node goes through the same validation + safety blocklist as the editor; rejects are reported, not imported.
+    One undo snapshot ("import") restores the previous state."""
+    from . import taxonomy
+    if isinstance(data, (bytes, str)):
+        try:
+            data = json.loads(data.decode("utf-8-sig") if isinstance(data, bytes) else data.lstrip("\ufeff"))
+        except Exception:
+            raise UserTaxError("badfile")
+    raw = data.get("nodes") if isinstance(data, dict) else None
+    if not isinstance(raw, list):
+        raise UserTaxError("badfile")
+    if len(raw) > MAX_IMPORT_NODES:
+        raise UserTaxError("toomany")
+    mode = "replace" if mode == "replace" else "merge"
+    with _lock:
+        d = read()
+        shipped = {k for k in taxonomy.load()["nodes"] if k not in {x["id"] for x in d["nodes"]}}
+        base = [] if mode == "replace" else json.loads(json.dumps(d["nodes"]))
+        by = {x["id"]: x for x in base}
+        added, updated, skipped, rejected = 0, 0, 0, []
+        pending = []
+        for r in raw:
+            if not isinstance(r, dict):
+                rejected.append({"id": "?", "label": "?", "code": "badfile"}); continue
+            nid = str(r.get("id") or "").strip()[:80]
+            if nid in shipped:
+                skipped += 1; continue                     # built-in node from a full export: nothing to import
+            if not re.fullmatch(r"u_[a-z0-9_]{1,76}", nid):
+                rejected.append({"id": nid or "?", "label": str(r.get("es") or r.get("en") or "?")[:80], "code": "badfile"}); continue
+            syn = r.get("syn") if isinstance(r.get("syn"), dict) else {}
+            n = {"id": nid, "parent": (str(r.get("parent")).strip() or None) if r.get("parent") else None,
+                 "kind": r.get("kind") if r.get("kind") in ("category", "group", "tag") else "tag",
+                 "es": str(r.get("es") or r.get("en") or "").strip()[:80], "en": str(r.get("en") or r.get("es") or "").strip()[:80],
+                 "syn": {"es": _clean_syn(syn.get("es")), "en": _clean_syn(syn.get("en"))}, "custom": True}
+            if n["kind"] == "group":
+                n["exclusive"] = bool(r.get("exclusive"))
+            if n["kind"] == "category":
+                n["parent"] = None
+            pending.append(n)
+        # parents first: repeat passes until no progress (handles any file order)
+        progress = True
+        while pending and progress:
+            progress, rest = False, []
+            for n in pending:
+                par = n["parent"]
+                if n["kind"] != "category" and par not in by and par not in shipped:
+                    if any(p["id"] == par for p in pending if p is not n):
+                        rest.append(n); continue
+                    rejected.append({"id": n["id"], "label": n["es"], "code": "parent"}); progress = True; continue
+                try:
+                    pn = by.get(par) or taxonomy.node(par) if par else None
+                    if n["kind"] != "category" and (not pn or pn["kind"] == "tag"):
+                        raise UserTaxError("parent")
+                    chain, p = [], par
+                    while p and p not in chain:
+                        chain.append(p); q = by.get(p) or taxonomy.node(p); p = q.get("parent") if q else None
+                    if any(c in FORBIDDEN_PARENTS for c in chain):
+                        raise UserTaxError("age")
+                    bad = safety_check([n["es"], n["en"]] + n["syn"]["es"] + n["syn"]["en"])
+                    if bad:
+                        raise UserTaxError(bad)
+                    if any(x["id"] != n["id"] and (x.get("parent") or None) == n["parent"] and _fold(x["es"]) == _fold(n["es"]) for x in by.values()) or \
+                            any(_fold((taxonomy.node(k) or {}).get("es", "")) == _fold(n["es"]) for k in (taxonomy.load()["kids"].get(par, []) if par else []) if k in shipped):
+                        raise UserTaxError("dup")
+                except UserTaxError as e:
+                    rejected.append({"id": n["id"], "label": n["es"], "code": e.code}); progress = True; continue
+                if any(c in shipped and taxonomy.is_sensitive(c) for c in chain) or any(by.get(c, {}).get("sensitive") for c in chain):
+                    n["sensitive"] = True
+                if n["id"] in by:
+                    updated += 1
+                else:
+                    added += 1
+                by[n["id"]] = n; progress = True
+            pending = rest
+        for n in pending:   # cycles
+            rejected.append({"id": n["id"], "label": n["es"], "code": "parent"})
+        removed = len([x for x in d["nodes"] if x["id"] not in by]) if mode == "replace" else 0
+        res = {"mode": mode, "added": added, "updated": updated, "skipped": skipped, "removed": removed,
+               "rejected": rejected[:200], "n_rejected": len(rejected)}
+        if dry_run or not (added or updated or removed):
+            return dict(res, applied=False)
+        _snapshot(d, "import")
+        d["nodes"] = list(by.values())
+        _write(d)
+        return dict(res, applied=True)

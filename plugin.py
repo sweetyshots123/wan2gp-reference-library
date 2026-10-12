@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.5.7"
+PLUGIN_VERSION = "1.5.8"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3258,13 +3258,18 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
         if action == "at_status":
             return {"ok": True, "at": svc.queue.status()}
-        if action in ("at_tax_add", "at_tax_update", "at_tax_delete", "at_tax_undo", "at_tax_list"):
+        if action == "at_tax_export":   # 1.5.8
+            from .reflib_core import usertax
+            fmt = "csv" if req.get("fmt") == "csv" else "json"
+            out = usertax.export("mine" if req.get("scope") == "mine" else "full", fmt)
+            return {"ok": True, "fmt": fmt, "data": out}
+        if action in ("at_tax_add", "at_tax_update", "at_tax_delete", "at_tax_undo", "at_tax_list", "at_tax_import"):
             from .reflib_core import usertax
             try:
                 if action == "at_tax_add":
@@ -3277,6 +3282,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     r = usertax.delete(str(req.get("tid") or ""))
                 elif action == "at_tax_undo":
                     r = usertax.undo()
+                elif action == "at_tax_import":   # 1.5.8
+                    r = usertax.import_(req.get("data") or {}, req.get("mode", "merge"), bool(req.get("dry_run")))
+                    if r.get("rejected"):
+                        for x in r["rejected"]:
+                            x["reason"] = usertax.MSG.get(x["code"], {}).get(lang[:2], x["code"])
                 else:
                     r = None
             except usertax.UserTaxError as e:

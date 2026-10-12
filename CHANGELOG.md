@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.8 — 2026-10-12
+
+- **Export taxonomy** in "Mis etiquetas": full (built-in + yours, merged, bilingual, with synonyms and the ES/EN path of every node) or only yours, as JSON (re-importable) or CSV (`path, es, en, synonyms`, UTF-8 with BOM for Excel). Downloaded through the browser as `reflib-taxonomy-<full|mine>-<date>.<json|csv>`.
+- **Import** a taxonomy JSON (an export from this plugin, full or mine, or a `user_taxonomy.json`): **merge** (adds new nodes, updates yours with the same id) or **replace yours**. Each node is validated with the same rules and blocklist as the editor (no genital/sexual-anatomy tags, nothing about minors, no explicit acts, nothing under apparent age). Built-in nodes in a full export are skipped. A confirm dialog shows the counts first and lists the rejected nodes with the reason. One click **undo**.
+- Fix: closing the auto-tag settings panel (⚙) could leave the image grid blank until you scrolled; it now redraws right away.
+- Your custom taxonomy lives in `user_taxonomy.json` in the plugin's own folder (next to `plugin.py`), not in `reflib_core`.
+
 ## 1.5.7 — 2026-10-11
 
 - **Reuse from WanGP's output player**: a compact bar right under the output video player/gallery with **"Reutilizar ajustes"** (all settings) and **"Solo referencias"**. They act on the video currently shown/selected in the player, with the 1.5.5 logic: its history entry when there is one (settings through WanGP's own loader, then refs / control video / masks), otherwise WanGP's loader with the video file itself (embedded metadata). "Solo referencias" without a history entry uses the reference images WanGP embedded in the file, if any.

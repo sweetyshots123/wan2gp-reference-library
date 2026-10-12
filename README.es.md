@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.5.7 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.5.8 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -103,6 +103,10 @@ Políticas (léelas antes de enviar desnudos):
 - Clic derecho en una tarjeta (o el botón de la vista previa) para **Abrir en el Explorador**. Solo funciona si el navegador está en el PC de WanGP.
 - **Mis etiquetas** es un árbol: crea categorías propias de primer nivel, subcategorías a cualquier profundidad (también dentro de las de serie) y etiquetas en cualquier nivel. Arrastra para mover y todo se puede deshacer.
 - Las imágenes en las que un modelo detecta actividad sexual explícita reciben solo la marca **Revisión › contenido explícito** y ninguna medida corporal, para que puedas encontrarlas y quitarlas.
+
+## Exportar / importar tu taxonomía (1.5.8)
+
+En **Ajustes del autoetiquetado › Mis etiquetas**: **Exportar taxonomía** descarga la taxonomía completa (de serie + tuya, bilingüe, con sinónimos) o solo la tuya, en JSON o CSV (`path, es, en, synonyms`). **Importar…** acepta un JSON exportado (o un `user_taxonomy.json`) y lo combina o reemplaza tus nodos. Cada nodo pasa las mismas comprobaciones y lista de bloqueo que el editor; los rechazados se listan con el motivo. Primero confirmas los recuentos y puedes deshacer. Tus etiquetas se guardan en `user_taxonomy.json`, en la carpeta del plugin (`plugins/wan2gp-reference-library/`).
 
 ## Filtros, autocompletado y etiquetas propias (1.5.1)
 

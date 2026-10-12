@@ -520,7 +520,12 @@ input.reflib-ib-tagin { flex: 0 1 160px; min-width: 90px; }
 .reflib-ib-modal input:disabled, .reflib-ib-modal select:disabled { opacity: .55; }
 .reflib-ib-fnode.sub span { font-weight: 600; opacity: .9; }
 /* 1.5.2 taxonomy tree editor */
-.reflib-ib-uttop { display: flex; gap: 6px; }
+.reflib-ib-uttop { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.reflib-ib-utio { display: inline-flex; gap: 4px; align-items: center; }
+.reflib-ib-utio select { max-width: 210px; font-size: 12px; padding: 3px 4px; border-radius: 6px; border: 1px solid var(--border-color-primary, #ccc);
+    background: var(--input-background-fill, #fff); color: var(--body-text-color, #111); }
+.dark .reflib-ib-utio select { background: var(--input-background-fill, #1f2937); color: var(--body-text-color, #e5e7eb); border-color: var(--border-color-primary, #4b5563); }
+.dark .reflib-ib-utio select option { background: #1f2937; color: #e5e7eb; }
 .reflib-ib-uttree { max-height: 340px; overflow: auto; border: 1px solid var(--border-color-primary, #333); border-radius: 6px; padding: 4px 0; }
 .reflib-ib-utnode { display: flex; align-items: center; gap: 4px; min-height: 26px; padding-right: 4px; font-size: 13px; border-radius: 4px; }
 .reflib-ib-utnode:hover { background: rgba(127,127,127,.1); }
