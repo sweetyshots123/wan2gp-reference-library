@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.9 — 2026-10-12
+
+- **A single click only selects.** The right details panel no longer opens on its own, so the grid keeps its size.
+- **View selector** in the image browser header: thumbnails **very large / medium / small**, plus a **Detalles** (Details) toggle for the right panel. Details is off by default; when on, the panel shows the selected image (with "Abrir en el Explorador", "Localizar carpeta", etc.) and its × turns it off. Both choices are remembered in the plugin settings (`browser_thumb`, `browser_details`). No list view.
+- **Double-click opens a full-screen image viewer** over the whole window (not the details): ←/→ (or ‹ ›) for previous/next within the current filtered results, with a position counter; **Ajustar** (fit, key 0) and **1:1** (actual size, scrollable, key 1), clicking the image toggles them; Esc closes. The selection follows the viewer.
+- Right-click menu keeps "Abrir en el Explorador", "Localizar carpeta" and "Vista grande", and adds "Ver detalles" when the panel is off.
+
 ## 1.5.8 — 2026-10-12
 
 - **Export taxonomy** in "Mis etiquetas": full (built-in + yours, merged, bilingual, with synonyms and the ES/EN path of every node) or only yours, as JSON (re-importable) or CSV (`path, es, en, synonyms`, UTF-8 with BOM for Excel). Downloaded through the browser as `reflib-taxonomy-<full|mine>-<date>.<json|csv>`.

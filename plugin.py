@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.5.8"
+PLUGIN_VERSION = "1.5.9"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -631,8 +631,10 @@ DEFAULT_SETTINGS = {
     "crop_save_images": "auto",   # image crops from Cropper (1.3): "auto" | "ask" | "off"
     "index_paused": False,        # 1.4.4: pause background indexing of watched folders
     "browser_fullscreen": False,  # 1.5.5: always open the image browser full screen (also kept in localStorage)
+    "browser_details": False,     # 1.5.9: right details panel in the image browser (off: a click only selects)
+    "browser_thumb": "m",         # 1.5.9: thumbnail size l / m / s
 }
-_CHOICES = {"replace_mode": ("replace", "append"), "language": ("auto",) + LANGS,
+_CHOICES = {"browser_thumb": ("l", "m", "s"), "replace_mode": ("replace", "append"), "language": ("auto",) + LANGS,
             "on_apply_prompts": ("offer", "apply_first", "off"), "crop_save": ("auto", "ask", "off"),
             "crop_save_images": ("auto", "ask", "off")}
 _CHANGE_REASONS = {"saved_col": "create", "created_empty": "create", "imported": "create", "renamed_col": "rename",
@@ -2969,6 +2971,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "index_paused": bool(index_paused),
             "browser_fullscreen": bool(load_settings().get("browser_fullscreen", False)) if browser_fullscreen is None else bool(browser_fullscreen),
         })
+        _cur = load_settings()
+        settings.update({k: _cur.get(k, DEFAULT_SETTINGS[k]) for k in ("browser_details", "browser_thumb")})   # 1.5.9: set from the browser header
         imagelib.set_paused(settings["index_paused"])
         lang = resolve_lang(settings["language"], browser_lang)
         try:
@@ -3110,9 +3114,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     out.update({k: v for k, v in self._ilib_payload(lang).items() if k != "ok"})
             elif action == "ui_pref":   # 1.5.5 browser UI preferences
                 st = load_settings()
-                st["browser_fullscreen"] = bool(req.get("browser_fullscreen"))
+                for k in ("browser_fullscreen", "browser_details", "browser_thumb"):   # 1.5.9: only the keys sent
+                    if k in req:
+                        st[k] = _coerce(k, DEFAULT_SETTINGS[k], req[k])
                 save_settings(st)
-                out = {"ok": True, "browser_fullscreen": st["browser_fullscreen"]}
+                out = {"ok": True, **{k: st[k] for k in ("browser_fullscreen", "browser_details", "browser_thumb")}}
             elif action in ("used_del", "used_undo"):   # 1.5.6
                 from .reflib_core import refusage
                 if action == "used_undo":

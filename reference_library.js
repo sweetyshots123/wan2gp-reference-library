@@ -663,6 +663,10 @@
             ut_add_ph: "Add a tag to this image…", ut_added: "Tag added", ut_unknown: "Pick a tag from the list",
             reveal: "Show in folder", reveal_tip: "Opens the folder with this file highlighted", reveal_remote: "Only available when the browser runs on the same PC as WanGP",
             big_preview: "Large preview",
+            v_size: "Thumbnail size", v_l: "Very large thumbnails", v_m: "Medium thumbnails", v_s: "Small thumbnails",
+            v_details: "Details", v_details_tip: "Show or hide the details panel on the right (selected image)", v_pick: "Select an image to see its details.",
+            ctx_details: "Show details", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
+            lb_prev: "Previous (←)", lb_next: "Next (→)",
             chips_clear: "Clear all", chip_rm: "Remove this filter", chip_or: "or", chip_and: "and", chip_not: "not",
             chip_mode: "Click to switch between include and exclude", chip_find: "Show in the tree", chip_search: "Search: {q}",
             used: "Used as reference", used_tip: "Every image that landed in WanGP's Reference Images (any source), newest use first", used_title: "Images used as reference — newest first",
@@ -748,6 +752,10 @@
             ut_add_ph: "Añadir etiqueta a esta imagen…", ut_added: "Etiqueta añadida", ut_unknown: "Elige una etiqueta de la lista",
             reveal: "Abrir en el Explorador", reveal_tip: "Abre la carpeta con este archivo resaltado", reveal_remote: "Solo disponible cuando el navegador está en el mismo PC que WanGP",
             big_preview: "Vista grande",
+            v_size: "Tamaño de miniaturas", v_l: "Miniaturas muy grandes", v_m: "Miniaturas medianas", v_s: "Miniaturas pequeñas",
+            v_details: "Detalles", v_details_tip: "Muestra u oculta el panel de detalles de la derecha (imagen seleccionada)", v_pick: "Selecciona una imagen para ver sus detalles.",
+            ctx_details: "Ver detalles", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
+            lb_prev: "Anterior (←)", lb_next: "Siguiente (→)",
             chips_clear: "Quitar todos", chip_rm: "Quitar este filtro", chip_or: "o", chip_and: "y", chip_not: "no",
             chip_mode: "Clic para alternar entre incluir y excluir", chip_find: "Mostrar en el árbol", chip_search: "Búsqueda: {q}",
             used: "Usadas como referencia", used_tip: "Todas las imágenes que han entrado en Reference Images de WanGP (de cualquier origen), la más reciente primero", used_title: "Imágenes usadas como referencia — más recientes primero",
@@ -834,7 +842,7 @@
     // ---- 1.4.4: the browser never holds the whole library. The server sends counts + the folder tree (meta) and
     // pages of 120 light items for the current filter; the grid is windowed (only the cards around the viewport
     // exist, recycled while scrolling) and thumbnails are requested for those cards only, a few at a time.
-    const PAGE = 120, THUMB_BATCH = 6, THUMB_CACHE_MAX = 1500, CARD_MIN = 140, GAP = 10, HEAD_H = 34, CARD_EXTRA = 46;
+    const PAGE = 120, THUMB_BATCH = 6, THUMB_CACHE_MAX = 1500, CARD_SIZES = { l: 300, m: 160, s: 104 }, GAP = 10, HEAD_H = 34, CARD_EXTRA = 46;
     function makeSel() {
         return {
             all: null,           // {f, sig, total, except: Set}: "all N matching" without loading them
@@ -1033,6 +1041,11 @@
         rs.textContent = it("rescan"); rs.title = it("rescan_tip");
         const fsb = root.querySelector(".reflib-ib-fs"); const fsOn = root.classList.contains("reflib-ib-full");
         fsb.textContent = fsOn ? "🗗" : "⛶"; fsb.title = it(fsOn ? "fs_restore" : "fs_max"); fsb.setAttribute("aria-pressed", fsOn ? "true" : "false");
+        const vp = viewPref();   // 1.5.9 view selector
+        root.querySelector(".reflib-ib-view").setAttribute("aria-label", it("v_size"));
+        root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
+        const vd = root.querySelector(".reflib-ib-vdet"); vd.textContent = "☰ " + it("v_details"); vd.title = it("v_details_tip"); vd.classList.toggle("on", vp.details); vd.setAttribute("aria-pressed", vp.details ? "true" : "false");
+        root.classList.toggle("reflib-ib-nodetails", !vp.details);
         const hb = root.querySelector(".reflib-ib-histbtn"); hb.textContent = "🕘 " + ht("title"); hb.title = ht("tip");
         const af = root.querySelector(".reflib-ib-addfolder");
         af.textContent = it("add_folder"); af.title = it("add_folder_tip");
@@ -1090,6 +1103,7 @@
         const main = ilib.root && ilib.root.querySelector(".reflib-ib-main");
         const vg = main && main.querySelector(".reflib-ib-vgrid");
         if (!vg) return null;
+        const CARD_MIN = CARD_SIZES[viewPref().thumb] || CARD_SIZES.m;   // 1.5.9 thumbnail size from the header
         const W = Math.max(CARD_MIN, vg.clientWidth || main.clientWidth - 4);
         const cols = Math.max(1, Math.floor((W + GAP) / (CARD_MIN + GAP)));
         const cw = (W - GAP * (cols - 1)) / cols, ch = cw + CARD_EXTRA;
@@ -1961,7 +1975,8 @@
         const host = ilib.root && ilib.root.querySelector(".reflib-ib-pvhost");
         if (!host) return;
         const h = ilib.preview;
-        if (!h) { host.innerHTML = ""; return; }
+        if (!viewPref().details) { host.innerHTML = ""; return; }   // 1.5.9: the details panel is opt-in (header "Detalles")
+        if (!h) { host.innerHTML = `<aside class="reflib-ib-preview reflib-ib-pvempty"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button><p class="reflib-ib-muted">${esc(it("v_pick"))}</p></aside>`; return; }
         const full = ilib.pvSrc && ilib.pvSrc.hash === h ? ilib.pvSrc : null;
         const lite = ilib.pvItem && ilib.pvItem.hash === h ? ilib.pvItem : null;
         const name = (full && full.name) || (lite && lite.name) || "";
@@ -2132,6 +2147,7 @@
               <button type="button" class="reflib-ib-btn reflib-ib-addfolder"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-rescan"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-histbtn" data-act="hist"></button>
+              <span class="reflib-ib-view" role="group"><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="l">▣</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="m">▦</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="s">▩</button><button type="button" class="reflib-ib-vdet" data-act="vdetails"></button></span>
               <button type="button" class="reflib-ib-fs" data-act="fullscreen" aria-label="fullscreen">⛶</button>
               <button type="button" class="reflib-ib-x" aria-label="close">×</button></div>
             <div class="reflib-ib-faddrow" hidden><input type="text" class="reflib-ib-fpath-in" spellcheck="false" autocomplete="off">
@@ -2414,7 +2430,7 @@
         showPreview(h, idx);
         const m = document.createElement("div");
         m.className = "reflib-ib-ctx";
-        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>`;
+        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2423,24 +2439,76 @@
         ilib.preview = hh; ilib.pvItem = ilib.q.items[idx] || null;
         for (const c of ilib.cards.values()) c.classList.toggle("cur", c.dataset.hash === hh);
         renderPreview();
+        if (!viewPref().details) return Promise.resolve();   // 1.5.9: a click only selects; details load when the panel is on
         return sendIlib({ action: "preview", hash: hh }).then(r => { if (r && r.image && ilib.preview === hh) { ilib.pvSrc = Object.assign({}, r.image, { hash: hh }); renderPreview(); } }).catch(() => {});
     }
     // 1.5.2 large preview (double-click): the full image over the browser; ←/→ step through the results, Esc / click closes
+    // 1.5.9 full-screen viewer: fixed over the whole window; ←/→ previous/next in the filtered results, Esc closes,
+    // "Ajustar" (fit) / "1:1" (actual size, scrollable), click on the image toggles them. Works without the details panel.
     function openLightbox(idx) {
         const it2 = ilib.q.items[idx]; if (!it2) return;
-        closeLightbox(true);
-        const box = document.createElement("div");
-        box.className = "reflib-ib-lightbox"; box.dataset.idx = idx;
-        box.innerHTML = `<img alt=""><div class="reflib-ib-lbname">${esc(it2.name || "")}</div><button type="button" class="reflib-ib-lbclose" title="${esc(it("close") || "×")}">×</button>`;
+        let box = ilib.lightbox;
+        if (!box) {
+            box = document.createElement("div");
+            box.className = "reflib-ib-lightbox fit"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
+            box.innerHTML = `<div class="reflib-ib-lbstage"><img alt=""></div>
+                <div class="reflib-ib-lbbar"><button type="button" data-lb="prev">‹</button><span class="reflib-ib-lbpos"></span><button type="button" data-lb="next">›</button>
+                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button></div>
+                <div class="reflib-ib-lbname"></div><button type="button" class="reflib-ib-lbclose">×</button>`;
+            box.addEventListener("click", (e) => {
+                const b = e.target.closest("[data-lb]");
+                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
+                if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
+                if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"));
+            });
+            box.addEventListener("dblclick", (e) => e.stopPropagation());
+            document.body.appendChild(box);
+            ilib.lightbox = box;
+        }
+        box.dataset.idx = idx;
         const img = box.querySelector("img");
-        const th = ilib.thumbs.get(it2.hash); if (th) img.src = th;
-        box.addEventListener("click", (e) => { if (e.target === box || e.target.classList.contains("reflib-ib-lbclose")) closeLightbox(); });
-        (ilib.root.querySelector(".reflib-ib-modal") || ilib.root).appendChild(box);
-        ilib.lightbox = box;
-        showPreview(it2.hash, idx).then(() => { if (ilib.lightbox === box && ilib.pvSrc && ilib.pvSrc.hash === it2.hash && ilib.pvSrc.src) img.src = ilib.pvSrc.src; });
+        box.querySelector(".reflib-ib-lbname").textContent = it2.name || "";
+        box.querySelector(".reflib-ib-lbpos").textContent = `${idx + 1} / ${ilib.q.total}`;
+        box.querySelector('[data-lb="prev"]').title = it("lb_prev"); box.querySelector('[data-lb="next"]').title = it("lb_next");
+        box.querySelector('[data-lb="prev"]').disabled = idx <= 0; box.querySelector('[data-lb="next"]').disabled = idx >= ilib.q.total - 1;
+        const fb = box.querySelector('[data-lb="fit"]'), ob = box.querySelector('[data-lb="one"]');
+        fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
+        fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
+        const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
+        showPreview(it2.hash, idx);
+        sendIlib({ action: "preview", hash: it2.hash }).then(r => { if (ilib.lightbox === box && img.dataset.hash === it2.hash && r && r.image && r.image.src) img.src = r.image.src; }).catch(() => {});
+    }
+    function lightboxZoom(one) {
+        const box = ilib.lightbox; if (!box) return;
+        box.classList.toggle("fit", !one);
+        box.querySelector('[data-lb="fit"]').classList.toggle("on", !one); box.querySelector('[data-lb="one"]').classList.toggle("on", !!one);
+    }
+    function lightboxStep(d) {
+        const box = ilib.lightbox; if (!box) return;
+        const i = +box.dataset.idx + d;
+        if (i < 0 || i >= ilib.q.total) return;
+        ensurePages(i, i);
+        const go = () => { const it2 = ilib.q.items[i]; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
+        if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
     }
     function closeLightbox(silent) {
         if (ilib.lightbox) { ilib.lightbox.remove(); ilib.lightbox = null; }
+    }
+    // 1.5.9 view preferences (thumbnail size, details panel): plugin settings + localStorage fallback
+    function viewPref() {
+        const t = cfg.browser_thumb || "m";
+        return { thumb: CARD_SIZES[t] ? t : "m", details: !!cfg.browser_details };
+    }
+    function setView(ch) {
+        const prev = viewPref();
+        if ("thumb" in ch && CARD_SIZES[ch.thumb]) cfg.browser_thumb = ch.thumb;
+        if ("details" in ch) cfg.browser_details = !!ch.details;
+        const now = viewPref();
+        sendIlib(Object.assign({ action: "ui_pref" }, "thumb" in ch ? { browser_thumb: now.thumb } : {}, "details" in ch ? { browser_details: now.details } : {})).catch(() => {});
+        if (now.details && !prev.details && ilib.preview) { const i = ilib.q.items.findIndex(x => x && x.hash === ilib.preview); showPreview(ilib.preview, i); }
+        else renderPreview();
+        render();
+        if (now.thumb !== prev.thumb) requestAnimationFrame(() => renderGrid());
     }
     function selectAllMatching() {
         const q = ilib.q;
@@ -2491,7 +2559,10 @@
         if (act === "locate") { closeCtx(); doLocate(el.dataset.hash); return; }
         if (act === "loccrumb") { locateTo(el.dataset.fid, el.dataset.rel || "", ilib.preview); return; }
         if (act === "ctxbig") { closeCtx(); openLightbox(+el.dataset.idx); return; }
-        if (act === "pvclose") { ilib.preview = null; for (const c of ilib.cards.values()) c.classList.remove("cur"); renderPreview(); }
+        if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
+        if (act === "vsize") { setView({ thumb: el.dataset.v }); return; }
+        if (act === "vdetails") { setView({ details: !viewPref().details }); return; }
+        if (act === "ctxdetails") { closeCtx(); setView({ details: true }); return; }
         else if (act === "selall") selectAllMatching();
         else if (act === "selnone") { ilib.sel.clear(); ilib.addOpen = false; selChanged(); }
         else if (act === "tag") doTag();
@@ -2585,10 +2656,10 @@
         }
         if (ilib.lightbox && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
             e.preventDefault(); e.stopPropagation();
-            const i = +ilib.lightbox.dataset.idx + (e.key === "ArrowRight" ? 1 : -1);
-            if (i >= 0 && i < ilib.q.total) { ensurePages(i, i); const it2 = ilib.q.items[i]; if (it2) { ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); } }
+            lightboxStep(e.key === "ArrowRight" ? 1 : -1);
             return;
         }
+        if (ilib.lightbox && (e.key === "1" || e.key === "0")) { e.preventDefault(); e.stopPropagation(); lightboxZoom(e.key === "1"); return; }
         if (e.key !== "Escape") return;
         e.preventDefault(); e.stopPropagation();
         if (ilib.root.querySelector(".reflib-ib-ctx")) { closeCtx(); return; }
@@ -2757,6 +2828,7 @@
     }
     function closeBrowser() {
         if (!ilib.root) return;
+        closeLightbox();
         ilib.open = false;
         ilib.root.classList.remove("open");
         document.documentElement.classList.remove("reflib-ib-lock");

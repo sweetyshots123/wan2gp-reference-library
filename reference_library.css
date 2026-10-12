@@ -485,10 +485,34 @@ input.reflib-ib-tagin { flex: 0 1 160px; min-width: 90px; }
 .reflib-ib-uterr { color: #f87171; font-size: 12px; min-height: 1em; }
 .reflib-ib-atadd { width: 100%; margin: 4px 0 6px; box-sizing: border-box; }
 /* 1.5.2 large preview (double-click) */
-.reflib-ib-lightbox { position: absolute; inset: 0; z-index: 60; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
-.reflib-ib-lightbox img { max-width: 96%; max-height: 92%; object-fit: contain; box-shadow: 0 10px 40px rgba(0,0,0,.6); cursor: default; }
-.reflib-ib-lbname { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; color: #ddd; font-size: 13px; }
-.reflib-ib-lbclose { position: absolute; top: 10px; right: 14px; background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 50%; width: 32px; height: 32px; font-size: 18px; cursor: pointer; }
+.reflib-ib-lightbox { position: fixed; inset: 0; z-index: 10095; background: rgba(0,0,0,.94); color: #eee; }
+.reflib-ib-lbstage { position: absolute; inset: 0 0 56px 0; overflow: auto; display: flex; }
+.reflib-ib-lbstage img { margin: auto; display: block; box-shadow: 0 10px 40px rgba(0,0,0,.6); cursor: zoom-in; }
+.reflib-ib-lightbox.fit .reflib-ib-lbstage { overflow: hidden; }
+.reflib-ib-lightbox.fit .reflib-ib-lbstage img { max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); object-fit: contain; }
+.reflib-ib-lightbox:not(.fit) .reflib-ib-lbstage img { max-width: none; max-height: none; cursor: zoom-out; }
+.reflib-ib-lbbar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; background: rgba(30,30,34,.92);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 5px 8px; }
+.reflib-ib-lbbar button { all: unset; cursor: pointer; color: #eee; padding: 3px 10px; border-radius: 6px; font-size: 13px; min-width: 18px; text-align: center; }
+.reflib-ib-lbbar button:hover, .reflib-ib-lbbar button:focus-visible { background: rgba(255,255,255,.14); }
+.reflib-ib-lbbar button.on { background: #2563eb; color: #fff; }
+.reflib-ib-lbbar button:disabled { opacity: .35; cursor: default; }
+.reflib-ib-lbbar [data-lb="prev"], .reflib-ib-lbbar [data-lb="next"] { font-size: 20px; line-height: 1; }
+.reflib-ib-lbpos { font-size: 12px; color: #ccc; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.reflib-ib-lbsep { width: 1px; height: 18px; background: rgba(255,255,255,.2); margin: 0 4px; }
+.reflib-ib-lbname { position: absolute; top: 14px; left: 60px; right: 60px; text-align: center; color: #ddd; font-size: 13px; text-shadow: 0 1px 3px #000; pointer-events: none; }
+.reflib-ib-lbclose { position: absolute; top: 10px; right: 14px; background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 50%; width: 34px; height: 34px; font-size: 18px; cursor: pointer; }
+/* 1.5.9 view selector in the header */
+.reflib-ib-view { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; border: 1px solid var(--border-color-primary, #d1d5db); }
+.reflib-ib-view button { all: unset; cursor: pointer; height: 26px; min-width: 26px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-size: 14px; color: var(--body-text-color, #111); box-sizing: border-box; }
+.reflib-ib-view .reflib-ib-vdet { font-size: 12.5px; margin-left: 4px; border-left: 1px solid var(--border-color-primary, #d1d5db); border-radius: 0 6px 6px 0; padding: 0 9px; }
+.reflib-ib-view button:hover, .reflib-ib-view button:focus-visible { background: var(--background-fill-secondary, #f3f4f6); }
+.reflib-ib-view button.on { background: #2563eb; color: #fff; }
+.dark .reflib-ib-view { border-color: var(--border-color-primary, #4b5563); }
+.dark .reflib-ib-view button { color: var(--body-text-color, #e5e7eb); }
+.dark .reflib-ib-view button.on { background: #3b82f6; color: #fff; }
+.reflib-ib-pvempty { display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; }
 /* 1.5.2 show in folder + context menu */
 .reflib-ib-pvreveal { margin: 4px 0; font-size: 12px; }
 .reflib-ib-ctx { position: absolute; z-index: 70; min-width: 210px; padding: 4px; border-radius: 8px; display: flex; flex-direction: column;
