@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.5.9 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.0 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -50,6 +50,10 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **Árbol de carpetas** (barra lateral izquierda, 1.4.1): cada raíz vigilada, desplegable en sus subcarpetas como en el disco, con recuentos. Haz clic en una carpeta para filtrar; *Incluir subcarpetas* alterna entre todo el subárbol y solo esa carpeta. Una ruta de navegación encima de la cuadrícula muestra dónde estás; haz clic en un tramo o en ↑ para subir. El filtro de carpeta se combina con los de colección y etiquetas. Cada raíz tiene ⟳ (reescanear) y × (quitar, dos clics) al pasar el ratón. Las imágenes se **leen en su sitio**: nunca se copian, mueven, modifican ni borran, así que no ocupan espacio extra. Se reescanean al abrir el modal y con **Reescanear** (los archivos sin cambios no se vuelven a hashear). Si un archivo se mueve o se borra, desaparece o reaparece en su nueva ruta; una carpeta que falta se marca. Al añadir una imagen de carpeta a una colección se **copia**, para que las colecciones sigan siendo autónomas. *Quitar* (dos clics) solo la quita del índice. Índice: `folders/index.json`; miniaturas en caché en `collections/.thumbs/`.
 - **Añadir a referencias** (pie de la selección) añade solo las imágenes elegidas a Reference Images de WanGP, por el mismo camino que al aplicar una colección. Las que ya estén en la galería se saltan y nunca se sustituye nada. Las imágenes de carpetas se leen en su sitio; no se copian a ninguna colección. *Cerrar al añadir* cierra el modal después (se recuerda). Si el modelo actual no tiene Reference Images, sale un error.
 - Haz clic en una imagen para verla en grande con sus colecciones, archivos y etiquetas. **Esc** o **×** cierran; las barras y el gestor se refrescan.
+
+## Explorador de medios: fotos, vídeos y audios (1.6.0)
+
+Las carpetas vigiladas e Importar indexan imágenes, **vídeos** (mp4, mov, webm, mkv, avi) y **audios** (wav, mp3, flac, ogg, m4a, aac, opus). Los botones **Todo / Fotos / Vídeos / Audios** de la cabecera (con recuentos) filtran por tipo. Las tarjetas de audio muestran la forma de onda y la duración con ▶ para escuchar; las de vídeo, un fotograma, la duración y una vista previa al pasar el ratón. Doble clic reproduce el archivo en el visor a pantalla completa; Detalles incluye un reproductor y los datos del códec. **Añadir a** solo ofrece lo que acepta el modelo actual: imágenes → Imágenes de referencia, un vídeo → Vídeo de control o la Librería de vídeos, un audio → las entradas de audio del modelo. El autoetiquetado solo procesa imágenes. Usa ffmpeg/ffprobe (incluidos con WanGP) para las ondas y duraciones.
 
 ## Navegar: selector de vista y visor (1.5.9)
 

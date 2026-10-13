@@ -11,8 +11,11 @@ import hashlib, io, json, os, shutil, tempfile, threading, time, uuid
 from typing import Any, Dict, Iterable, List, Optional
 from . import storage
 
-FIELDS = ("image_refs", "image_start", "image_end", "video_guide", "video_mask", "image_mask", "image_guide", "video_source")
+FIELDS = ("image_refs", "image_start", "image_end", "video_guide", "video_mask", "image_mask", "image_guide", "video_source",
+          "audio_guide", "audio_guide2", "audio_guide3")   # 1.6.0: audio inputs too
 VIDEO_FIELDS = {"video_guide", "video_mask", "video_source"}
+AUDIO_FIELDS = {"audio_guide", "audio_guide2", "audio_guide3"}
+_AUDIO_EXT = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
 KEY_SETTINGS = ("prompt", "negative_prompt", "seed", "resolution", "video_length", "num_inference_steps", "guidance_scale",
                 "flow_shift", "model_type", "type", "video_prompt_type", "image_prompt_type", "sliding_window_size",
                 "activated_loras", "loras_multipliers", "creation_date", "generation_time")
@@ -113,8 +116,9 @@ def _store_item(x, field: str) -> Optional[Dict[str, Any]]:
         return {"h": h, "kind": "image", "blob": rel, "src": None, "size": len(data)}
     if isinstance(x, str) and os.path.isfile(x):
         h = storage._file_hash(x)
-        kind = "video" if field in VIDEO_FIELDS or os.path.splitext(x)[1].lower() in (".mp4", ".mkv", ".webm", ".mov", ".avi") else "image"
-        ext = os.path.splitext(x)[1].lower() or (".mp4" if kind == "video" else ".png")
+        e0 = os.path.splitext(x)[1].lower()
+        kind = "audio" if field in AUDIO_FIELDS or e0 in _AUDIO_EXT else "video" if field in VIDEO_FIELDS or e0 in (".mp4", ".mkv", ".webm", ".mov", ".avi") else "image"
+        ext = e0 or {"video": ".mp4", "audio": ".wav"}.get(kind, ".png")
         rel, size = None, 0
         if is_volatile(x):
             rel = os.path.join("blobs", h + ext)
@@ -129,6 +133,12 @@ def _store_item(x, field: str) -> Optional[Dict[str, Any]]:
                 try:
                     from . import media
                     media.make_poster(_p(rel) if rel else x, t, max_side=256)
+                except Exception:
+                    pass
+            elif kind == "audio":
+                try:
+                    from . import mediainfo
+                    mediainfo.audio_thumb(_p(rel) if rel else x, t, size=256)
                 except Exception:
                     pass
             elif Image is not None:

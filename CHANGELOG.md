@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0 — 2026-10-11
+
+- **Image browser → media browser ("Explorador de medios").** Watched folders and Import now also index **video** (mp4, mov, webm, mkv, avi) and **audio** (wav, mp3, flac, ogg, m4a, aac, opus). Files are still read in place, never copied or modified.
+- **Type filter** in the header (**Todo / Fotos / Vídeos / Audios**, with counts for the current filter) and as a removable chip. The folder tree counts per type, too (tooltip).
+- **Audio cards**: waveform thumbnail (ffmpeg, server-side, cached in `collections/.thumbs`), duration, ▶ to play/pause in place. **Video cards**: poster frame, duration, muted hover preview after a short delay.
+- **Viewer** (double-click) plays video and audio; the **Details** panel has an inline player with duration, size, fps, codec, sample rate and file size. "Show in Explorer" / "Locate folder" are unchanged.
+- **"Añadir a" per type**, only for inputs the current model shows: images → Reference Images; one video → Control video, or the Video Library; one audio → each audio input the model exposes (Audio 1/2/3). Mismatched or missing inputs are refused with a message.
+- Collections hold any type; tags, search and autocomplete work for every type. History also records and restores audio inputs.
+- **Auto-tagging stays images-only**: videos and audio in a selection are skipped with a notice.
+- Fast at 12k+ files: large media (≥ 48 MB) use a sampled content hash (size + 3 × 4 MB), durations are probed by one throttled background ffprobe thread (on-screen items first) and cached in `collections/mediainfo.json`. Playback serves exactly the requested file through Gradio, never whole folders.
+
 ## 1.5.9 — 2026-10-12
 
 - **A single click only selects.** The right details panel no longer opens on its own, so the grid keeps its size.

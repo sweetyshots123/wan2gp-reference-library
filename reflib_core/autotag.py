@@ -114,8 +114,19 @@ class AutoTagService:
         return self._map
 
     # actions
+    @staticmethod
+    def only_images(hashes):
+        """1.6.0: auto-tagging is images-only; videos and audio are skipped (and counted) without an error."""
+        hs = list(hashes or [])
+        by = imagelib.catalog()["by_hash"]
+        return [h for h in hs if (by.get(h) or {}).get("kind", "image") == "image"]
+
     def enqueue(self, hashes, force=False):
-        return self.queue.enqueue(hashes, force)
+        hs = list(hashes or [])
+        imgs = self.only_images(hs)
+        r = self.queue.enqueue(imgs, force)
+        r["not_image"] = len(hs) - len(imgs)
+        return r
 
     def job_facets(self, f=None) -> Dict[str, int]:
         """1.5.4 "Estado del etiquetado" counts over the current filter (without its own jst part)."""
@@ -125,6 +136,8 @@ class AutoTagService:
         tagged = self.auto_map()[1]
         c = {k: 0 for k in imagelib.JST_KEYS}
         for i in items:
+            if i.get("kind", "image") != "image":
+                continue
             st = jm.get(i["hash"])
             if st:
                 c[st] += 1

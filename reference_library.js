@@ -703,12 +703,18 @@
             set_model: "Model", set_threshold: "Threshold", set_batch: "Batch", set_vram: "VRAM cap (GB)", set_offline: "Offline (only downloaded models)",
             set_body: "Body-shape analysis", set_body_vlm: "VLM cross-check", set_cloud: "Allow cloud (sends images or descriptions)", set_key: "OpenRouter API key",
             set_key_set: "set", set_fallback: "Local fallback", set_jev_url: "Jev server URL (empty = in process)", set_latest: "Jev: use latest instead of pinned 1.13", set_save: "Save",
-            browse: "Image browser", browse_tip: "Browse all images (collections, unassigned pool, folders)", close: "Close (Esc)",
-            search_ph: "Search by name…", import: "Import images", import_tip: "Upload or drop images here: they go to the unassigned pool",
+            browse: "Media browser", browse_tip: "Browse all images, videos and audio (collections, unassigned pool, folders)", close: "Close (Esc)",
+            search_ph: "Search by name…", import: "Import", import_tip: "Upload or drop images, videos or audio here: they go to the unassigned pool",
+            k_all: "All", k_image: "Photos", k_video: "Videos", k_audio: "Audio", k_tip: "Media type", chip_kind: "Type: {k}",
+            k_tree: "{i} photos · {v} videos · {a} audio", dur_none: "duration pending…", play: "Play", pause: "Pause",
+            to_vctl: "Use as control video", to_vctl_tip: "Put this video in WanGP's control video input", to_vlib: "Add to Video Library", to_vlib_tip: "Copy the selected videos into the Video Library",
+            to_audio: "→ {label}", to_audio_tip: "Put this audio in WanGP's \"{label}\" input (shown by the current model)",
+            to_one: "Select a single file for this", only_images_refs: "{n} non-image file(s) skipped (references take images)",
+            sent_to: "Sent to {what}", pv_dur: "Duration", pv_codec: "Codec", pv_fps: "Frame rate", pv_rate: "Sample rate",
             rescan: "Re-scan", rescan_tip: "Re-scan the watched folders",
             f_cols: "Collections", f_all: "All", f_none: "Unassigned", f_tags: "Tags", f_folders: "Folders", no_tags: "no tags yet",
-            n_images: "{n} images", n_shown: "{shown} of {n}", more: "Show more",
-            empty: "No images match these filters.", empty_lib: "The library has no images yet. Import some or add a folder.",
+            n_images: "{n} files", n_shown: "{shown} of {n}", more: "Show more",
+            empty: "Nothing matches these filters.", empty_lib: "The library is empty. Import some files or add a folder.",
             in_n: "In {n} collection(s): {names}", in_none: "Not in any collection", from_folder: "From a watched folder",
             sel_n: "{n} selected", sel_visible: "Select shown", sel_clear: "Clear selection",
             tag_ph: "Add tag…", tag_add: "Add tag", tag_remove: "Remove “{tag}” from the selected images",
@@ -720,7 +726,7 @@
             folders_note: "Images are read in place (never copied, moved or changed). Adding one to a collection copies it there.",
             drop: "Drop images to import them", pool_badge: "unassigned", folder_badge: "folder", loading: "Loading…",
             add_folder: "Add folder", add_folder_tip: "Watch a folder on the WanGP machine (indexed in place, never copied)", cancel: "Cancel",
-            tree_title: "Folders", tree_sub: "Include subfolders", all_images: "All images", up: "Up one level",
+            tree_title: "Folders", tree_sub: "Include subfolders", all_images: "All media", up: "Up one level",
             frescan: "Re-scan this folder", fremove: "Remove from the index (files on disk are untouched)", fremove_confirm: "Click again to remove",
             indexing: "Indexing {name}: {done} / {total}", indexing_start: "Indexing {name}…",
             to_refs: "Add to references", to_refs_tip: "Append the selected images to WanGP's Reference Images (duplicates skipped, nothing replaced)",
@@ -792,12 +798,18 @@
             set_model: "Modelo", set_threshold: "Umbral", set_batch: "Lote", set_vram: "Límite de VRAM (GB)", set_offline: "Sin conexión (solo modelos descargados)",
             set_body: "Análisis de la forma del cuerpo", set_body_vlm: "Comprobación con VLM", set_cloud: "Permitir nube (envía imágenes o descripciones)", set_key: "Clave API de OpenRouter",
             set_key_set: "guardada", set_fallback: "Respaldo local", set_jev_url: "URL del servidor Jev (vacío = en proceso)", set_latest: "Jev: usar la última en vez de la 1.13 fijada", set_save: "Guardar",
-            browse: "Explorador de imágenes", browse_tip: "Examinar todas las imágenes (colecciones, sin colección, carpetas)", close: "Cerrar (Esc)",
-            search_ph: "Buscar por nombre…", import: "Importar imágenes", import_tip: "Sube o suelta aquí imágenes: van a la bolsa sin colección",
+            browse: "Explorador de medios", browse_tip: "Examinar imágenes, vídeos y audios (colecciones, sin colección, carpetas)", close: "Cerrar (Esc)",
+            search_ph: "Buscar por nombre…", import: "Importar", import_tip: "Sube o suelta aquí imágenes, vídeos o audios: van a la bolsa sin colección",
+            k_all: "Todo", k_image: "Fotos", k_video: "Vídeos", k_audio: "Audios", k_tip: "Tipo de medio", chip_kind: "Tipo: {k}",
+            k_tree: "{i} fotos · {v} vídeos · {a} audios", dur_none: "duración pendiente…", play: "Reproducir", pause: "Pausa",
+            to_vctl: "Usar como vídeo de control", to_vctl_tip: "Pone este vídeo en la entrada de vídeo de control de WanGP", to_vlib: "Añadir a la Librería de vídeos", to_vlib_tip: "Copia los vídeos seleccionados en la Librería de vídeos",
+            to_audio: "→ {label}", to_audio_tip: "Pone este audio en la entrada «{label}» de WanGP (la muestra el modelo actual)",
+            to_one: "Selecciona un solo archivo para esto", only_images_refs: "{n} archivo(s) que no son imágenes omitidos (las referencias solo admiten imágenes)",
+            sent_to: "Enviado a {what}", pv_dur: "Duración", pv_codec: "Códec", pv_fps: "Fotogramas/s", pv_rate: "Frecuencia",
             rescan: "Reescanear", rescan_tip: "Volver a escanear las carpetas vigiladas",
             f_cols: "Colecciones", f_all: "Todas", f_none: "Sin colección", f_tags: "Etiquetas", f_folders: "Carpetas", no_tags: "aún no hay etiquetas",
-            n_images: "{n} imágenes", n_shown: "{shown} de {n}", more: "Mostrar más",
-            empty: "Ninguna imagen coincide con estos filtros.", empty_lib: "La librería aún no tiene imágenes. Importa alguna o añade una carpeta.",
+            n_images: "{n} archivos", n_shown: "{shown} de {n}", more: "Mostrar más",
+            empty: "Nada coincide con estos filtros.", empty_lib: "La librería está vacía. Importa archivos o añade una carpeta.",
             in_n: "En {n} colección(es): {names}", in_none: "No está en ninguna colección", from_folder: "De una carpeta vigilada",
             sel_n: "{n} seleccionadas", sel_visible: "Seleccionar las mostradas", sel_clear: "Quitar selección",
             tag_ph: "Añadir etiqueta…", tag_add: "Añadir etiqueta", tag_remove: "Quitar «{tag}» de las imágenes elegidas",
@@ -809,7 +821,7 @@
             folders_note: "Las imágenes se leen en su sitio (nunca se copian, mueven ni cambian). Al añadir una a una colección se copia ahí.",
             drop: "Suelta las imágenes para importarlas", pool_badge: "sin colección", folder_badge: "carpeta", loading: "Cargando…",
             add_folder: "Añadir carpeta", add_folder_tip: "Vigilar una carpeta del equipo de WanGP (se indexa en su sitio, nunca se copia)", cancel: "Cancelar",
-            tree_title: "Carpetas", tree_sub: "Incluir subcarpetas", all_images: "Todas las imágenes", up: "Subir un nivel",
+            tree_title: "Carpetas", tree_sub: "Incluir subcarpetas", all_images: "Todos los medios", up: "Subir un nivel",
             frescan: "Reescanear esta carpeta", fremove: "Quitar del índice (los archivos del disco no se tocan)", fremove_confirm: "Haz clic otra vez para quitarla",
             indexing: "Indexando {name}: {done} / {total}", indexing_start: "Indexando {name}…",
             to_refs: "Añadir a referencias", to_refs_tip: "Añade las imágenes elegidas a Reference Images de WanGP (sin duplicados, sin sustituir nada)",
@@ -858,7 +870,7 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "" },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "" },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
                    expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
@@ -867,7 +879,7 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
+    const FAST_ACTIONS = new Set(["media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
@@ -889,7 +901,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "" };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "" };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -912,6 +924,7 @@
         if (sig !== q.sig || gen !== q.gen) return false;
         const totalChanged = q.total !== page.total || JSON.stringify(q.groups) !== JSON.stringify(page.groups || null);
         q.total = page.total; q.groups = page.groups || null; q.ready = true;
+        if (page.kinds && JSON.stringify(page.kinds) !== JSON.stringify(ilib.kinds)) { ilib.kinds = page.kinds; setTimeout(renderKindBar, 0); }
         ilib.recentMore = !!page.recent_more;
         if (q.items.length > q.total) q.items.length = q.total;
         page.items.forEach((it, k) => {   // keep the same object when nothing changed, so its card isn't rebuilt
@@ -1015,8 +1028,12 @@
         const tip = nc ? it("in_n", { n: nc, names: img.cols.map(colName).join(", ") }) : it("in_none");
         const on = ilib.sel.has(img.hash);
         const when = img.added ? it(img.folders.length && !nc && !img.pool ? "seen_on" : "added_on", { when: whenText(img.added) }) : "";
-        return `<div title="${esc(when)}" class="reflib-ib-card ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}">
-              <div class="reflib-ib-thumb ${th === "" ? "nothumb" : ""}">${th ? `<img src="${th}" alt="" decoding="async">` : ""}
+        const mk = img.kind || "image";   // 1.6.0 media cards: type icon, duration, audio ▶, video hover preview
+        const media = mk !== "image" ? `<span class="reflib-ib-kbadge k-${mk}" aria-hidden="true">${mk === "video" ? "🎬" : "🎵"}</span>
+                <span class="reflib-ib-dur" title="${esc(img.dur ? it("pv_dur") : it("dur_none"))}">${img.dur ? esc(fmtDur(img.dur)) : "…"}</span>
+                ${mk === "audio" ? `<button type="button" class="reflib-ib-aplay ${ilib.audioHash === img.hash ? "on" : ""}" data-act="aplay" data-hash="${img.hash}" title="${esc(it(ilib.audioHash === img.hash ? "pause" : "play"))}" aria-label="${esc(it("play"))}">${ilib.audioHash === img.hash ? "❚❚" : "▶"}</button>` : ""}` : "";
+        return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
+              <div class="reflib-ib-thumb ${th === "" ? "nothumb" : ""}">${th ? `<img src="${th}" alt="" decoding="async">` : ""}${media}
                 <label class="reflib-ib-cb" title="${esc(it("sel_visible"))}"><input type="checkbox" ${on ? "checked" : ""}></label>
                 <span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : it("folder_badge"))}</span>
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
@@ -1041,6 +1058,7 @@
         rs.textContent = it("rescan"); rs.title = it("rescan_tip");
         const fsb = root.querySelector(".reflib-ib-fs"); const fsOn = root.classList.contains("reflib-ib-full");
         fsb.textContent = fsOn ? "🗗" : "⛶"; fsb.title = it(fsOn ? "fs_restore" : "fs_max"); fsb.setAttribute("aria-pressed", fsOn ? "true" : "false");
+        renderKindBar();
         const vp = viewPref();   // 1.5.9 view selector
         root.querySelector(".reflib-ib-view").setAttribute("aria-label", it("v_size"));
         root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
@@ -1189,6 +1207,7 @@
             el.style.cssText = `position:absolute;left:${c * (lay.cw + GAP)}px;top:${y}px;width:${lay.cw}px;height:${lay.ch}px`;
             ilib.cards.set(idx, el); frag.appendChild(el);
         }
+        if (!durTimer) pollDurations();   // 1.6.0
         if (frag.childNodes.length) {
             vg.appendChild(frag);
             // keep DOM order = list order (keyboard/tab order, accessibility); moves ≤ 200 nodes
@@ -1284,7 +1303,7 @@
         };
         for (const f of d.folders) {
             node(f.id, "");
-            for (const [rel, [dc, ac]] of Object.entries((d.tree || {})[f.id] || {})) { const n = node(f.id, rel); n.direct = dc; n.all = ac; }
+            for (const [rel, [dc, ac, ki, kv, ka]] of Object.entries((d.tree || {})[f.id] || {})) { const n = node(f.id, rel); n.direct = dc; n.all = ac; n.k = { image: ki || 0, video: kv || 0, audio: ka || 0 }; }
         }
         ilib.tree = { nodes };
         ilib.treeFor = d.tree;
@@ -1301,8 +1320,10 @@
             const kids = [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
             const open = ilib.expanded.has(n.key);
             const active = cur && cur.fid === n.fid && cur.rel === n.rel;
-            const count = ilib.f.sub ? n.all : n.direct;
-            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc(root ? root.path : n.rel)}">
+            const kc = n.k || { image: n.all, video: 0, audio: 0 };
+            const count = ilib.f.kind ? kc[ilib.f.kind] : (ilib.f.sub ? n.all : n.direct);   // 1.6.0: per media type
+            const ktip = it("k_tree", { i: kc.image, v: kc.video, a: kc.audio });
+            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? root.path : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
                 <span class="reflib-ib-ticon">${FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? root.name : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
@@ -1317,7 +1338,7 @@
         return `<aside class="reflib-ib-tree ${d.folders.length ? "" : "slim"}">
             <div class="reflib-ib-trecent ${recentOn ? "on" : ""}" data-act="recent" title="${esc(it("recent_tip"))}"><span class="reflib-ib-ticon">${CLOCK_SVG}</span><span class="reflib-ib-tname">${esc(it("recent"))}</span></div>
             <div class="reflib-ib-tused ${usedOn ? "on" : ""}" data-act="used" title="${esc(it("used_tip"))}"><span class="reflib-ib-ticon">↺</span><span class="reflib-ib-tname">${esc(it("used"))}</span></div>
-            <div class="reflib-ib-tall ${cur || recentOn || usedOn ? "" : "on"}" data-act="crumb" data-fid="">${esc(it("all_images"))} <i>${d.total}</i></div>${head}${roots}${renderFacets()}</aside>`;
+            <div class="reflib-ib-tall ${cur || recentOn || usedOn ? "" : "on"}" data-act="crumb" data-fid="">${esc(it("all_images"))} <i>${ilib.f.kind && d.kinds ? d.kinds[ilib.f.kind] : d.total}</i></div>${head}${roots}${renderFacets()}</aside>`;
     }
     function renderCrumbs(d) {
         if (ilib.f.used) return `<div class="reflib-ib-usedbar"><span>${esc(it("used_title"))}</span>
@@ -1389,13 +1410,14 @@
         }
         if (f.q.trim()) groups.push(chip("q", "", esc(it("chip_search", { q: f.q.trim() })), "q"));
         if (f.jst) groups.push(chip("jst", f.jst, esc(it("jsf_title") + ": " + it("jsf_" + f.jst)), "jst"));
+        if (f.kind) groups.push(chip("kind", f.kind, esc(it("chip_kind", { k: it("k_" + f.kind) })), "kind"));
         if (!groups.length) return "";
         return `<div class="reflib-ib-fchips" title="${esc(it("chips_tip"))}">${join(groups, "chip_and")}<button type="button" class="reflib-ib-fclear" data-act="chipclear">${esc(it("chips_clear"))}</button></div>`;
     }
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = "";
+            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = "";
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
         }
@@ -1408,6 +1430,7 @@
             else if (kind === "tag") f.tags.delete(k); else if (kind === "at") f.atags.delete(k); else if (kind === "xt") f.xtags.delete(k);
             else if (kind === "range") delete f.ranges[k];
             else if (kind === "jst") f.jst = "";
+            else if (kind === "kind") f.kind = "";
             else if (kind === "q") { f.q = ""; const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
             newQuery(); return true;
         }
@@ -1986,18 +2009,22 @@
         const added = (full && full.added) || (lite && lite.added) || 0;
         const folderOnly = full ? (full.folders || []).length && !(full.collections || []).length && !full.in_pool : lite && lite.folders.length && !lite.cols.length && !lite.pool;
         const src = full && full.src ? full.src : ilib.thumbs.get(h);
-        host.innerHTML = `<aside class="reflib-ib-preview"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
-              <div class="reflib-ib-pv-img">${src ? `<img src="${src}" alt="">` : ""}</div>
+        const pmk = (full && full.kind) || (lite && lite.kind) || "image";   // 1.6.0
+        host.innerHTML = `<aside class="reflib-ib-preview k-${pmk}"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
+              <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
+                  : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
               <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}</div>
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
-              <div class="reflib-ib-muted">${full && full.width ? `${full.width}×${full.height} · ${Math.round((full.size || 0) / 1024)} KB` : ""}</div>
+              <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
+                  full && full.codec ? full.codec : "", full && full.rate ? (full.rate / 1000) + " kHz" : "", full && full.size ? (full.size > 1048576 ? (full.size / 1048576).toFixed(1) + " MB" : Math.round(full.size / 1024) + " KB") : ""].filter(Boolean).join(" · "))
+                  : (full && full.width ? `${full.width}×${full.height} · ${Math.round((full.size || 0) / 1024)} KB` : "")}</div>
               ${added ? `<div class="reflib-ib-muted reflib-ib-pv-when">${esc(it(folderOnly ? "seen_on" : "added_on", { when: whenText(added) }))}</div>` : ""}
               <h4>${esc(it("preview_cols"))}</h4><div class="reflib-ib-pv-list">${cols.length ? cols.map(c => `<span class="reflib-ib-chip static">${esc(c)}</span>`).join("") : esc(it("in_none"))}</div>
               ${files.length ? `<h4>${esc(it("preview_folders"))}</h4><div class="reflib-ib-pv-files">${files.map(p => `<div title="${esc(p)}">${esc(p)}</div>`).join("")}</div>` : ""}
               <h4>${esc(it("preview_tags"))}</h4><div class="reflib-ib-pv-list">${tags.length ? tags.map(x => `<span class="reflib-ib-chip static">${esc(x)}</span>`).join("") : esc(it("preview_none"))}</div>
-              <div class="reflib-ib-autohost">${renderAutoPanel(h)}</div></aside>`;
-        if (!ilib.at.img || ilib.at.img.hash !== h) loadAutoImage(h);
+              ${pmk === "image" ? `<div class="reflib-ib-autohost">${renderAutoPanel(h)}</div>` : ""}</aside>`;
+        if (pmk === "image" && (!ilib.at.img || ilib.at.img.hash !== h)) loadAutoImage(h);
     }
     // ---- selection footer: the server summarises the selection (it can be "all 11 207 matching") ----
     let infoTimer = null;
@@ -2025,6 +2052,17 @@
         const d = ilib.data, q = ilib.q;
         if (!d) return "";
         return q.total === d.total ? it("n_images", { n: d.total }) : it("n_shown", { shown: q.total, n: d.total });
+    }
+    function mediaActions(inf, n) {   // 1.6.0: only what the selection and the current WanGP model can take
+        const k = inf.kinds || { image: n, video: 0, audio: 0 };
+        let html = "";
+        if (k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
+        if (k.video) {
+            if (wanInput("reflib-vt-generate")) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="tovctl" ${n === 1 && k.video === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_vctl_tip") : it("to_one"))}">🎬 ${esc(it("to_vctl"))}</button>`;
+            html += `<button type="button" class="reflib-ib-btn" data-act="tovlib" title="${esc(it("to_vlib_tip"))}">${esc(it("to_vlib"))}</button>`;
+        }
+        if (k.audio) for (const a of audioTargets()) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="toaudio" data-to="${a.to}" ${n === 1 && k.audio === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_audio_tip", { label: a.label }) : it("to_one"))}">🎵 ${esc(it("to_audio", { label: a.label }))}</button>`;
+        return html;
     }
     function renderFooter() {
         const host = ilib.root && ilib.root.querySelector(".reflib-ib-foothost");
@@ -2061,9 +2099,9 @@
                 <datalist id="reflib-ib-taglist">${d.tags.map(x => `<option value="${esc(x.tag)}"></option>`).join("")}</datalist>
                 <button type="button" class="reflib-ib-btn" data-act="tag">${esc(it("tag_add"))}</button>
                 <label class="reflib-ib-check" title="${esc(it("close_after"))}"><input type="checkbox" class="reflib-ib-closeafter" ${localStorage.getItem("reflib_ib_close_after") === "1" ? "checked" : ""}> ${esc(it("close_after"))}</label>
-                <button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip"))}">${esc(it("to_refs"))}</button>
+                ${mediaActions(inf, n)}
                 <button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="addopen">${esc(it("add_to"))}</button>
-                <button type="button" class="reflib-ib-btn reflib-ib-at" data-act="atgo" title="${esc(it("at_btn_tip"))}">✨ ${esc(it("at_btn"))}</button>
+                ${!inf.kinds || inf.kinds.image ? `<button type="button" class="reflib-ib-btn reflib-ib-at" data-act="atgo" title="${esc(it("at_btn_tip"))}">✨ ${esc(it("at_btn"))}</button>` : ""}
                 ${removeBtn}<button type="button" class="reflib-ib-btn reflib-ib-danger ${ilib.delArmed ? "armed" : ""}" data-act="del" ${canDelete ? "" : "disabled"} title="${esc(delTip)}">${esc(delLabel)}</button>` : ""}
             </div>${addPanel}`;
         const tagin = host.querySelector(".reflib-ib-tagin");
@@ -2147,6 +2185,7 @@
               <button type="button" class="reflib-ib-btn reflib-ib-addfolder"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-rescan"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-histbtn" data-act="hist"></button>
+              <span class="reflib-ib-kinds" role="group"></span>
               <span class="reflib-ib-view" role="group"><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="l">▣</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="m">▦</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="s">▩</button><button type="button" class="reflib-ib-vdet" data-act="vdetails"></button></span>
               <button type="button" class="reflib-ib-fs" data-act="fullscreen" aria-label="fullscreen">⛶</button>
               <button type="button" class="reflib-ib-x" aria-label="close">×</button></div>
@@ -2163,7 +2202,7 @@
             <div class="reflib-ib-atset" hidden></div>
             <div class="reflib-ib-body"></div>
             <div class="reflib-ib-drop"><span></span></div>
-            <input type="file" class="reflib-ib-file" accept="image/*" multiple hidden></div>`;
+            <input type="file" class="reflib-ib-file" accept="image/*,video/*,audio/*" multiple hidden></div>`;
         const host = document.querySelector(".gradio-container") || document.body;
         host.appendChild(bg);
         ilib.root = bg;
@@ -2186,7 +2225,7 @@
         modal.addEventListener("dragleave", (e) => { if (e.target === modal || !modal.contains(e.relatedTarget)) modal.classList.remove("dropping"); });
         modal.addEventListener("drop", (e) => {
             e.preventDefault(); modal.classList.remove("dropping");
-            const files = [...(e.dataTransfer.files || [])].filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(f.name));
+            const files = [...(e.dataTransfer.files || [])].filter(f => /^(image|video|audio)\//.test(f.type) || /\.(png|jpe?g|webp|bmp|gif|tiff?|mp4|mov|m4v|webm|mkv|avi|wav|mp3|flac|ogg|m4a|aac|opus)$/i.test(f.name));
             if (files.length) uploadFiles(files);
         });
         bg.addEventListener("click", onClick);
@@ -2204,6 +2243,7 @@
             openLightbox(+card.dataset.idx);
         });
         bg.addEventListener("mousedown", startDrag);
+        hoverWire(bg);
         // Shift on a checkbox = range (the change event doesn't carry the modifier)
         bg.addEventListener("click", (e) => { if (e.target.matches(".reflib-ib-cb input")) ilib.cbShift = e.shiftKey; }, true);
         bg.addEventListener("change", onChange);
@@ -2475,6 +2515,22 @@
         fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
+        // 1.6.0: videos and audio play in the viewer (audio over its waveform)
+        const stage = box.querySelector(".reflib-ib-lbstage");
+        stage.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} m.remove(); });
+        const mk = it2.kind || "image";
+        box.dataset.kind = mk;
+        img.hidden = mk === "video";
+        if (mk !== "image") {
+            stopAudio();
+            mediaUrl(it2.hash).then(u => {
+                if (!u || ilib.lightbox !== box || img.dataset.hash !== it2.hash) return;
+                const m = document.createElement(mk === "video" ? "video" : "audio");
+                m.className = "reflib-ib-lbmedia"; m.controls = true; m.autoplay = true; m.preload = "auto"; m.src = u;
+                if (mk === "video") { m.playsInline = true; if (th) m.poster = th; }
+                stage.appendChild(m); m.play().catch(() => {});
+            });
+        }
         showPreview(it2.hash, idx);
         sendIlib({ action: "preview", hash: it2.hash }).then(r => { if (ilib.lightbox === box && img.dataset.hash === it2.hash && r && r.image && r.image.src) img.src = r.image.src; }).catch(() => {});
     }
@@ -2492,7 +2548,100 @@
         if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
     }
     function closeLightbox(silent) {
-        if (ilib.lightbox) { ilib.lightbox.remove(); ilib.lightbox = null; }
+        if (ilib.lightbox) { ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} }); ilib.lightbox.remove(); ilib.lightbox = null; }
+    }
+
+    // ---- 1.6.0 media browser: type filter, durations, audio playback, video hover preview, WanGP audio/video targets
+    const KINDS = ["image", "video", "audio"];
+    const closeAfter = () => localStorage.getItem("reflib_ib_close_after") === "1";
+    function fmtDur(sec) {
+        const t = Math.max(0, +sec || 0);
+        if (t < 60) return "0:" + String(Math.round(t)).padStart(2, "0");
+        const r = Math.round(t), h = Math.floor(r / 3600), m = Math.floor((r % 3600) / 60), x = r % 60;
+        return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
+    }
+    function renderKindBar() {
+        const host = ilib.root && ilib.root.querySelector(".reflib-ib-kinds"); if (!host) return;
+        const k = ilib.kinds || (ilib.data && ilib.data.kinds) || {}, cur = ilib.f.kind || "";
+        const tot = KINDS.reduce((a, x) => a + (k[x] || 0), 0);
+        host.setAttribute("aria-label", it("k_tip"));
+        host.innerHTML = [["", it("k_all"), tot]].concat(KINDS.map(x => [x, it("k_" + x), k[x] || 0])).map(([v, l, n]) =>
+            `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${esc(l)} <i>${n}</i></button>`).join("");
+    }
+    const murl = new Map();
+    function mediaUrl(h) {
+        if (murl.has(h)) return Promise.resolve(murl.get(h));
+        return sendIlib({ action: "media_url", hash: h }).then(r => { const u = r && r.ok ? r.url : null; if (u) murl.set(h, u); return u; }).catch(() => null);
+    }
+    function stopAudio() {
+        if (ilib.audio) { try { ilib.audio.pause(); } catch (e) {} ilib.audio = null; }
+        const was = ilib.audioHash; ilib.audioHash = null;
+        if (was) { const b = ilib.root && ilib.root.querySelector(`.reflib-ib-aplay[data-hash="${was}"]`); if (b) { b.classList.remove("on"); b.textContent = "▶"; b.title = it("play"); } }
+    }
+    function toggleAudio(h) {
+        if (ilib.audioHash === h) { stopAudio(); return; }
+        stopAudio();
+        mediaUrl(h).then(u => {
+            if (!u) return;
+            const a = new Audio(u); a.preload = "auto"; ilib.audio = a; ilib.audioHash = h;
+            a.addEventListener("ended", () => { if (ilib.audio === a) stopAudio(); });
+            a.play().catch(() => {});
+            const b = ilib.root && ilib.root.querySelector(`.reflib-ib-aplay[data-hash="${h}"]`); if (b) { b.classList.add("on"); b.textContent = "❚❚"; b.title = it("pause"); }
+        });
+    }
+    function hoverWire(bg) {
+        let timer = null, cur = null;
+        const clear = () => { clearTimeout(timer); timer = null; if (cur) { const v = cur.querySelector(".reflib-ib-hvid"); if (v) { try { v.pause(); } catch (e) {} v.remove(); } cur = null; } };
+        bg.addEventListener("mouseover", (e) => {
+            const card = e.target.closest(".reflib-ib-card[data-kind='video']");
+            if (card === cur) return;
+            clear();
+            if (!card || ilib.drag) return;
+            cur = card;
+            timer = setTimeout(() => {   // a short delay so sweeping across the grid starts nothing
+                const h = card.dataset.hash;
+                mediaUrl(h).then(u => {
+                    if (!u || cur !== card) return;
+                    const th = card.querySelector(".reflib-ib-thumb"); if (!th) return;
+                    const v = document.createElement("video");
+                    v.className = "reflib-ib-hvid"; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata"; v.src = u;
+                    v.addEventListener("loadeddata", () => v.classList.add("on"));
+                    th.appendChild(v); v.play().catch(() => {});
+                });
+            }, 450);
+        });
+        bg.addEventListener("mouseleave", clear);
+        bg.addEventListener("mousedown", clear, true);
+    }
+    let durTimer = null, durTries = 0;
+    function pollDurations() {   // durations are probed in the background (throttled); refresh the visible cards that wait
+        clearTimeout(durTimer);
+        if (!ilib.open) return;
+        const want = [...(ilib.cards || new Map()).values()].map(c => c.dataset.hash).filter(h => { const x = ilib.q.items.find(i => i && i.hash === h); return x && x.kind && !x.dur; }).slice(0, 200);
+        if (!want.length) { durTries = 0; durTimer = null; return; }
+        if (++durTries > 60) { durTimer = null; return; }
+        durTimer = setTimeout(() => (durTimer = null, sendIlib({ action: "media_dur", hashes: want }).then(r => {
+            if (!r || !r.ok) return;
+            let changed = false;
+            for (const x of ilib.q.items) if (x && r.dur[x.hash]) { x.dur = r.dur[x.hash]; changed = true; const c = ilib.cards.get(x.hash) || [...ilib.cards.values()].find(cc => cc.dataset.hash === x.hash); const sp = c && c.querySelector(".reflib-ib-dur"); if (sp) { sp.textContent = fmtDur(x.dur); sp.title = it("pv_dur"); } }
+            pollDurations();
+        }).catch(() => pollDurations())), 1500);
+    }
+    function wanInput(cls) {   // a WanGP input the CURRENT model shows (hidden ones have no layout box)
+        const el = document.querySelector("." + cls);
+        if (!el || !el.offsetParent || getComputedStyle(el).display === "none") return null;
+        const lab = el.querySelector('[data-testid="block-label"], label span, .label-wrap span');
+        return { el, label: ((lab && lab.textContent) || "").trim() };
+    }
+    function audioTargets() {
+        return ["audio_guide", "audio_guide2", "audio_guide3"].map(n => { const w = wanInput(`reflib-at-${n}-generate`); return w ? { to: n, label: w.label || n } : null; }).filter(Boolean);
+    }
+    function sendMediaTo(to) {
+        const h = [...ilib.sel][0]; if (!h) return;
+        sendBridge({ hash: h, to, target: "generate:history" }).then(r => {
+            if (r && r.ok && (r.restored || []).length) { toast(it("sent_to", { what: to === "video_guide" ? it("to_vctl") : (audioTargets().find(a => a.to === to) || { label: to }).label }), "ok"); if (closeAfter()) closeBrowser(); }
+            else toast((r && r.error) || "error", "error");
+        }).catch(() => {});
     }
     // 1.5.9 view preferences (thumbnail size, details panel): plugin settings + localStorage fallback
     function viewPref() {
@@ -2561,6 +2710,11 @@
         if (act === "ctxbig") { closeCtx(); openLightbox(+el.dataset.idx); return; }
         if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
         if (act === "vsize") { setView({ thumb: el.dataset.v }); return; }
+        if (act === "kind") { ilib.f.kind = el.dataset.v || ""; newQuery(); renderKindBar(); render(); return; }
+        if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
+        if (act === "tovctl") { sendMediaTo("video_guide"); return; }
+        if (act === "toaudio") { sendMediaTo(el.dataset.to); return; }
+        if (act === "tovlib") { sendIlib(Object.assign({ action: "to_vlib" }, ilib.sel.payload())).then(r => { toast((r && r.message) || "error", r && r.ok ? "ok" : "error"); }).catch(() => {}); return; }
         if (act === "vdetails") { setView({ details: !viewPref().details }); return; }
         if (act === "ctxdetails") { closeCtx(); setView({ details: true }); return; }
         else if (act === "selall") selectAllMatching();
@@ -2828,7 +2982,7 @@
     }
     function closeBrowser() {
         if (!ilib.root) return;
-        closeLightbox();
+        closeLightbox(); stopAudio();
         ilib.open = false;
         ilib.root.classList.remove("open");
         document.documentElement.classList.remove("reflib-ib-lock");
@@ -2905,17 +3059,17 @@
               outputs: "Generated videos without history", outputs_tip: "From WanGP's output folder: settings come from the metadata embedded in the file",
               more: "Load more", missing: "output file missing", size: "{mb} MB stored", cap: "Size cap (MB, 0 = no cap)", enabled: "Record generations",
               no_loader: "WanGP's settings loader was not found on the page", loading: "Loading settings in WanGP…", restored: "Restored: {what}",
-              refs: "Refs", start: "Start", end: "End", control: "Control", vmask: "Video mask", imask: "Image mask", guide: "Guide", source: "Source", find: "History", nohist: "no history entry", noembed: "no embedded settings" },
+              refs: "Refs", start: "Start", end: "End", control: "Control", vmask: "Video mask", imask: "Image mask", guide: "Guide", source: "Source", aud1: "Audio 1", aud2: "Audio 2", aud3: "Audio 3", find: "History", nohist: "no history entry", noembed: "no embedded settings" },
         es: { title: "Historial", tip: "Historial de generaciones", search: "Buscar prompt, modelo o archivo…", empty: "Aún no hay generaciones. Genera un vídeo en WanGP y aparecerá aquí.",
               reuse_all: "Reutilizar todos los ajustes", reuse_all_tip: "Modelo, prompt, semilla, resolución, pasos… con el cargador de ajustes de WanGP, más refs, vídeo de control y máscaras",
               reuse_refs: "Reutilizar solo referencias", replace: "Reemplazar las refs actuales (por defecto: añadir)", savecol: "Guardar refs como colección", del: "Borrar", undo: "Deshacer",
               outputs: "Vídeos generados sin historial", outputs_tip: "De la carpeta de salida de WanGP: los ajustes salen de los metadatos incrustados en el archivo",
               more: "Cargar más", missing: "falta el archivo de salida", size: "{mb} MB guardados", cap: "Tamaño máximo (MB, 0 = sin límite)", enabled: "Registrar generaciones",
               no_loader: "No se encontró el cargador de ajustes de WanGP en la página", loading: "Cargando ajustes en WanGP…", restored: "Restaurado: {what}",
-              refs: "Refs", start: "Inicio", end: "Final", control: "Control", vmask: "Máscara vídeo", imask: "Máscara imagen", guide: "Guía", source: "Origen", find: "Historial", nohist: "sin entrada en el historial", noembed: "sin ajustes incrustados" },
+              refs: "Refs", start: "Inicio", end: "Final", control: "Control", vmask: "Máscara vídeo", imask: "Máscara imagen", guide: "Guía", source: "Origen", aud1: "Audio 1", aud2: "Audio 2", aud3: "Audio 3", find: "Historial", nohist: "sin entrada en el historial", noembed: "sin ajustes incrustados" },
     };
     const ht = (k, p = {}) => String((HT[lang()] || HT.en)[k] || HT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
-    const HFIELD = { image_refs: "refs", image_start: "start", image_end: "end", video_guide: "control", video_mask: "vmask", image_mask: "imask", image_guide: "guide", video_source: "source" };
+    const HFIELD = { image_refs: "refs", image_start: "start", image_end: "end", video_guide: "control", video_mask: "vmask", image_mask: "imask", image_guide: "guide", video_source: "source", audio_guide: "aud1", audio_guide2: "aud2", audio_guide3: "aud3" };
     const hist = { root: null, items: [], total: 0, q: "", timer: 0, outputs: [], replace: false, sel: new Set(), anchor: -1 };
     function histBuild() {
         const bg = document.createElement("div");
@@ -2958,7 +3112,7 @@
         const date = new Date(e.ts * 1000).toLocaleString(lang() === "es" ? "es-ES" : "en-GB");
         const k = e.key || {};
         const meta = [e.model_type, k.resolution, k.video_length ? k.video_length + "f" : "", k.num_inference_steps ? k.num_inference_steps + " steps" : "", k.seed !== undefined ? "seed " + k.seed : ""].filter(Boolean).join(" · ");
-        const groups = Object.entries(e.media || {}).map(([f, xs]) => `<div class="reflib-hist-grp"><span>${esc(ht(HFIELD[f] || f))}</span>${xs.map(x => e.thumbs[x.h] ? `<img src="${e.thumbs[x.h]}" alt="" class="${x.kind === "video" ? "vid" : ""}">` : `<i class="reflib-hist-noimg">${x.kind === "video" ? "🎞" : "▣"}</i>`).join("")}</div>`).join("");
+        const groups = Object.entries(e.media || {}).map(([f, xs]) => `<div class="reflib-hist-grp"><span>${esc(ht(HFIELD[f] || f))}</span>${xs.map(x => e.thumbs[x.h] ? `<img src="${e.thumbs[x.h]}" alt="" class="${x.kind === "video" ? "vid" : ""}">` : `<i class="reflib-hist-noimg">${x.kind === "video" ? "🎞" : x.kind === "audio" ? "♪" : "▣"}</i>`).join("")}</div>`).join("");
         const hasRefs = !!(e.media && e.media.image_refs);
         return `<div class="reflib-hist-row ${hist.sel.has(e.id) ? "sel" : ""}" data-eid="${esc(e.id)}" aria-selected="${hist.sel.has(e.id)}">
             <div class="reflib-hist-out">${e.poster_src ? `<img src="${e.poster_src}" alt="">` : `<i class="reflib-hist-noimg">🎞</i>`}</div>

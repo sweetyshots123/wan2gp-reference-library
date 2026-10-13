@@ -297,8 +297,29 @@ def _cached_thumb(h: str) -> Optional[str]:
     return None
 
 
+def _media_thumb(src: str, cache: str, kind: str) -> Optional[str]:
+    """1.6.0: poster frame (video) / waveform (audio), cached as .thumbs/<hash>.jpg like image thumbnails."""
+    from . import mediainfo
+    try:
+        if not (os.path.isfile(cache) and os.path.getsize(cache) > 0 and os.path.getmtime(cache) >= os.path.getmtime(src)):
+            os.makedirs(os.path.dirname(cache), exist_ok=True)
+            if not (mediainfo.video_thumb(src, cache) if kind == "video" else mediainfo.audio_thumb(src, cache)):
+                return None
+        with open(cache, "rb") as f:
+            return "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+    except Exception as e:
+        print(f"[Reference Library] media thumbnail failed for {src}: {e}")
+        return None
+
+
 def _make_thumb(h: str, cands: List[str], size: int = 220) -> Optional[str]:
     for src in cands:
+        k = kind_of(src)
+        if k in ("video", "audio") and os.path.isfile(src):
+            uri = _media_thumb(src, os.path.join(_thumbs_dir(), h + ".jpg"), k)
+            if uri:
+                return uri
+            continue
         if os.path.isfile(src):
             uri = _img_data_uri(src, size, os.path.join(_thumbs_dir(), h + ".jpg"))
             if uri:
@@ -383,6 +404,26 @@ def thumbs_for(hashes: Iterable[str], size: int = 220, budget: Optional[float] =
     return out
 
 
+SERVE_URL = None   # 1.6.0 host hook: path -> URL the browser can stream (WanGP: Gradio file route, this one file only)
+
+
+def media_path(digest: str) -> Optional[str]:
+    img = catalog()["by_hash"].get(str(digest or ""))
+    if not img:
+        return None
+    return next((c for c in [img["path"]] + list(img.get("files") or []) if c and os.path.isfile(c)), None)
+
+
+def media_url(digest: str) -> Optional[str]:
+    p = media_path(digest)
+    if not p or not SERVE_URL:
+        return None
+    try:
+        return SERVE_URL(p)
+    except Exception:
+        return None
+
+
 def preview(digest: str, size: int = 1024) -> Optional[Dict[str, Any]]:
     img = catalog()["by_hash"].get(str(digest or ""))
     for img in [img] if img else []:
@@ -398,6 +439,23 @@ def preview(digest: str, size: int = 1024) -> Optional[Dict[str, Any]]:
             out.pop("path", None)
             src = next((c for c in [img["path"]] + list(img.get("files") or []) if os.path.isfile(c)), img["path"])
             img = dict(img, path=src)
+            out["kind"] = img["kind"]
+            if img["kind"] != "image":   # 1.6.0: poster / waveform + a playable URL for this one file
+                from . import mediainfo
+                out["src"] = _media_thumb(src, os.path.join(_thumbs_dir(), img["hash"] + ".jpg"), img["kind"])
+                mi = mediainfo.get(img["hash"]) or (mediainfo._probe(src, img["kind"]) if os.path.isfile(src) else {})
+                out["dur"] = mi.get("duration") or 0
+                if mi.get("w"):
+                    out["width"], out["height"] = mi["w"], mi["h"]
+                for k in ("fps", "codec", "rate", "ch"):
+                    if mi.get(k):
+                        out[k] = mi[k]
+                out["url"] = media_url(img["hash"])
+                try:
+                    out["size"] = os.path.getsize(src)
+                except OSError:
+                    pass
+                return out
             out["src"] = _img_data_uri(src, size)
             try:
                 from PIL import Image
@@ -418,6 +476,16 @@ def preview(digest: str, size: int = 1024) -> Optional[Dict[str, Any]]:
 #                                    pool/<sha256>.<ext>
 #                                    pool/.trash/<sha256>.<ext> + <sha256>.json   (deleted, restorable 5 min, purged at 15)
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff")
+VIDEO_EXTS = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")            # 1.6.0 media browser
+AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
+MEDIA_EXTS = IMAGE_EXTS + VIDEO_EXTS + AUDIO_EXTS
+KINDS = ("image", "video", "audio")
+
+
+def kind_of(path: str) -> str:
+    """"image" | "video" | "audio" from the extension ("" for anything else)."""
+    e = os.path.splitext(str(path or ""))[1].lower()
+    return "image" if e in IMAGE_EXTS else "video" if e in VIDEO_EXTS else "audio" if e in AUDIO_EXTS else ""
 
 
 def pool_dir() -> str:
@@ -472,9 +540,9 @@ def pool_add(src: str, name: Optional[str] = None, source: str = "import", skip_
     if not isinstance(src, str) or not os.path.isfile(src):
         raise storage.StorageError("source image not found")
     ext = os.path.splitext(name or src)[1].lower() or os.path.splitext(src)[1].lower()
-    if ext not in IMAGE_EXTS:
+    if ext not in MEDIA_EXTS:
         ext = os.path.splitext(src)[1].lower()
-    if ext not in IMAGE_EXTS:
+    if ext not in MEDIA_EXTS:
         raise storage.StorageError("not an image file")
     digest = storage._file_hash(src)
     with storage._lock:
@@ -771,7 +839,7 @@ def _candidates(folder: Dict[str, Any], with_stat: bool = False):
                     continue
             except OSError:
                 continue
-            if os.path.splitext(n)[1].lower() not in IMAGE_EXTS:
+            if os.path.splitext(n)[1].lower() not in MEDIA_EXTS:   # 1.6.0: images, videos and audio
                 continue
             if with_stat:
                 try:
@@ -1070,7 +1138,7 @@ def browse_dir(path: str) -> Dict[str, Any]:
                             dirs.append({"name": n, "path": os.path.join(text, n)})
                         else:
                             more = True
-                    elif images < BROWSE_MAX_COUNT and not n.startswith(".") and os.path.splitext(n)[1].lower() in IMAGE_EXTS:
+                    elif images < BROWSE_MAX_COUNT and not n.startswith(".") and os.path.splitext(n)[1].lower() in MEDIA_EXTS:
                         images += 1
                 except OSError:
                     continue
@@ -1339,11 +1407,13 @@ def catalog() -> Dict[str, Any]:
                       "folders": tuple(dict.fromkeys(intern(f["id"]) for f in i["folders"])),
                       "locs": tuple((intern(a), intern(b)) for a, b in i["locs"]), "tags": tuple(i["tags"]),
                       "tagf": frozenset(_fold(t) for t in i["tags"]), "fold": fold, "added": i["added"],
-                      "auto": amap.get(i["hash"], frozenset()), "body": bmap.get(i["hash"])})
+                      "auto": amap.get(i["hash"], frozenset()), "body": bmap.get(i["hash"]),
+                      "kind": kind_of(i["path"]) or kind_of(i["name"]) or "image"})
     folders = list_folders()
     fids = {f["id"] for f in folders}
     direct: Dict[str, Dict[str, set]] = {f["id"]: {"": set()} for f in folders}
     subtree: Dict[str, Dict[str, set]] = {f["id"]: {"": set()} for f in folders}
+    kind_by = {i["hash"]: i["kind"] for i in items}
     for i in items:
         for fid, rel in i["locs"]:
             if fid not in fids:
@@ -1352,7 +1422,13 @@ def catalog() -> Dict[str, Any]:
             parts = rel.split("/") if rel else []
             for k in range(len(parts), -1, -1):
                 subtree[fid].setdefault("/".join(parts[:k]), set()).add(i["hash"])
-    tree = {fid: {rel: [len(direct[fid].get(rel, ())), len(s)] for rel, s in subtree[fid].items()} for fid in subtree}
+
+    def _cnt(s):   # 1.6.0: [direct, subtree, subtree images, videos, audios]
+        c = {"image": 0, "video": 0, "audio": 0}
+        for h in s:
+            c[kind_by.get(h, "image")] += 1
+        return [c["image"], c["video"], c["audio"]]
+    tree = {fid: {rel: [len(direct[fid].get(rel, ())), len(s)] + _cnt(s) for rel, s in subtree[fid].items()} for fid in subtree}
     # 1.5.5: folder-name search. One folded "path" string per tree node (hundreds, not 11k), matched once per query.
     fpath = {f["id"]: f["path"].replace("\\", "/").rstrip("/") for f in folders}
     nodefold = {(fid, rel): _fold(fpath[fid] + ("/" + rel if rel else "")) for fid in subtree for rel in subtree[fid]}
@@ -1364,7 +1440,13 @@ def catalog() -> Dict[str, Any]:
     _cat["rev"] = _cat.get("rev", 0) + 1
     data = {"rev": _cat["rev"], "items": items, "by_hash": {i["hash"]: i for i in items}, "tree": tree, "nodefold": nodefold,
             "tags": sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"]))),
-            "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"])}
+            "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"]),
+            "kinds": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS}}
+    try:   # 1.6.0: durations of every video/audio, probed in the background (throttled), never on this path
+        from . import mediainfo
+        mediainfo.want((i["hash"], i["path"], i["kind"]) for i in items if i["kind"] != "image")
+    except Exception:
+        pass
     with _cat_lock:
         _cat.update(key=key, data=data, fkey=None, flist=None, lru=[])
     return data
@@ -1382,7 +1464,8 @@ def _clean_filter(f) -> Dict[str, Any]:
             "ranges": [(str(r[0]), float(r[1]), float(r[2])) for r in (f.get("ranges") or []) if isinstance(r, (list, tuple)) and len(r) == 3][:20],
             "node": {"fid": str(node.get("fid") or ""), "rel": str(node.get("rel") or "")} if node and not f.get("recent") and not f.get("used") else None,
             "sub": f.get("sub", True) is not False, "recent": bool(f.get("recent")) and not f.get("used"), "used": bool(f.get("used")),
-            "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1)))}
+            "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1))),
+            "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS else ""}
 
 
 def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
@@ -1436,7 +1519,11 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     if q:   # 1.5.5: images whose folder path (watched folder or any subfolder) contains the term
         qnodes = {k for k, fs in (cat.get("nodefold") or {}).items() if q in fs}
 
+    kind = f["kind"]
+
     def ok(i):
+        if kind and i["kind"] != kind:
+            return False
         if cols or none:
             if not (cols & i["colids"]) and not (none and i["in_pool"] and not i["colids"]):
                 return False
@@ -1490,8 +1577,24 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
 
 
 def _light(i: Dict[str, Any]) -> Dict[str, Any]:
-    return {"hash": i["hash"], "name": i["name"], "names": list(i["names"][:4]), "cols": sorted(i["colids"]), "pool": bool(i["in_pool"]),
-            "folders": list(i["folders"]), "tags": list(i["tags"]), "added": round(i["added"] or 0, 1)}
+    out = {"hash": i["hash"], "name": i["name"], "names": list(i["names"][:4]), "cols": sorted(i["colids"]), "pool": bool(i["in_pool"]),
+           "folders": list(i["folders"]), "tags": list(i["tags"]), "added": round(i["added"] or 0, 1)}
+    if i["kind"] != "image":   # 1.6.0
+        from . import mediainfo
+        out["kind"] = i["kind"]
+        mi = mediainfo.get(i["hash"])
+        if mi:
+            out["dur"] = mi.get("duration") or 0
+    return out
+
+
+def kind_counts(f) -> Dict[str, int]:
+    """1.6.0: images / videos / audio over the current filter without its type (the Todo/Fotos/Vídeos/Audios chips)."""
+    base = dict(f if isinstance(f, dict) else {}, kind="")
+    c = {k: 0 for k in KINDS}
+    for i in filtered(base)["items"]:
+        c[i["kind"]] += 1
+    return c
 
 
 def _groups(items: List[Dict[str, Any]], tz_min: int, now: float, ts=None) -> List[Dict[str, Any]]:
@@ -1520,11 +1623,16 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0) -> Dict[str, An
     limit = max(0, min(PAGE_MAX, int(limit if limit is not None else 120)))
     jrev, jmap = _jobmap()
     page = [_light(i) for i in items[offset:offset + limit]]
+    try:   # on-screen media without a duration yet are probed first
+        from . import mediainfo
+        mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image"), front=True)
+    except Exception:
+        pass
     for x in page:
         st = jmap.get(x["hash"])
         if st:
             x["js"] = st
-    out = {"total": len(items), "offset": offset, "items": page, "recent_more": res["recent_more"], "jrev": jrev}
+    out = {"total": len(items), "offset": offset, "items": page, "recent_more": res["recent_more"], "jrev": jrev, "kinds": kind_counts(f)}
     if res["recent"]:
         out["groups"] = _groups(items, tz_min, now)
     if res.get("used"):
@@ -1591,11 +1699,13 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
     by = catalog()["by_hash"]
     n = deletable = folder_only = on_disk = in_one = 0
     cols, tags = set(), {}
+    kinds = {k: 0 for k in KINDS}
     for h in hashes:
         i = by.get(h)
         if not i:
             continue
         n += 1
+        kinds[i["kind"]] += 1
         if i["colids"] or i["in_pool"]:
             deletable += 1
             cols |= i["colids"]
@@ -1609,7 +1719,7 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             for t in i["tags"]:
                 tags.setdefault(_fold(t), t)
     return {"n": n, "deletable": deletable, "cols": len(cols), "folder_only": folder_only, "on_disk": on_disk,
-            "in_one": in_one, "tags": list(tags.values())}
+            "in_one": in_one, "tags": list(tags.values()), "kinds": kinds}
 
 
 def facets(f, limit: int = 400) -> Dict[str, int]:
@@ -1656,7 +1766,7 @@ def body_stats(f) -> Dict[str, Dict[str, float]]:
 def meta() -> Dict[str, Any]:
     cat = catalog()
     return {"rev": cat["rev"], "total": len(cat["items"]), "collections": cat["collections"], "tags": cat["tags"], "folders": cat["folders"],
-            "tree": cat["tree"], "n_unassigned": cat["n_unassigned"]}
+            "tree": cat["tree"], "n_unassigned": cat["n_unassigned"], "kinds": cat.get("kinds", {})}
 
 
 def invalidate() -> None:

@@ -97,7 +97,30 @@ def _inside(path: str, root: str) -> bool:
         return False
 
 
+_MEDIA_SAMPLED = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
+SAMPLED_HASH_MIN = 48 * 1024 * 1024   # 1.6.0: big video/audio files get a sampled content hash (12k-file folders stay fast)
+
+
+def _sampled_hash(path: str, size: int) -> str:
+    """sha256 over the size + 4 MB at the start, middle and end. Same 64-hex shape as a full hash; still content-based
+    (a copy of the file gets the same hash), but a 4 GB video costs 12 MB of reading instead of 4 GB."""
+    h = hashlib.sha256(b"reflib-sampled-v1:" + str(size).encode())
+    blk = 4 * 1024 * 1024
+    with open(path, "rb") as reader:
+        for off in (0, max(0, size // 2 - blk // 2), max(0, size - blk)):
+            reader.seek(off)
+            h.update(reader.read(blk))
+    return h.hexdigest()
+
+
 def _file_hash(path: str) -> str:
+    try:
+        if os.path.splitext(path)[1].lower() in _MEDIA_SAMPLED:
+            size = os.path.getsize(path)
+            if size >= SAMPLED_HASH_MIN:
+                return _sampled_hash(path, size)
+    except OSError:
+        pass
     h = hashlib.sha256()
     with open(path, "rb") as reader:
         while True:

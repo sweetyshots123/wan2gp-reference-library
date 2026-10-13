@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.5.9"
+PLUGIN_VERSION = "1.6.0"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -180,6 +180,8 @@ TEXT = {
         "exported": "Exported to {path}",
         "imported": "Imported as \"{name}\" ({n} images)",
         "bad_request": "invalid request",
+        "at_no_images": "Auto-tagging works on images only: select at least one image.",
+        "at_not_image": "{n} video/audio file(s) skipped (auto-tagging is images-only).",
         "at_queued": "Auto-tagging {n} image(s) in the background ({k} already tagged, skipped).",
         "at_height_bad": "Height must be between 120 and 220 cm.",
         "unknown_action": "unknown action",
@@ -190,6 +192,8 @@ TEXT = {
         "imported_name": "Imported collection",
         "err_image_index": "That image is no longer in the collection — refresh and try again",
         "err_image_missing": "Image file not found",
+        "err_target_missing": "That WanGP input isn't available for the current model.",
+        "vlib_added": "{n} video(s) added to the Video Library ({k} already there).",
         "err_not_image": "Not an image file",
         "err_zip_missing": "Zip file not found",
         "err_bad_zip": "Not a valid zip file",
@@ -277,10 +281,10 @@ TEXT = {
         "err_no_images": "Select at least one image",
         "err_no_tags": "Type a tag",
         "sec_img_crops": "### Image crops",
-        "browser_fullscreen": "Always open the image browser full screen",
-        "browser_fullscreen_info": "The image browser opens filling the whole screen (the ⛶ button in its header still switches for the current session).",
+        "browser_fullscreen": "Always open the media browser full screen",
+        "browser_fullscreen_info": "The media browser opens filling the whole screen (the ⛶ button in its header still switches for the current session).",
         "index_paused": "Pause folder indexing",
-        "index_paused_info": "Watched folders stop being indexed in the background until you turn this off (also from the image browser).",
+        "index_paused_info": "Watched folders stop being indexed in the background until you turn this off (also from the media browser).",
         "indexing_paused": "Indexing paused",
         "crop_save_images": "Image crops made with Cropper",
         "crop_save_images_info": "Start/end, reference and control images cropped with Cropper go to the automatic \"Crops\" collection (or the collection Cropper names). Save automatically, ask with a Save button, or don't save. The same crop is never stored twice in a collection.",
@@ -407,6 +411,8 @@ TEXT = {
         "exported": "Exportada a {path}",
         "imported": "Importada como \"{name}\" ({n} imágenes)",
         "bad_request": "petición no válida",
+        "at_no_images": "El autoetiquetado solo funciona con imágenes: selecciona al menos una.",
+        "at_not_image": "{n} vídeo(s)/audio(s) omitidos (el autoetiquetado es solo para imágenes).",
         "at_queued": "Autoetiquetando {n} imagen(es) en segundo plano ({k} ya etiquetadas, omitidas).",
         "at_height_bad": "La altura debe estar entre 120 y 220 cm.",
         "unknown_action": "acción desconocida",
@@ -417,6 +423,8 @@ TEXT = {
         "imported_name": "Colección importada",
         "err_image_index": "Esa imagen ya no está en la colección — actualiza y vuelve a intentarlo",
         "err_image_missing": "No se encuentra el archivo de la imagen",
+        "err_target_missing": "Esa entrada de WanGP no está disponible con el modelo actual.",
+        "vlib_added": "{n} vídeo(s) añadidos a la Librería de vídeos ({k} ya estaban).",
         "err_not_image": "No es un archivo de imagen",
         "err_zip_missing": "No se encuentra el archivo zip",
         "err_bad_zip": "El archivo no es un zip válido",
@@ -505,9 +513,9 @@ TEXT = {
         "err_no_tags": "Escribe una etiqueta",
         "sec_img_crops": "### Recortes de imágenes",
         "browser_fullscreen": "Abrir siempre a pantalla completa",
-        "browser_fullscreen_info": "El explorador de imágenes se abre ocupando toda la pantalla (el botón ⛶ de su cabecera sigue cambiándolo solo para esa vez).",
+        "browser_fullscreen_info": "El explorador de medios se abre ocupando toda la pantalla (el botón ⛶ de su cabecera sigue cambiándolo solo para esa vez).",
         "index_paused": "Pausar la indexación de carpetas",
-        "index_paused_info": "Las carpetas vigiladas dejan de indexarse en segundo plano hasta que lo desactives (también desde el explorador de imágenes).",
+        "index_paused_info": "Las carpetas vigiladas dejan de indexarse en segundo plano hasta que lo desactives (también desde el explorador de medios).",
         "indexing_paused": "Indexación en pausa",
         "crop_save_images": "Recortes de imágenes hechos con Cropper",
         "crop_save_images_info": "Las imágenes de inicio/fin, de referencia y de control recortadas con Cropper van a la colección automática «Recortes» (o a la colección que indique Cropper). Guardar automáticamente, preguntar con un botón Guardar, o no guardarlos. El mismo recorte nunca se guarda dos veces en una colección.",
@@ -690,6 +698,26 @@ try:
     imagelib.set_paused(bool(load_settings().get("index_paused")))   # 1.4.4
 except Exception:
     pass
+
+
+_SERVED = set()
+AUDIO_TARGETS = ("audio_guide", "audio_guide2", "audio_guide3")   # 1.6.0 WanGP audio inputs (shown per model)
+
+
+def _serve_url(path):
+    """1.6.0: let Gradio stream exactly this one library file (video/audio playback in the media browser). Only files the
+    browser asks to play are added (never whole folders), so nothing else in a watched folder becomes reachable."""
+    from pathlib import Path
+    from urllib.parse import quote
+    from gradio.data_classes import _StaticFiles
+    rp = Path(path).resolve()
+    if rp not in _SERVED:
+        _StaticFiles.all_paths.append(rp)
+        _SERVED.add(rp)
+    return "/gradio_api/file=" + quote(str(rp).replace("\\", "/"), safe="/:")
+
+
+imagelib.SERVE_URL = _serve_url
 
 
 def _prewarm_catalog():
@@ -1073,7 +1101,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         self.request_component("image_refs_extra")
         self.request_component("image_refs_row")
         self.request_component("tab_id")
-        for name in ("video_mask", "image_mask"):
+        for name in ("video_mask", "image_mask") + AUDIO_TARGETS:
             self.request_component(name)
         try:   # 1.5.5 generation history: WanGP calls this right before writing a generation's metadata
             self.register_data_hook("before_metadata_save", self._history_hook)
@@ -1130,7 +1158,12 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             comp = components.get(name)
             if isinstance(comp, gr.Video):
                 watch[name] = comp
-        self._extra_comps[tab] = {n: components.get(n) for n in ("video_mask", "image_mask")}
+        self._extra_comps[tab] = {n: components.get(n) for n in ("video_mask", "image_mask") + AUDIO_TARGETS}
+        for n in AUDIO_TARGETS:   # 1.6.0: tag WanGP's audio inputs so the media browser knows which ones the model shows
+            c = components.get(n)
+            if isinstance(c, gr.Audio):
+                cl = c.elem_classes if isinstance(c.elem_classes, list) else ([c.elem_classes] if c.elem_classes else [])
+                c.elem_classes = cl + ["reflib-atarget", f"reflib-at-{n}-{tab}"]
         watch_images = {name: components[name] for name in WATCH_IMAGES if isinstance(components.get(name), gr.components.Component)}
         self.vtargets[tab] = {"video": video, "watch": watch, "watch_images": watch_images}
         settings = load_settings()
@@ -1294,9 +1327,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
     def _hist_targets(self, tab):
         vt = self.vtargets[tab]
         hcomps = [("video_guide", vt["video"])] + [(n, c) for n, c in vt["watch"].items() if n == "video_source"]
-        for n in ("video_mask", "image_mask"):
+        for n in ("video_mask", "image_mask") + AUDIO_TARGETS:
             c = self._extra_comps.get(tab, {}).get(n)
-            if isinstance(c, (gr.Video, gr.Image, gr.ImageEditor, gr.Gallery)):
+            if isinstance(c, (gr.Video, gr.Image, gr.ImageEditor, gr.Gallery, gr.Audio)):
                 hcomps.append((n, c))
         for n in ("image_start", "image_end", "image_guide"):
             c = vt.get("watch_images", {}).get(n)
@@ -1317,13 +1350,23 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         eid = str(req.get("eid") or "")
         e = _h.get(eid) or {}
         ups, done = [], []
+        direct = {}
+        if req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library video/audio -> one WanGP input
+            to, src = str(req["to"]), imagelib.media_path(str(req["hash"]))
+            ent = imagelib.entry_for(str(req["hash"])) or {}
+            want = "audio" if to in AUDIO_TARGETS else "video"
+            if src and ent.get("kind") == want and any(n == to for n, _ in comps):
+                direct[to] = [src]
+            else:
+                return (json.dumps({"ok": False, "id": req.get("id"), "error": tr(req.get("lang", "en"), "err_target_missing"), "target": f"{tab}:history"}),
+                        *[gr.skip() for _ in comps])
         for name, comp in comps:
-            ps = _h.paths(eid, name) if e else []
+            ps = direct.get(name, []) if direct else (_h.paths(eid, name) if e else [])
             if not ps:
                 ups.append(gr.skip()); continue
             try:
-                if isinstance(comp, gr.Video):
-                    val = _stage_video(ps[0], f"history_{name}")
+                if isinstance(comp, (gr.Video, gr.Audio)):
+                    val = _stage_video(ps[0], (os.path.splitext(os.path.basename(ps[0]))[0] if direct else f"history_{name}"))
                 elif isinstance(comp, gr.Gallery):
                     val = _stage_for_gallery(ps)
                 else:
@@ -1420,7 +1463,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         paths, seen = ([p for p in paths_override if os.path.isfile(p)] if paths_override else []), set()
         for h in want:
             img = by_hash.get(h)
-            if not img or h in seen:
+            if not img or h in seen or img.get("kind", "image") != "image":   # 1.6.0: only images go to Reference Images
                 continue
             cands = [img["path"]] + list(img.get("files") or [])
             path = next((c for c in cands if c and os.path.isfile(c)), None)
@@ -2123,7 +2166,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             ilib_req = gr.Textbox(value="", elem_id="reflib_ilib_req", show_label=False)
             ilib_resp = gr.Textbox(value="", elem_id="reflib_ilib_resp", show_label=False)
             ilib_btn = gr.Button("ilib", elem_id="reflib_ilib_btn")
-            ilib_upload = gr.File(file_count="multiple", file_types=["image"], elem_id="reflib_ilib_upload", show_label=False)
+            ilib_upload = gr.File(file_count="multiple", file_types=["image", "video", "audio"], elem_id="reflib_ilib_upload", show_label=False)
             # 1.4.3: a second, unqueued channel for small fast calls (thumbnails, scan progress, folder picker), so they
             # never wait behind a big list refresh or an import in the Gradio queue.
             ilib_fast_req = gr.Textbox(value="", elem_id="reflib_ilib_fast_req", show_label=False)
@@ -3157,6 +3200,31 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             elif action == "thumbs":
                 pend = []
                 out = {"ok": True, "thumbs": imagelib.thumbs_for((req.get("hashes") or [])[:24], budget=0.25, pending=pend), "pending": pend}
+            elif action == "media_url":   # 1.6.0: stream one video/audio in the browser (hover, viewer, details)
+                u = imagelib.media_url(str(req.get("hash") or ""))
+                out = {"ok": bool(u), "url": u}
+            elif action == "media_dur":   # 1.6.0: durations probed so far (background, throttled)
+                from .reflib_core import mediainfo
+                dd = {}
+                for h in [str(x) for x in (req.get("hashes") or [])][:400]:
+                    mi = mediainfo.get(h)
+                    if mi and mi.get("duration"):
+                        dd[h] = mi["duration"]
+                out = {"ok": True, "dur": dd}
+            elif action == "to_vlib":   # 1.6.0: selected videos -> Video Library
+                n_add = n_dup = 0
+                for h in hashes:
+                    ent = imagelib.entry_for(h) or {}
+                    src = imagelib.media_path(h) if ent.get("kind") == "video" else None
+                    if not src:
+                        continue
+                    try:
+                        _v, created = videostore.add_video(src, name=os.path.splitext(ent.get("name") or os.path.basename(src))[0], source="browser")
+                        n_add += 1 if created else 0
+                        n_dup += 0 if created else 1
+                    except Exception as e:
+                        print(f"[Reference Library] to video library failed: {e}")
+                out = {"ok": bool(n_add or n_dup), "added": n_add, "dup": n_dup, "message": tr(lang, "vlib_added", n=n_add, k=n_dup)}
             elif action == "preview":
                 p = imagelib.preview(str(req.get("hash") or ""))
                 out = {"ok": bool(p), "image": p} if p else self._err(lang, "err_image_missing")
@@ -3264,7 +3332,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -3332,6 +3400,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                                   "key_field": v["key_field"], "key_env": v["key_env"][0], "env_set": any(os.environ.get(e) for e in v["key_env"]),
                                   "price": _c.DEFAULT_PRICES[k], "warning": _c.PRICE_WARNINGS.get(k, "")} for k, v in _c.CLOUD.items()},
                     "policies": _c.POLICIES}
+        if action in ("at_estimate", "at_enqueue"):   # 1.6.0: only images are auto-tagged
+            n_all = len(hashes)
+            hashes = svc.only_images(hashes)
+            if not hashes and n_all:
+                return {"ok": False, "error": tr(lang, "at_no_images")}
         if action == "at_estimate":
             return {"ok": True, "estimate": svc.estimate(len(hashes))}
         if action == "at_enqueue":
@@ -3339,7 +3412,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if (est.get("cloud") or est.get("download_gb")) and not req.get("confirm"):
                 return {"ok": True, "confirm": est}   # the UI shows size / cost and asks once
             r = svc.enqueue(hashes, force=bool(req.get("force")))
-            return {"ok": True, "queued": r, "at": svc.queue.status(), "message": tr(lang, "at_queued", n=r["queued"], k=r["skipped"])}
+            r["not_image"] = n_all - len(hashes)
+            msg = tr(lang, "at_queued", n=r["queued"], k=r["skipped"]) + (" " + tr(lang, "at_not_image", n=r["not_image"]) if r["not_image"] else "")
+            return {"ok": True, "queued": r, "at": svc.queue.status(), "message": msg}
         if action == "at_jobfacets":
             return {"ok": True, "counts": svc.job_facets(req.get("f")), "jrev": svc.queue.jrev}
         if action == "at_retry":
@@ -3362,7 +3437,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = json.loads(raw or "{}")
         except Exception:
             req = {}
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 
