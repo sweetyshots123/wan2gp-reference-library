@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.0"
+PLUGIN_VERSION = "1.6.1"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3200,6 +3200,33 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             elif action == "thumbs":
                 pend = []
                 out = {"ok": True, "thumbs": imagelib.thumbs_for((req.get("hashes") or [])[:24], budget=0.25, pending=pend), "pending": pend}
+            elif action == "media_src":   # 1.6.1 "Recortar": the library file handed to Cropper's file API
+                h = str(req.get("hash") or "")
+                ent, src = imagelib.entry_for(h) or {}, imagelib.media_path(h)
+                if not src or not os.path.isfile(src):
+                    out = {"ok": False, "error": "file not found"}
+                else:
+                    out = {"ok": True, "path": os.path.abspath(src), "url": _serve_url(src), "kind": ent.get("kind") or imagelib.kind_of(src),
+                           "name": os.path.splitext(ent.get("name") or os.path.basename(src))[0]}
+            elif action == "crop_save":   # 1.6.1: Cropper's result -> "Recortes" (images) / Video Library (videos)
+                from .reflib_core import api as _rapi, storage as _st
+                path, kind, srch = str(req.get("path") or ""), str(req.get("kind") or ""), str(req.get("src") or "")
+                ent = imagelib.entry_for(srch) or {}
+                base = os.path.splitext(ent.get("name") or "crop")[0][:80]
+                if not path or not os.path.isfile(path) or imagelib.kind_of(path) != kind or kind not in ("image", "video"):
+                    out = {"ok": False, "error": "bad crop result"}
+                elif kind == "image":
+                    r = _rapi.add_image(path, name=f"{base} (crop){os.path.splitext(path)[1].lower()}", source="media-browser",
+                                        meta={"source_hash": srch, "dedupe_key": "crop:" + _st._file_hash(path)})
+                    if not r:
+                        out = {"ok": False, "error": "not saved"}
+                    else:
+                        imagelib.invalidate()
+                        out = {"ok": True, "kind": "image", "collection_id": r.get("collection_id"), "collection_name": r.get("collection_name"),
+                               "hash": _st._file_hash(r["path"]) if r.get("path") and os.path.isfile(r["path"]) else _st._file_hash(path)}
+                else:
+                    vid = _rapi.add_video(path, name=f"{base} (crop)", source="media-browser", meta={"source_hash": srch})
+                    out = {"ok": bool(vid), "kind": "video", "video_id": vid} if vid else {"ok": False, "error": "not saved"}
             elif action == "media_url":   # 1.6.0: stream one video/audio in the browser (hover, viewer, details)
                 u = imagelib.media_url(str(req.get("hash") or ""))
                 out = {"ok": bool(u), "url": u}
@@ -3332,7 +3359,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -3437,7 +3464,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = json.loads(raw or "{}")
         except Exception:
             req = {}
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

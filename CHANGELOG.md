@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1 — 2026-10-14
+
+- **"Recortar" (Crop) from the media browser**: right-click menu, Detalles panel and the full-screen viewer, for images and videos (not audio). Opens the Cropper plugin's editor on the library file itself, with nothing going through WanGP's inputs. Needs **Cropper 1.5.0+** (file API `window.cropper.cropFile`); with an older Cropper the button is disabled with a tooltip.
+- Image crops are copied into the automatic **"Recortes"** collection; the browser switches to it and selects the new crop. Video crops are copied into the **Video Library**. Cropper's temporary result is copied right away (its temp folder is cleaned after 24 h); the original file is never changed.
+- If a crop is already open, a second "Recortar" just shows a soft "Ya hay un recorte abierto" notice. Cancelling the editor saves nothing.
+
 ## 1.6.0 — 2026-10-11
 
 - **Image browser → media browser ("Explorador de medios").** Watched folders and Import now also index **video** (mp4, mov, webm, mkv, avi) and **audio** (wav, mp3, flac, ogg, m4a, aac, opus). Files are still read in place, never copied or modified.

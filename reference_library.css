@@ -707,3 +707,7 @@ input.reflib-ib-tagin { flex: 0 1 160px; min-width: 90px; }
 .reflib-ib-pvmedia { width: 100%; display: block; border-radius: 6px; background: #000; }
 audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .dark audio.reflib-ib-pvmedia { color-scheme: dark; }
+/* 1.6.1 Recortar */
+.reflib-ib-cropbtn:disabled, .reflib-ib-cropbtn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.reflib-ib-lbbar .reflib-ib-cropbtn { padding: 0 10px; width: auto; }
+.reflib-ib-lbbar .reflib-ib-cropbtn[hidden] { display: none; }

@@ -665,7 +665,7 @@
             big_preview: "Large preview",
             v_size: "Thumbnail size", v_l: "Very large thumbnails", v_m: "Medium thumbnails", v_s: "Small thumbnails",
             v_details: "Details", v_details_tip: "Show or hide the details panel on the right (selected image)", v_pick: "Select an image to see its details.",
-            ctx_details: "Show details", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
+            ctx_details: "Show details", crop: "Crop", crop_tip: "Crop with Cropper; the result is saved to the library", crop_na: "Needs Cropper with file cropping (window.cropper.cropFile, file API 1). Update Cropper to enable it.", crop_audio: "Audio can't be cropped", crop_saved_img: "Crop saved to \u201c{c}\u201d", crop_saved_vid: "Crop saved to the Video Library", crop_fail: "Crop failed: {e}", crop_busy: "A crop is already open", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
             lb_prev: "Previous (←)", lb_next: "Next (→)",
             chips_clear: "Clear all", chip_rm: "Remove this filter", chip_or: "or", chip_and: "and", chip_not: "not",
             chip_mode: "Click to switch between include and exclude", chip_find: "Show in the tree", chip_search: "Search: {q}",
@@ -760,7 +760,7 @@
             big_preview: "Vista grande",
             v_size: "Tamaño de miniaturas", v_l: "Miniaturas muy grandes", v_m: "Miniaturas medianas", v_s: "Miniaturas pequeñas",
             v_details: "Detalles", v_details_tip: "Muestra u oculta el panel de detalles de la derecha (imagen seleccionada)", v_pick: "Selecciona una imagen para ver sus detalles.",
-            ctx_details: "Ver detalles", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
+            ctx_details: "Ver detalles", crop: "Recortar", crop_tip: "Recortar con Cropper; el resultado se guarda en la librería", crop_na: "Necesita Cropper con recorte de archivos (window.cropper.cropFile, API de archivos 1). Actualiza Cropper para activarlo.", crop_audio: "Los audios no se pueden recortar", crop_saved_img: "Recorte guardado en «{c}»", crop_saved_vid: "Recorte guardado en la Librería de vídeos", crop_fail: "No se pudo recortar: {e}", crop_busy: "Ya hay un recorte abierto", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
             lb_prev: "Anterior (←)", lb_next: "Siguiente (→)",
             chips_clear: "Quitar todos", chip_rm: "Quitar este filtro", chip_or: "o", chip_and: "y", chip_not: "no",
             chip_mode: "Clic para alternar entre incluir y excluir", chip_find: "Mostrar en el árbol", chip_search: "Búsqueda: {q}",
@@ -2014,7 +2014,7 @@
               <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
-              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}</div>
+              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}</div>
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
               <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
                   full && full.codec ? full.codec : "", full && full.rate ? (full.rate / 1000) + " kHz" : "", full && full.size ? (full.size > 1048576 ? (full.size / 1048576).toFixed(1) + " MB" : Math.round(full.size / 1024) + " KB") : ""].filter(Boolean).join(" · "))
@@ -2410,6 +2410,37 @@
     function locateBtn(h, cls) {
         return `<button type="button" class="${cls}" data-act="locate" data-hash="${esc(h)}" title="${esc(it("locate_tip"))}">🧭 ${esc(it("locate"))}</button>`;
     }
+    // 1.6.1 "Recortar": opens the Cropper plugin for a library image/video through its file API (contract:
+    // window.cropper.fileApi >= 1 and window.cropper.cropFile({path, url, kind, name, source}) -> Promise of
+    // {ok, path, width, height} | {ok:false, cancelled} | {ok:false, error}). Without it the button is disabled.
+    function cropApi() { const c = window.cropper; return c && typeof c.cropFile === "function" && (+c.fileApi || 0) >= 1 ? c : null; }
+    function cropBtn(h, cls, kind) {
+        if (kind === "audio") return "";
+        const ok = !!cropApi();
+        return `<button type="button" class="${cls} reflib-ib-cropbtn" data-act="crop" data-hash="${esc(h)}" ${ok ? "" : "aria-disabled=\"true\" disabled"} title="${esc(it(ok ? "crop_tip" : "crop_na"))}">✂ ${esc(it("crop"))}</button>`;
+    }
+    async function doCrop(h) {
+        const api = cropApi(); if (!api || !h) return;
+        const src = await sendIlib({ action: "media_src", hash: h }).catch(() => null);
+        if (!src || !src.ok) { toast(it("crop_fail", { e: (src && src.error) || "?" }), "error"); return; }
+        if (src.kind === "audio") { toast(it("crop_audio"), "warn"); return; }
+        if (ilib.lightbox) closeLightbox();
+        let res;
+        try { res = await api.cropFile({ path: src.path, url: src.url, kind: src.kind, name: src.name, source: "reference-library" }); }
+        catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+        if (!res || res.cancelled) return;
+        if (res.busy) { toast(it("crop_busy"), "info"); return; }   // Cropper 1.5.0: an editor is already open
+        if (!res.ok || !res.path) { toast(it("crop_fail", { e: res.error || "?" }), "error"); return; }
+        const r = await sendIlib({ action: "crop_save", path: res.path, kind: src.kind, src: h }).catch(() => null);
+        if (!r || !r.ok) { toast(it("crop_fail", { e: (r && r.error) || "?" }), "error"); return; }
+        if (r.kind === "image") {
+            toast(it("crop_saved_img", { c: r.collection_name || "" }), "ok");
+            ilib.f.node = null; ilib.f.recent = false; ilib.f.used = false; ilib.f.none = false; ilib.f.kind = "";
+            ilib.f.cols = new Set([r.collection_id]);
+            if (ilib.f.q) { ilib.f.q = ""; const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
+            newQuery(); if (r.hash) focusImage(r.hash);
+        } else toast(it("crop_saved_vid"), "ok");
+    }
     function locCrumbs(l) {
         const parts = l.rel ? l.rel.split("/") : [];
         let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${esc(l.root_name)}</button>`;
@@ -2470,7 +2501,7 @@
         showPreview(h, idx);
         const m = document.createElement("div");
         m.className = "reflib-ib-ctx";
-        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
+        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2493,11 +2524,11 @@
             box.className = "reflib-ib-lightbox fit"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
             box.innerHTML = `<div class="reflib-ib-lbstage"><img alt=""></div>
                 <div class="reflib-ib-lbbar"><button type="button" data-lb="prev">‹</button><span class="reflib-ib-lbpos"></span><button type="button" data-lb="next">›</button>
-                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button></div>
+                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button></div>
                 <div class="reflib-ib-lbname"></div><button type="button" class="reflib-ib-lbclose">×</button>`;
             box.addEventListener("click", (e) => {
                 const b = e.target.closest("[data-lb]");
-                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
+                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
                 if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
                 if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"));
             });
@@ -2512,6 +2543,8 @@
         box.querySelector('[data-lb="prev"]').title = it("lb_prev"); box.querySelector('[data-lb="next"]').title = it("lb_next");
         box.querySelector('[data-lb="prev"]').disabled = idx <= 0; box.querySelector('[data-lb="next"]').disabled = idx >= ilib.q.total - 1;
         const fb = box.querySelector('[data-lb="fit"]'), ob = box.querySelector('[data-lb="one"]');
+        const cb = box.querySelector('[data-lb="crop"]'), cok = !!cropApi(), isAud = it2.kind === "audio";
+        cb.textContent = "✂ " + it("crop"); cb.hidden = isAud; cb.disabled = !cok; cb.title = it(cok ? "crop_tip" : "crop_na");
         fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
@@ -2706,6 +2739,7 @@
         }
         if (act === "reveal") { closeCtx(); doReveal(el.dataset.hash); return; }
         if (act === "locate") { closeCtx(); doLocate(el.dataset.hash); return; }
+        if (act === "crop") { closeCtx(); if (!el.disabled) doCrop(el.dataset.hash); return; }
         if (act === "loccrumb") { locateTo(el.dataset.fid, el.dataset.rel || "", ilib.preview); return; }
         if (act === "ctxbig") { closeCtx(); openLightbox(+el.dataset.idx); return; }
         if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
