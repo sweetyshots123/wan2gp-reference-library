@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.1 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.2 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -50,6 +50,10 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **Árbol de carpetas** (barra lateral izquierda, 1.4.1): cada raíz vigilada, desplegable en sus subcarpetas como en el disco, con recuentos. Haz clic en una carpeta para filtrar; *Incluir subcarpetas* alterna entre todo el subárbol y solo esa carpeta. Una ruta de navegación encima de la cuadrícula muestra dónde estás; haz clic en un tramo o en ↑ para subir. El filtro de carpeta se combina con los de colección y etiquetas. Cada raíz tiene ⟳ (reescanear) y × (quitar, dos clics) al pasar el ratón. Las imágenes se **leen en su sitio**: nunca se copian, mueven, modifican ni borran, así que no ocupan espacio extra. Se reescanean al abrir el modal y con **Reescanear** (los archivos sin cambios no se vuelven a hashear). Si un archivo se mueve o se borra, desaparece o reaparece en su nueva ruta; una carpeta que falta se marca. Al añadir una imagen de carpeta a una colección se **copia**, para que las colecciones sigan siendo autónomas. *Quitar* (dos clics) solo la quita del índice. Índice: `folders/index.json`; miniaturas en caché en `collections/.thumbs/`.
 - **Añadir a referencias** (pie de la selección) añade solo las imágenes elegidas a Reference Images de WanGP, por el mismo camino que al aplicar una colección. Las que ya estén en la galería se saltan y nunca se sustituye nada. Las imágenes de carpetas se leen en su sitio; no se copian a ninguna colección. *Cerrar al añadir* cierra el modal después (se recuerda). Si el modelo actual no tiene Reference Images, sale un error.
 - Haz clic en una imagen para verla en grande con sus colecciones, archivos y etiquetas. **Esc** o **×** cierran; las barras y el gestor se refrescan.
+
+## Redimensionar vídeos (1.6.2)
+
+**⤡ Redimensionar** a 480p / 720p / 1080p (lado corto; se mantiene la proporción y el lado largo es múltiplo de 16) desde la barra del vídeo de control (sustituye la entrada y guarda el resultado en la Librería de vídeos) o desde el explorador de medios (clic derecho, Detalles, visor; se guarda en la Librería de vídeos). Nunca amplía sin preguntar, conserva el audio y no modifica el original. Usa NVENC si está disponible; si no, libx264 CRF 18. Los resultados se llaman `<nombre> (720p)`.
 
 ## Recortar desde el explorador (1.6.1)
 

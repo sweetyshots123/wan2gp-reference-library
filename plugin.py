@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.1"
+PLUGIN_VERSION = "1.6.2"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -235,6 +235,9 @@ TEXT = {
         "src_import": "imported",
         "vloaded": "Video \"{name}\" loaded into Control Video",
         "vsaved": "Video \"{name}\" saved to the library",
+        "rs_same": "The video is already {w}×{h}",
+        "rs_started": "Resizing to {preset}…",
+        "rs_no_video": "Load a control video first",
         "vdup": "Already in the video library as \"{name}\"",
         "vcrop_saved": "Crop saved to the video library as \"{name}\"",
         "vcrop_offer": "Save this crop to the video library?",
@@ -466,6 +469,9 @@ TEXT = {
         "src_import": "importado",
         "vloaded": "Vídeo \"{name}\" cargado en Vídeo de control",
         "vsaved": "Vídeo \"{name}\" guardado en la librería",
+        "rs_same": "El vídeo ya mide {w}×{h}",
+        "rs_started": "Redimensionando a {preset}…",
+        "rs_no_video": "Carga antes un vídeo de control",
         "vdup": "Ya está en la librería de vídeos como \"{name}\"",
         "vcrop_saved": "Recorte guardado en la librería de vídeos como \"{name}\"",
         "vcrop_offer": "¿Guardar este recorte en la librería de vídeos?",
@@ -1551,6 +1557,35 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         return {**self._ok(lang, "updated_col", name=col["name"], n=len(col["images"]), _cid=col["id"]), "id": col["id"]}, col
 
     # ------------------------------------------------------------ video library: load / save / notes
+    def resize_start(self, src, preset, name, upscale_ok, lang="en"):
+        """1.6.2 video resize -> Video Library. Returns a JSON-able response: {ok, job} | {ok:false, need_confirm, src, dst}."""
+        from .reflib_core import resize as _rs
+        if preset not in _rs.PRESETS:
+            return self._err(lang, "bad_request")
+        if not src or not os.path.isfile(src) or not media.is_video_path(src):
+            return self._err(lang, "rs_no_video")
+        try:
+            p = _rs.plan(src, preset)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        if not p["dst"][0]:
+            return self._err(lang, "err_generic", e="ffprobe")
+        if p["same"]:
+            return {"ok": True, "same": True, "kind": "info", "toast": tr(lang, "rs_same", w=p["src"][0], h=p["src"][1])}
+        if p["upscale"] and not upscale_ok:
+            return {"ok": True, "quiet": True, "need_confirm": True, "src": p["src"], "dst": p["dst"], "preset": preset}
+        rname = _rs.result_name(name or os.path.basename(src), preset)
+
+        def store(out, job):
+            entry, created = videostore.add_video(out, name=rname, source="resize",
+                                                  meta={"resize": preset, "source_file": os.path.basename(src), "size": job.get("dst_size")},
+                                                  fallback=rname)
+            imagelib.invalidate()
+            return {"video_id": entry["id"], "name": entry["name"], "created": bool(created)}
+        jid = _rs.start(src, preset, rname, on_done=store)
+        return {"ok": True, "quiet": True, "job": jid, "src": p["src"], "dst": p["dst"], "name": rname, "upscale": p["upscale"],
+                "message": tr(lang, "rs_started", preset=preset)}
+
     def load_video(self, tab, vid, lang="en"):
         """Stage a copy of the stored video and return (out, gr.update for the Control Video)."""
         if not vid:
@@ -3200,6 +3235,18 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             elif action == "thumbs":
                 pend = []
                 out = {"ok": True, "thumbs": imagelib.thumbs_for((req.get("hashes") or [])[:24], budget=0.25, pending=pend), "pending": pend}
+            elif action == "resize_start":   # 1.6.2: a library video -> resized copy in the Video Library
+                h = str(req.get("hash") or "")
+                ent = imagelib.entry_for(h) or {}
+                src = imagelib.media_path(h) if ent.get("kind") == "video" else None
+                out = self.resize_start(src, str(req.get("preset") or ""), os.path.splitext(ent.get("name") or "")[0], bool(req.get("upscale")), lang)
+            elif action == "resize_status":
+                from .reflib_core import resize as _rs
+                st = _rs.status(req.get("job"))
+                out = {"ok": bool(st), "job": st}
+            elif action == "resize_cancel":
+                from .reflib_core import resize as _rs
+                out = {"ok": _rs.cancel(req.get("job"))}
             elif action == "media_src":   # 1.6.1 "Recortar": the library file handed to Cropper's file API
                 h = str(req.get("hash") or "")
                 ent, src = imagelib.entry_for(h) or {}, imagelib.media_path(h)
@@ -3359,7 +3406,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -3464,7 +3511,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = json.loads(raw or "{}")
         except Exception:
             req = {}
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 
@@ -3569,6 +3616,28 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     {"ok": True, "message": tr(lang, key2, collection=res["collection_name"], name=res["name"]),
                      "toast": tr(lang, key2, collection=res["collection_name"], name=res["name"]), "kind": "info"}
                 out["reload"] = True
+            elif action == "resize_start":   # 1.6.2: resize the current Control Video
+                path = _public_api._clean_src(value)
+                nm = None
+                lv = self._last_video.get(tab)
+                if lv and path and os.path.isfile(path):
+                    try:
+                        e2 = videostore.get_video(lv)
+                        if e2 and e2.get("hash") == videostore.file_hash(path):
+                            nm = e2.get("name")
+                    except Exception:
+                        pass
+                out = self.resize_start(path, str(req.get("preset") or ""), nm or os.path.splitext(os.path.basename(path or ""))[0], bool(req.get("upscale")), lang)
+            elif action == "resize_apply":   # 1.6.2: the finished resize replaces the Control Video
+                from .reflib_core import resize as _rs
+                st = _rs.status(req.get("job"))
+                if not st or st["state"] != "done" or not (st.get("result") or {}).get("video_id"):
+                    out = self._err(lang, "err_generic", e="resize")
+                else:
+                    out, video_u = self.load_video(tab, st["result"]["video_id"], lang)
+                    if out.get("ok"):
+                        sel = out["vid"]
+                        out["quiet"] = True   # the browser shows its own "replaced + saved" toast
             elif action == "video_inspect":
                 path = _public_api._clean_src(value)
                 ok = bool(path and os.path.isfile(path))

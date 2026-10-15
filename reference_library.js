@@ -2014,7 +2014,7 @@
               <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
-              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}</div>
+              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}</div>
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
               <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
                   full && full.codec ? full.codec : "", full && full.rate ? (full.rate / 1000) + " kHz" : "", full && full.size ? (full.size > 1048576 ? (full.size / 1048576).toFixed(1) + " MB" : Math.round(full.size / 1024) + " KB") : ""].filter(Boolean).join(" · "))
@@ -2501,7 +2501,7 @@
         showPreview(h, idx);
         const m = document.createElement("div");
         m.className = "reflib-ib-ctx";
-        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
+        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image") + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2524,11 +2524,12 @@
             box.className = "reflib-ib-lightbox fit"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
             box.innerHTML = `<div class="reflib-ib-lbstage"><img alt=""></div>
                 <div class="reflib-ib-lbbar"><button type="button" data-lb="prev">‹</button><span class="reflib-ib-lbpos"></span><button type="button" data-lb="next">›</button>
-                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button></div>
+                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button><button type="button" data-lb="resize" class="reflib-rs-btn"></button></div>
                 <div class="reflib-ib-lbname"></div><button type="button" class="reflib-ib-lbclose">×</button>`;
             box.addEventListener("click", (e) => {
                 const b = e.target.closest("[data-lb]");
-                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
+                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; }
+                if (k === "resize") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; const r0 = b.getBoundingClientRect(); closeLightbox(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: hh }); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
                 if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
                 if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"));
             });
@@ -2544,6 +2545,7 @@
         box.querySelector('[data-lb="prev"]').disabled = idx <= 0; box.querySelector('[data-lb="next"]').disabled = idx >= ilib.q.total - 1;
         const fb = box.querySelector('[data-lb="fit"]'), ob = box.querySelector('[data-lb="one"]');
         const cb = box.querySelector('[data-lb="crop"]'), cok = !!cropApi(), isAud = it2.kind === "audio";
+        const rb = box.querySelector('[data-lb="resize"]'); rb.textContent = "⤡ " + rt("btn"); rb.title = rt("tip"); rb.hidden = it2.kind !== "video";
         cb.textContent = "✂ " + it("crop"); cb.hidden = isAud; cb.disabled = !cok; cb.title = it(cok ? "crop_tip" : "crop_na");
         fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
@@ -2740,6 +2742,7 @@
         if (act === "reveal") { closeCtx(); doReveal(el.dataset.hash); return; }
         if (act === "locate") { closeCtx(); doLocate(el.dataset.hash); return; }
         if (act === "crop") { closeCtx(); if (!el.disabled) doCrop(el.dataset.hash); return; }
+        if (act === "resize") { const r0 = el.getBoundingClientRect(); closeCtx(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: el.dataset.hash }); return; }
         if (act === "loccrumb") { locateTo(el.dataset.fid, el.dataset.rel || "", ilib.preview); return; }
         if (act === "ctxbig") { closeCtx(); openLightbox(+el.dataset.idx); return; }
         if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
@@ -3286,11 +3289,126 @@
     }
     setInterval(mountPlayerBar, 800);
 
+
+    // ================================================================ 1.6.2 video resize (ours; cropping is Cropper's)
+    // Short-side presets; the server keeps the aspect ratio, makes the long side a multiple of 16, never upscales
+    // without confirmation, encodes with NVENC when it works (else libx264 CRF 18), keeps the audio and never touches
+    // the source. Result: "<name> (720p)" in the Video Library; from the Control Video bar it also replaces the input.
+    const RT = {
+        en: { btn: "Resize", tip: "Resize this video (480p / 720p / 1080p); the result goes to the Video Library", title: "Resize video",
+              hint: "Short side · aspect ratio kept · sizes in multiples of 16 · the original is never changed",
+              hint_ctl: "Replaces the Control Video with the resized copy and saves it to the Video Library",
+              up_q: "This would upscale the video from {src} to {dst}. Upscaling adds no detail. Continue?", up_ok: "Upscale",
+              prog: "Resizing “{name}” to {preset}", cancel: "Cancel", cancelled: "Resize cancelled",
+              saved: "“{name}” ({w}×{h}) saved to the Video Library", replaced: "Control Video replaced with “{name}” ({w}×{h}), also saved to the Video Library",
+              fail: "Resize failed: {e}", busy: "A resize is already running" },
+        es: { btn: "Redimensionar", tip: "Redimensionar este vídeo (480p / 720p / 1080p); el resultado va a la Librería de vídeos", title: "Redimensionar vídeo",
+              hint: "Lado corto · se mantiene la proporción · medidas múltiplo de 16 · el original no se modifica",
+              hint_ctl: "Sustituye el vídeo de control por la copia redimensionada y la guarda en la Librería de vídeos",
+              up_q: "Esto ampliaría el vídeo de {src} a {dst}. Ampliar no añade detalle. ¿Continuar?", up_ok: "Ampliar",
+              prog: "Redimensionando «{name}» a {preset}", cancel: "Cancelar", cancelled: "Redimensionado cancelado",
+              saved: "«{name}» ({w}×{h}) guardado en la Librería de vídeos", replaced: "Vídeo de control sustituido por «{name}» ({w}×{h}), también guardado en la Librería de vídeos",
+              fail: "No se pudo redimensionar: {e}", busy: "Ya hay un redimensionado en marcha" },
+    };
+    const rt = (k, p = {}) => String((RT[lang()] || RT.en)[k] || RT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    const RS_PRESETS = ["480p", "720p", "1080p"];
+    let rsRunning = null;
+    function resizeBtn(h, cls) {
+        return `<button type="button" class="${cls} reflib-rs-btn" data-act="resize" data-hash="${esc(h)}" title="${esc(rt("tip"))}">⤡ ${esc(rt("btn"))}</button>`;
+    }
+    function closeResizeMenu() { const m = document.querySelector(".reflib-rs-menu"); if (m) { m.remove(); window.removeEventListener("keydown", rsKey, true); document.removeEventListener("mousedown", rsOut, true); } }
+    function rsKey(e) { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); closeResizeMenu(); } }
+    function rsOut(e) { if (!e.target.closest(".reflib-rs-menu")) closeResizeMenu(); }
+    // opts: {hash} (library video) or {tab} (current Control Video of that form)
+    function openResizeMenu(anchor, opts) {
+        closeResizeMenu();
+        const m = document.createElement("div");
+        m.className = "reflib-rs-menu"; m.setAttribute("role", "menu");
+        m.innerHTML = `<div class="reflib-rs-title"></div><div class="reflib-rs-presets">${RS_PRESETS.map(p => `<button type="button" role="menuitem" data-rs="${p}">${p}</button>`).join("")}</div><div class="reflib-rs-hint"></div>`;
+        m.querySelector(".reflib-rs-title").textContent = rt("title");
+        m.querySelector(".reflib-rs-hint").textContent = opts.tab ? rt("hint") + ". " + rt("hint_ctl") + "." : rt("hint") + ".";
+        m.addEventListener("click", e => { const b = e.target.closest("[data-rs]"); if (b) { closeResizeMenu(); runResize(opts, b.dataset.rs, false); } });
+        document.body.appendChild(m);
+        const r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : { left: innerWidth / 2 - 130, bottom: innerHeight / 2, top: innerHeight / 2 };
+        const mw = m.offsetWidth, mh = m.offsetHeight;
+        m.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.left)) + "px";
+        m.style.top = (r.bottom + mh + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - mh - 6)) + "px";
+        window.addEventListener("keydown", rsKey, true); setTimeout(() => document.addEventListener("mousedown", rsOut, true), 0);
+        const f = m.querySelector('[data-rs="720p"]'); if (f) f.focus();
+    }
+    const rsStart = (opts, preset, upscale) => opts.tab
+        ? sendBridge({ target: `${opts.tab}:video_guide`, action: "resize_start", preset, upscale })
+        : sendIlib({ action: "resize_start", hash: opts.hash, preset, upscale });
+    async function runResize(opts, preset, upscale) {
+        if (rsRunning) { toast(rt("busy"), "info"); return; }
+        let r;
+        try { r = await rsStart(opts, preset, upscale); } catch (e) { toast(rt("fail", { e: String(e && e.message || e) }), "error"); return; }
+        if (!r) return;
+        if (r.ok === false) { if (!opts.tab) toast(r.error || rt("fail", { e: "?" }), "error"); return; }   // bridge errors are toasted by bridgeResponse
+        if (r.same) { if (!opts.tab) toast(r.toast, "info"); return; }
+        if (r.need_confirm) {
+            const go = await confirmDlg(rt("up_q", { src: r.src.join("×"), dst: r.dst.join("×") }), rt("up_ok"));
+            if (go) runResize(opts, preset, true);
+            return;
+        }
+        if (r.job) trackResize(opts, r, preset);
+    }
+    function trackResize(opts, r, preset) {
+        const box = document.createElement("div");
+        box.className = "reflib-rs-prog"; box.setAttribute("role", "status");
+        box.innerHTML = `<div class="reflib-rs-ptext"></div><div class="reflib-rs-bar"><i></i></div><div class="reflib-rs-prow"><span class="reflib-rs-pct">0%</span><span class="reflib-rs-enc"></span><button type="button" class="reflib-rs-cancel"></button></div>`;
+        box.querySelector(".reflib-rs-ptext").textContent = rt("prog", { name: r.name, preset }) + ` · ${r.dst.join("×")}`;
+        const cb = box.querySelector(".reflib-rs-cancel"); cb.textContent = rt("cancel");
+        cb.addEventListener("click", () => { cb.disabled = true; sendIlib({ action: "resize_cancel", job: r.job }).catch(() => {}); });
+        document.body.appendChild(box);
+        rsRunning = r.job;
+        const end = () => { rsRunning = null; box.remove(); };
+        const tick = async () => {
+            let st = null;
+            try { const s2 = await sendIlib({ action: "resize_status", job: r.job }); st = s2 && s2.job; } catch (e) {}
+            if (!st) { setTimeout(tick, 800); return; }
+            const pc = Math.round((st.progress || 0) * 100);
+            box.querySelector(".reflib-rs-bar i").style.width = pc + "%"; box.querySelector(".reflib-rs-pct").textContent = pc + "%";
+            if (st.encoder) box.querySelector(".reflib-rs-enc").textContent = st.encoder === "h264_nvenc" ? "NVENC" : "x264";
+            if (st.state === "queued" || st.state === "running") { setTimeout(tick, 400); return; }
+            end();
+            if (st.state === "cancelled") { toast(rt("cancelled"), "info"); return; }
+            if (st.state !== "done") { toast(rt("fail", { e: st.error || "?" }), "error"); return; }
+            const res = st.result || {}, w = (st.dst_size || r.dst)[0], h = (st.dst_size || r.dst)[1];
+            reloadVideos();
+            if (opts.tab) {
+                const a = await sendBridge({ target: `${opts.tab}:video_guide`, action: "resize_apply", job: r.job }).catch(() => null);
+                if (a && a.ok) toast(rt("replaced", { name: res.name || r.name, w, h }), "ok");
+                else toast(rt("saved", { name: res.name || r.name, w, h }), "ok");
+            } else toast(rt("saved", { name: res.name || r.name, w, h }), "ok");
+            emit("reflib:changed", { reason: "video-added", id: res.video_id || null, kind: "video" });
+        };
+        setTimeout(tick, 300);
+    }
+    // Control Video bar: a "Resize" button next to Load / Save / Manage
+    function mountResizeButtons() {
+        for (const tab of TABS) {
+            const bar = document.getElementById("reflib_vbar_" + tab);
+            if (!bar) continue;
+            let b = bar.querySelector(".reflib-rs-vbtn");
+            if (!b) {
+                const host = bar.querySelector(".reflib-bar-row .reflib-btns") || bar.querySelector(".reflib-btns");
+                if (!host) continue;
+                const sib = document.getElementById("reflib_vbar_manage_" + tab) || host.querySelector("button");
+                b = document.createElement("button"); b.type = "button";
+                b.className = ((sib && sib.className) || "lg secondary").replace(/\breflib-ico-\S+/g, "") + " reflib-rs-vbtn";
+                b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); openResizeMenu(b, { tab }); });
+                host.appendChild(b);
+            }
+            const lbl = "⤡ " + rt("btn"); if (b.textContent !== lbl) { b.textContent = lbl; b.title = rt("hint_ctl"); }
+        }
+    }
+    setInterval(mountResizeButtons, 700);
     window.referenceLibrary = {
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

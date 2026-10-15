@@ -711,3 +711,31 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-cropbtn:disabled, .reflib-ib-cropbtn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .reflib-ib-lbbar .reflib-ib-cropbtn { padding: 0 10px; width: auto; }
 .reflib-ib-lbbar .reflib-ib-cropbtn[hidden] { display: none; }
+/* 1.6.2 video resize */
+.reflib-rs-menu { position: fixed; z-index: 10096; min-width: 260px; max-width: 320px; padding: 10px 12px; border-radius: 10px;
+    background: var(--background-fill-primary, #fff); color: var(--body-text-color, #111); border: 1px solid var(--border-color-primary, #d1d5db);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: 13px; }
+.reflib-rs-title { font-weight: 600; margin-bottom: 8px; }
+.reflib-rs-presets { display: flex; gap: 6px; }
+.reflib-rs-presets button { flex: 1; height: 34px; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: 13.5px;
+    border: 1px solid var(--border-color-primary, #d1d5db); background: var(--background-fill-secondary, #f3f4f6); color: inherit; }
+.reflib-rs-presets button:hover, .reflib-rs-presets button:focus-visible { background: #2563eb; border-color: #2563eb; color: #fff; outline: none; }
+.reflib-rs-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.35; opacity: .75; }
+.dark .reflib-rs-menu { background: #1f2430; color: #e5e7eb; border-color: #3a4152; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.dark .reflib-rs-presets button { background: #2a3040; border-color: #3a4152; }
+.dark .reflib-rs-presets button:hover, .dark .reflib-rs-presets button:focus-visible { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.reflib-rs-prog { position: fixed; left: 20px; bottom: 20px; z-index: 10096; width: 320px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;
+    background: var(--background-fill-primary, #fff); color: var(--body-text-color, #111); border: 1px solid var(--border-color-primary, #d1d5db); box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+.dark .reflib-rs-prog { background: #1f2430; color: #e5e7eb; border-color: #3a4152; }
+.reflib-rs-ptext { margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflib-rs-bar { height: 6px; border-radius: 3px; background: rgba(127,127,127,.25); overflow: hidden; }
+.reflib-rs-bar i { display: block; height: 100%; width: 0; background: #2563eb; transition: width .3s; }
+.dark .reflib-rs-bar i { background: #3b82f6; }
+.reflib-rs-prow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.reflib-rs-pct { font-variant-numeric: tabular-nums; }
+.reflib-rs-enc { flex: 1; opacity: .6; font-size: 11px; }
+.reflib-rs-cancel { cursor: pointer; border-radius: 6px; padding: 3px 10px; font-size: 12px; border: 1px solid var(--border-color-primary, #d1d5db); background: transparent; color: inherit; }
+.dark .reflib-rs-cancel { border-color: #3a4152; }
+.reflib-ib-lbbar .reflib-rs-btn { padding: 0 10px; width: auto; }
+.reflib-ib-lbbar .reflib-rs-btn[hidden] { display: none; }
+.reflib-rs-vbtn { white-space: nowrap; flex: 0 0 auto !important; min-width: max-content !important; }

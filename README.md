@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.1 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.2 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -50,6 +50,10 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Folder tree** (left sidebar, 1.4.1): every watched root, expandable into its subfolders as on disk, with image counts. Click a folder to filter the grid; *Include subfolders* switches between the whole subtree and that folder only. A breadcrumb above the grid shows the path; click a segment or ↑ to go up. The folder filter combines with the collection and tag filters. Each root has ⟳ (re-scan) and × (remove, two clicks) on hover. Images are **read in place**: never copied, moved, modified or deleted, so they use no extra space. They're re-scanned whenever the modal opens and with **Re-scan** (unchanged files are not re-hashed). Moved or deleted files just drop out or reappear at their new path; a missing folder is flagged. Adding a folder image to a collection **copies** it, so collections stay self-contained. *Remove* (two clicks) only removes the folder from the index. Index: `folders/index.json`; thumbnails cached in `collections/.thumbs/`.
 - **Add to references** (selection footer) appends only the selected images to WanGP's Reference Images through the same gallery path as a collection apply. Images already in the gallery are skipped and nothing is replaced. Folder images are read from where they are; they aren't copied into a collection. *Close after adding* closes the modal afterwards (remembered). If the current model has no Reference Images, you get an error.
 - Click an image for a larger preview, its collections, files and tags. **Esc** or **×** closes; the bars and manager refresh.
+
+## Resize videos (1.6.2)
+
+**⤡ Resize** to 480p / 720p / 1080p (short side; aspect kept, long side a multiple of 16) from the Control Video bar (replaces the input and saves the result to the Video Library) or from the media browser (right-click, Details, viewer; saved to the Video Library). Never upscales without asking, keeps the audio, never changes the original. Uses NVENC when available, else libx264 CRF 18. Results are named `<name> (720p)`.
 
 ## Crop from the browser (1.6.1)
 

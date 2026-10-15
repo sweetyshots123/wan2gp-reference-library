@@ -9,7 +9,7 @@ Hosts (the WanGP plugin, a future standalone app, the CLI) call configure(data_d
 """
 import os
 
-__version__ = "1.6.1"
+__version__ = "1.6.2"
 FORMAT_VERSION = 1
 
 

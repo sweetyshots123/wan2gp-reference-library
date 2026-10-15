@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.2 — 2026-10-16
+
+- **Video resize ("Redimensionar")** to **480p / 720p / 1080p** (short side). Aspect ratio kept; the long side is rounded to a multiple of 16 (WanGP-friendly), the short side is the preset exactly. A video already at that size is left alone. **No upscaling** without an explicit confirmation.
+- Encoded with ffmpeg: **NVENC** (h264_nvenc, preset p7, CQ 19) when it really works on the machine (checked with a test encode), otherwise **libx264 CRF 18**. Audio is kept (copied; re-encoded to AAC only when the container needs it). Live progress with Cancel. One resize at a time.
+- **Control Video bar**: "⤡ Redimensionar" resizes the current Control Video, **replaces the input** with the result and saves it to the Video Library.
+- **Media browser**: right-click, Detalles panel and the viewer offer "Redimensionar" for videos; the result goes to the Video Library.
+- The source file is never touched. Results are named `<name> (720p)` (no stacking: `x (720p)` → `x (480p)`). Cropping stays in the Cropper plugin.
+
 ## 1.6.1 — 2026-10-14
 
 - **"Recortar" (Crop) from the media browser**: right-click menu, Detalles panel and the full-screen viewer, for images and videos (not audio). Opens the Cropper plugin's editor on the library file itself, with nothing going through WanGP's inputs. Needs **Cropper 1.5.0+** (file API `window.cropper.cropFile`); with an older Cropper the button is disabled with a tooltip.

@@ -36,3 +36,4 @@ models/
 .env
 __pycache__/
 *.pyc
+.resize_tmp/
