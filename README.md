@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.2 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.3 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -245,11 +245,11 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 - It follows its **own** setting **Image crops made with Cropper** (*Save to the “Crops” collection automatically* / *Ask each time* / *Don't save*), separate from the video one. The toast (with the **Save to the collection** button in *Ask* mode) appears when the cropped image lands in one of the image inputs. The Control Image is a PIL image without a file name, so there the newest crop notice (< 20 s) is used.
 - **Duplicates:** never twice in the same collection: same bytes (sha256) or same `meta["dedupe_key"]`. Collections in the undo trash don't count. **Restore-aware:** if you delete the “Crops” collection, crop again (a new one is created) and then **Undo** the delete, the newer collection is merged back into the restored one (duplicates skipped) and removed, and a message says how many crops were moved.
 
-**Python API** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 4**; check `>= 1` for collections only, `>= 2` for videos, `>= 3` for `add_image`, `>= 4` for `list_images` / tags):
+**Python API** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 5**; check `>= 1` for collections only, `>= 2` for videos, `>= 3` for `add_image`, `>= 4` for `list_images` / tags, `>= 5` for the generation history, below):
 
 | Function | Returns |
 |---|---|
-| `API_VERSION` | `4` (v1–v3 functions unchanged) |
+| `API_VERSION` | `5` (v1–v4 functions unchanged) |
 | `list_collections()` | `[{id, name, count, cover_path or None, updated}]`, sorted by name |
 | `get_collection(cid)` | `{id, name, count, cover_path, updated, created, images: [absolute paths]}` or `None` |
 | `image_paths(cid)` | absolute image paths in collection order, `[]` if not found |
@@ -261,6 +261,66 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `list_tags()` / `image_tags(sha256)` | (v4) `[{tag, count}]` / `["tag", …]` |
 | `image_crop_policy()` / `crop_policy()` | `"auto"`, `"ask"` or `"off"` (images / videos) |
 | `add_video(path, name=None, source="cropper", meta=None)` | video id or `None`; never raises. `source="cropper"` follows the crop setting; any other source always saves. `name` defaults to the file name. `meta` is a small JSON-able dict (≤ 4 KB) stored with the entry. |
+
+**Generation history API (API v5, Reference Library 1.6.3).** Read-only access to the generation history plus a hook called after every saved generation. All functions **never raise** (errors are printed, the result is `None` / `False` / `[]`) and return **copies**: changing them changes nothing in the library. All paths are **absolute**; a path is `None` when that file is gone.
+
+| Function | Returns |
+|---|---|
+| `get_history_entry(eid: str) -> dict \| None` | the entry (shape below), or `None` |
+| `find_history_by_output(path) -> dict \| None` | the entry that produced this output file (exact path, else same file name), or `None` |
+| `latest_history_entry() -> dict \| None` | the newest entry, or `None` when the history is empty |
+| `history_settings_file(eid=None, video=None) -> str \| None` | a JSON settings file for WanGP's *Load Settings From Media File / Json*, from entry `eid` or for output `video` (its entry, else the metadata embedded in the file). Written to the temp folder. |
+| `on_history_entry(callback) -> str \| None` | token (`None` if `callback` isn't callable). `callback(entry)` runs right after an entry is saved, with `"updated": True` when a sliding-window continuation updated the previous entry (same `id`) instead of adding one. Each callback gets its own copy and runs in its own `try/except`: an exception is printed and never breaks the capture or the other callbacks. Synchronous on WanGP's saving thread, so hand heavy work to a thread. |
+| `off_history_entry(token) -> bool` | `True` if that listener was removed |
+| `media_fields() -> list[str]` | the input fields recorded in `media`: `image_refs, image_start, image_end, video_guide, video_mask, image_mask, image_guide, video_source, audio_guide, audio_guide2, audio_guide3` |
+
+Entry shape (`updated` only in `on_history_entry` payloads):
+
+```json
+{
+  "id": "6604566dfb8e41a88f2a66baa6afa273",
+  "ts": 1792271461.097842,
+  "output": ["/path/to/Wan2GP/outputs/2026-10-17-23h11m01s_seed424242_a woman walking.mp4"],
+  "model_type": "vace_14B",
+  "prompt": "a woman walking in the city",
+  "settings": {"prompt": "a woman walking in the city", "seed": 424242, "num_inference_steps": 12, "resolution": "832x480",
+               "image_prompt_type": "L", "keep_frames_video_source": "", "sliding_window_overlap": 5, "...": "..."},
+  "media": {
+    "image_refs": [{"h": "73042f6e…", "kind": "image",
+                    "path": "/path/to/plugins/wan2gp-reference-library/history/blobs/73042f6e….png",
+                    "thumb_path": "/path/to/plugins/wan2gp-reference-library/history/thumbs/73042f6e….jpg"}],
+    "video_guide": [{"h": "85062480…", "kind": "video", "path": "/path/to/…/history/blobs/85062480….mp4",
+                     "thumb_path": "/path/to/…/history/thumbs/85062480….jpg"}]
+  },
+  "poster_path": "/path/to/…/history/thumbs/out_6604566dfb8e41a88f2a66baa6afa273.jpg",
+  "video_source": "/path/to/Wan2GP/outputs/2026-10-17-23h05m40s_seed111_first shot.mp4",
+  "video_source_original": "/path/to/Wan2GP/outputs/2026-10-17-23h05m40s_seed111_first shot.mp4",
+  "updated": false
+}
+```
+
+- `settings` are WanGP's settings as saved in the output's metadata, and always contain **`image_prompt_type`**, **`keep_frames_video_source`** and **`sliding_window_overlap`**. WanGP's metadata cleaning can drop them (for example `keep_frames_video_source` when the source video isn't used), so they are also taken from WanGP's own generation values. The metadata value wins when both exist. `None` when unknown, e.g. entries recorded before 1.6.3.
+- **`video_source`** is the source video WanGP really used, as an absolute path. In **"L" mode** (*Continue last video*) WanGP resolves it to the previous output before generating, and that resolved path is what's recorded, so `find_history_by_output(entry["video_source"])` gives the parent shot. It points to the original file when it still exists, else to the history's own stored copy, else `None`. `video_source_original` is the recorded path even when the file is gone (`None` for older entries).
+- `media` paths point to the history's stored copies (`history/blobs`), or to the original file for large inputs that are only referenced.
+
+```python
+import sys, threading
+
+def _rl():
+    api = sys.modules.get("wan2gp_reference_library_api")      # lazy: never at import time
+    return api if api is not None and getattr(api, "API_VERSION", 0) >= 5 else None
+
+def _on_entry(entry):                                          # runs on WanGP's saving thread: keep it fast
+    threading.Thread(target=index_scene, args=(entry,), daemon=True).start()
+
+api = _rl()
+token = api.on_history_entry(_on_entry) if api else None
+# later: api.off_history_entry(token)
+
+# chain a continuation back to its parent shot
+e = api.latest_history_entry()
+parent = api.find_history_by_output(e["video_source"]) if e and e["video_source"] else None
+```
 
 Ids are `uuid4().hex` and survive renames. Reference Library consumes `sys.modules["wan2gp_prompt_library_api"]` the same way (`list_prompts()`, `prompts_for_collection(cid)`, `set_collection_prompts(cid, prompt_ids)`). Prompt Library 1.1.0 only accepted `API_VERSION == 1` and hides its links with Reference Library 1.2.0; use Prompt Library 1.2 or newer.
 

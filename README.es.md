@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.2 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.3 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -247,11 +247,11 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 - Sigue su **propio** ajuste **Recortes de imágenes hechos con Cropper** (*Guardar en la colección «Recortes» automáticamente* / *Preguntar cada vez* / *No guardar*), aparte del de vídeos. El aviso (con el botón **Guardar en la colección** en modo *Preguntar*) sale cuando la imagen recortada llega a una de las entradas de imagen. La imagen de control es una imagen PIL sin nombre de archivo; ahí se usa el aviso de recorte más reciente (< 20 s).
 - **Duplicados:** nunca dos veces en la misma colección: mismos bytes (sha256) o mismo `meta["dedupe_key"]`. Las colecciones en la papelera de deshacer no cuentan. **Tiene en cuenta Deshacer:** si borras la colección «Recortes», recortas otra vez (se crea una nueva) y luego **Deshaces** el borrado, la nueva se vuelca en la restaurada (sin duplicados) y se elimina, y un aviso dice cuántos recortes se han pasado.
 
-**API de Python** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 4**; comprueba `>= 1` si solo usas colecciones, `>= 2` para vídeos y `>= 3` para `add_image`, `>= 4` para `list_images` / etiquetas):
+**API de Python** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 5**; comprueba `>= 1` si solo usas colecciones, `>= 2` para vídeos, `>= 3` para `add_image`, `>= 4` para `list_images` / etiquetas y `>= 5` para el historial de generaciones, más abajo):
 
 | Función | Devuelve |
 |---|---|
-| `API_VERSION` | `3` (las funciones de la v1 y la v2 no cambian) |
+| `API_VERSION` | `5` (las funciones de la v1 a la v4 no cambian) |
 | `list_collections()` | `[{id, name, count, cover_path o None, updated}]`, ordenadas por nombre |
 | `get_collection(cid)` | `{id, name, count, cover_path, updated, created, images: [rutas absolutas]}` o `None` |
 | `image_paths(cid)` | rutas absolutas de las imágenes en el orden de la colección; `[]` si no existe |
@@ -263,6 +263,66 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `list_tags()` / `image_tags(sha256)` | (v4) `[{tag, count}]` / `["tag", …]` |
 | `image_crop_policy()` / `crop_policy()` | `"auto"`, `"ask"` o `"off"` (imágenes / vídeos) |
 | `add_video(path, name=None, source="cropper", meta=None)` | id del vídeo o `None`; nunca lanza excepciones. `source="cropper"` sigue el ajuste de recortes; cualquier otro origen siempre guarda. `name` por defecto es el nombre del archivo. `meta` es un diccionario pequeño serializable a JSON (≤ 4 KB) que se guarda con la entrada. |
+
+**API del historial de generaciones (API v5, Reference Library 1.6.3).** Acceso de solo lectura al historial de generaciones y un aviso tras cada generación guardada. Ninguna función **lanza excepciones** (los errores se imprimen y el resultado es `None` / `False` / `[]`) y todas devuelven **copias**: cambiarlas no cambia nada en la librería. Todas las rutas son **absolutas**; una ruta es `None` si ese archivo ya no existe.
+
+| Función | Devuelve |
+|---|---|
+| `get_history_entry(eid: str) -> dict \| None` | la entrada (forma abajo), o `None` |
+| `find_history_by_output(path) -> dict \| None` | la entrada que generó ese archivo de salida (ruta exacta, si no mismo nombre de archivo), o `None` |
+| `latest_history_entry() -> dict \| None` | la entrada más reciente, o `None` si el historial está vacío |
+| `history_settings_file(eid=None, video=None) -> str \| None` | un JSON de ajustes para *Load Settings From Media File / Json* de WanGP, de la entrada `eid` o del vídeo de salida `video` (su entrada, si no los metadatos incrustados en el archivo). Se escribe en la carpeta temporal. |
+| `on_history_entry(callback) -> str \| None` | token (`None` si `callback` no es invocable). `callback(entry)` se llama justo después de guardar una entrada, con `"updated": True` cuando una continuación de ventana deslizante actualizó la entrada anterior (mismo `id`) en vez de añadir una. Cada callback recibe su propia copia y va en su propio `try/except`: una excepción se imprime y nunca rompe la captura ni a los demás callbacks. Se llama de forma síncrona en el hilo de guardado de WanGP; pasa el trabajo pesado a otro hilo. |
+| `off_history_entry(token) -> bool` | `True` si se quitó ese listener |
+| `media_fields() -> list[str]` | los campos de entrada que se guardan en `media`: `image_refs, image_start, image_end, video_guide, video_mask, image_mask, image_guide, video_source, audio_guide, audio_guide2, audio_guide3` |
+
+Forma de una entrada (`updated` solo en lo que recibe `on_history_entry`):
+
+```json
+{
+  "id": "6604566dfb8e41a88f2a66baa6afa273",
+  "ts": 1792271461.097842,
+  "output": ["/path/to/Wan2GP/outputs/2026-10-17-23h11m01s_seed424242_a woman walking.mp4"],
+  "model_type": "vace_14B",
+  "prompt": "a woman walking in the city",
+  "settings": {"prompt": "a woman walking in the city", "seed": 424242, "num_inference_steps": 12, "resolution": "832x480",
+               "image_prompt_type": "L", "keep_frames_video_source": "", "sliding_window_overlap": 5, "...": "..."},
+  "media": {
+    "image_refs": [{"h": "73042f6e…", "kind": "image",
+                    "path": "/path/to/plugins/wan2gp-reference-library/history/blobs/73042f6e….png",
+                    "thumb_path": "/path/to/plugins/wan2gp-reference-library/history/thumbs/73042f6e….jpg"}],
+    "video_guide": [{"h": "85062480…", "kind": "video", "path": "/path/to/…/history/blobs/85062480….mp4",
+                     "thumb_path": "/path/to/…/history/thumbs/85062480….jpg"}]
+  },
+  "poster_path": "/path/to/…/history/thumbs/out_6604566dfb8e41a88f2a66baa6afa273.jpg",
+  "video_source": "/path/to/Wan2GP/outputs/2026-10-17-23h05m40s_seed111_first shot.mp4",
+  "video_source_original": "/path/to/Wan2GP/outputs/2026-10-17-23h05m40s_seed111_first shot.mp4",
+  "updated": false
+}
+```
+
+- `settings` son los ajustes de WanGP tal como se guardaron en los metadatos de la salida, y siempre incluyen **`image_prompt_type`**, **`keep_frames_video_source`** y **`sliding_window_overlap`**. La limpieza de metadatos de WanGP puede quitarlos (por ejemplo `keep_frames_video_source` si no se usa vídeo de origen), así que también se toman de los valores de la propia generación de WanGP. Si existen ambos, gana el de los metadatos. Valen `None` si no se conocen, p. ej. en entradas guardadas antes de la 1.6.3.
+- **`video_source`** es el vídeo de origen que WanGP usó realmente, como ruta absoluta. En el **modo "L"** (*Continuar el último vídeo*) WanGP lo resuelve a la salida anterior antes de generar, y es esa ruta resuelta la que se guarda, así que `find_history_by_output(entry["video_source"])` da la toma anterior. Apunta al archivo original si sigue existiendo; si no, a la copia guardada en el historial; si tampoco, `None`. `video_source_original` es la ruta guardada aunque el archivo ya no exista (`None` en entradas antiguas).
+- Las rutas de `media` apuntan a las copias guardadas en el historial (`history/blobs`) o, para entradas grandes que solo se referencian, al archivo original.
+
+```python
+import sys, threading
+
+def _rl():
+    api = sys.modules.get("wan2gp_reference_library_api")      # lazy: never at import time
+    return api if api is not None and getattr(api, "API_VERSION", 0) >= 5 else None
+
+def _on_entry(entry):                                          # runs on WanGP's saving thread: keep it fast
+    threading.Thread(target=index_scene, args=(entry,), daemon=True).start()
+
+api = _rl()
+token = api.on_history_entry(_on_entry) if api else None
+# later: api.off_history_entry(token)
+
+# chain a continuation back to its parent shot
+e = api.latest_history_entry()
+parent = api.find_history_by_output(e["video_source"]) if e and e["video_source"] else None
+```
 
 Los ids son `uuid4().hex` y no cambian al renombrar. Reference Library usa `sys.modules["wan2gp_prompt_library_api"]` del mismo modo (`list_prompts()`, `prompts_for_collection(cid)`, `set_collection_prompts(cid, prompt_ids)`). Prompt Library 1.1.0 solo aceptaba `API_VERSION == 1` y oculta sus vínculos con Reference Library 1.2.0; usa Prompt Library 1.2 o posterior.
 

@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.2"
+PLUGIN_VERSION = "1.6.3"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -1197,7 +1197,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if loc is None:
                 return configs
             from .reflib_core import history as _h
-            raw = {f: loc.get(f) for f in _h.FIELDS}
+            raw = {f: loc.get(f) for f in _h.FIELDS}   # video_source: already resolved by WanGP in "L" mode
+            extra = {k: loc.get(k) for k in getattr(_h, "EXTRA_SETTINGS", ())}
             out = loc.get("video_path")
             cfg_ref = configs
             def work():
@@ -1207,7 +1208,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     time.sleep(0.1)
                 time.sleep(0.2)
                 try:
-                    _h.capture(raw, dict(cfg_ref), out, model_type or "", cap_mb=history_config().get("cap_mb"))
+                    _h.capture(raw, dict(cfg_ref), out, model_type or "", cap_mb=history_config().get("cap_mb"), extra=extra)
                 except Exception:
                     traceback.print_exc()
             threading.Thread(target=work, daemon=True, name="reflib-history").start()

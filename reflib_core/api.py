@@ -19,6 +19,10 @@ API_VERSION 3 (Reference Library 1.3.0) adds add_image (crops of start/end, refe
 image_crop_policy. Everything from v1 and v2 is unchanged.
 
 API_VERSION 4 (Reference Library 1.4.0) adds read-only access to the image browser: list_images, list_tags, image_tags.
+
+API_VERSION 5 (Reference Library 1.6.3) adds read-only access to the generation history and a change hook:
+get_history_entry, find_history_by_output, latest_history_entry, history_settings_file, on_history_entry /
+off_history_entry, media_fields. Entries are plain dicts with absolute paths (see get_history_entry).
 """
 from __future__ import annotations
 
@@ -38,7 +42,7 @@ except ImportError:  # imported as a top-level module (unit tests)
     import imagestore  # type: ignore
     import imagelib  # type: ignore
 
-API_VERSION = 4
+API_VERSION = 5
 MODULE_NAME = "wan2gp_reference_library_api"
 CROP_POLICIES = ("auto", "ask", "off")
 
@@ -436,6 +440,97 @@ def image_tags(digest: str) -> List[str]:
     """Tags of one image by its sha256 (also for images no longer in any collection). Never raises."""
     try:
         return imagelib.image_tags(digest)
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------------ generation history (v5, 1.6.3)
+def _history():
+    try:
+        from . import history as _h
+    except ImportError:  # top-level import (unit tests)
+        import history as _h  # type: ignore
+    return _h
+
+
+def get_history_entry(eid: str) -> Optional[Dict[str, Any]]:
+    """One history entry, or None. Shape (all paths absolute; a path is None when that file is gone)::
+
+        {"id": str, "ts": float (epoch s), "output": [abs path, ...], "model_type": str, "prompt": str,
+         "settings": {...WanGP settings as saved..., always with "image_prompt_type", "keep_frames_video_source",
+                      "sliding_window_overlap" (None when unknown, e.g. entries recorded before 1.6.3)},
+         "media": {field: [{"h": sha256, "kind": "image"|"video"|"audio", "path": abs|None, "thumb_path": abs|None}]},
+         "poster_path": abs|None,
+         "video_source": abs|None,            # the source video WanGP really used; in "L" (continue last video) mode the
+                                              # resolved previous output. The original file when it still exists, else
+                                              # the history's stored copy, else None
+         "video_source_original": abs|None}   # the recorded original path, even if gone (None before 1.6.3)
+
+    `field` is one of media_fields(). Returns a copy: changing it changes nothing in the library."""
+    try:
+        h = _history()
+        return h.resolved(h.get(str(eid or "")))
+    except Exception as e:
+        print(f"[Reference Library] get_history_entry failed: {e}")
+        return None
+
+
+def find_history_by_output(path) -> Optional[Dict[str, Any]]:
+    """The entry that produced this output file (exact path, else same file name), same shape as get_history_entry."""
+    try:
+        if not isinstance(path, str) or not path:
+            return None
+        h = _history()
+        return h.resolved(h.find_by_output(path))
+    except Exception as e:
+        print(f"[Reference Library] find_history_by_output failed: {e}")
+        return None
+
+
+def latest_history_entry() -> Optional[Dict[str, Any]]:
+    """The newest entry (same shape), or None when the history is empty."""
+    try:
+        h = _history()
+        return h.resolved(h.latest())
+    except Exception as e:
+        print(f"[Reference Library] latest_history_entry failed: {e}")
+        return None
+
+
+def history_settings_file(eid: Optional[str] = None, video: Optional[str] = None) -> Optional[str]:
+    """Path of a JSON settings file for WanGP's "Load Settings From Media File / Json": from the entry `eid`, or for
+    the output `video` (its history entry, else the metadata WanGP embedded in the file). Written to the temp folder;
+    None when there are no settings."""
+    try:
+        return _history().settings_file(str(eid or ""), str(video or ""))
+    except Exception as e:
+        print(f"[Reference Library] history_settings_file failed: {e}")
+        return None
+
+
+def on_history_entry(callback: Callable[[Dict[str, Any]], Any]) -> Optional[str]:
+    """Call `callback(entry)` after every saved generation, entry = get_history_entry shape + "updated": bool
+    (True when a sliding-window continuation updated the previous entry instead of adding one). Called synchronously
+    on WanGP's saving thread right after the entry is written, so keep it fast (hand heavy work to a thread).
+    Exceptions are caught and printed; they never break the capture. Returns a token for off_history_entry."""
+    try:
+        return _history().add_listener(callback)
+    except Exception as e:
+        print(f"[Reference Library] on_history_entry failed: {e}")
+        return None
+
+
+def off_history_entry(token) -> bool:
+    try:
+        return _history().remove_listener(token)
+    except Exception:
+        return False
+
+
+def media_fields() -> List[str]:
+    """Input fields the history records (image_refs, image_start, video_guide, audio_guide, ...)."""
+    try:
+        return list(_history().FIELDS)
     except Exception:
         return []
 

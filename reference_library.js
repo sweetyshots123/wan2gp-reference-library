@@ -3177,7 +3177,31 @@
         r.querySelector(".reflib-hist-outs").innerHTML = outs.length ? `<h4 title="${esc(ht("outputs_tip"))}">${esc(ht("outputs"))}</h4>` + outs.map(o => `<div class="reflib-hist-orow" data-path="${esc(o.path)}" data-url="${esc(o.url)}"><span title="${esc(o.path)}">${esc(o.name)}</span>
             <button type="button" class="reflib-ib-btn" data-hact="oall" title="${esc(ht("outputs_tip"))}">${esc(ht("reuse_all"))}</button></div>`).join("") : "";
     }
-    function settingsInput() { return document.querySelector(".wangp-settings-upload input[type=file]"); }
+    // 1.6.3: WanGP 18.18 also gives the model's custom_guide gr.File the class "wangp-settings-upload" (and it comes
+    // first in the page), so pick the real "Load Settings From Media File / Json / Zip" loader: it sits next to WanGP's
+    // settings buttons (export / default / reset), is labelled "Load Settings", and accepts any file (no `accept`).
+    function settingsInput() {
+        const best = settingsLoaderCandidates()[0];
+        return best && best.score > 0 ? best.input : null;
+    }
+    function settingsLoaderCandidates() {
+        const out = [];
+        document.querySelectorAll(".wangp-settings-upload").forEach((blk, i) => {
+            const input = blk.querySelector("input[type=file]"); if (!input) return;
+            const label = ((blk.querySelector('[data-testid="block-label"], label, .label-wrap') || {}).textContent || "").trim();
+            let score = 0, near = false, el = blk;
+            for (let k = 0; k < 4 && el && el.parentElement; k++) {   // WanGP's own settings buttons in the same column
+                el = el.parentElement;
+                if (el.querySelector(".wangp-settings-export, .wangp-settings-default, .wangp-reset-settings, .wangp-settings-include-media")) { near = true; break; }
+            }
+            if (near) score += 4;
+            if (/load settings/i.test(label)) score += 3;
+            if (/custom guide/i.test(label)) score -= 6;
+            if (input.getAttribute("accept")) score -= 2;   // custom_guide restricts the file types, the loader does not
+            out.push({ input, block: blk, label, score, i });
+        });
+        return out.sort((a, b) => b.score - a.score || b.i - a.i);   // tie: the later one (the loader is after the form)
+    }
     async function nativeLoad(file) {
         const input = settingsInput();
         if (!input) { toast(ht("no_loader"), "error"); return false; }
@@ -3408,7 +3432,7 @@
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, settingsInput, settingsLoaderCandidates, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

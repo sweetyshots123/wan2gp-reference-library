@@ -7,7 +7,7 @@ In-memory images (PIL) are always stored; files are copied only when they could 
 files that live in a stable place are referenced by path + hash. A size cap (MB) prunes the oldest entries;
 deletes go to a trash with undo."""
 from __future__ import annotations
-import hashlib, io, json, os, shutil, tempfile, threading, time, uuid
+import copy, hashlib, io, json, os, shutil, tempfile, threading, time, uuid
 from typing import Any, Dict, Iterable, List, Optional
 from . import storage
 
@@ -171,8 +171,28 @@ def _ok_json(x):
 
 
 # ---------------------------------------------------------------------------- capture
-def capture(inputs: Dict[str, Any], configs: Optional[Dict[str, Any]], output, model_type: str = "", cap_mb: Optional[float] = None) -> Optional[Dict]:
-    """Record one generation. `inputs` = WanGP's raw inputs (PIL images / paths), `configs` = its metadata dict."""
+EXTRA_SETTINGS = ("image_prompt_type", "keep_frames_video_source", "sliding_window_overlap")
+
+
+def _extra(inputs: Dict[str, Any], configs: Dict[str, Any], extra: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """1.6.3: what WanGP's metadata cleaning may drop. The effective video_source (in "L" mode WanGP has already
+    resolved it to the continued video in generate_media) as an absolute path, plus the three settings, taken from
+    generate_media's own values first, then from the metadata."""
+    extra = extra or {}
+    out: Dict[str, Any] = {}
+    vs = (inputs or {}).get("video_source")
+    vs = vs[0] if isinstance(vs, (list, tuple)) and vs else vs
+    out["video_source"] = os.path.abspath(vs) if isinstance(vs, str) and vs else None
+    for k in EXTRA_SETTINGS:
+        v = extra.get(k) if extra.get(k) is not None else configs.get(k)
+        out[k] = v if _ok_json(v) and not isinstance(v, (dict, list, tuple)) else (None if v is None else str(v))
+    return out
+
+
+def capture(inputs: Dict[str, Any], configs: Optional[Dict[str, Any]], output, model_type: str = "", cap_mb: Optional[float] = None,
+            extra: Optional[Dict[str, Any]] = None) -> Optional[Dict]:
+    """Record one generation. `inputs` = WanGP's raw inputs (PIL images / paths), `configs` = its metadata dict,
+    `extra` (1.6.3) = generate_media's own image_prompt_type / keep_frames_video_source / sliding_window_overlap."""
     configs = dict(configs or {})
     outs = [o for o in (output if isinstance(output, (list, tuple)) else [output]) if isinstance(o, str)]
     if not outs:
@@ -193,7 +213,7 @@ def capture(inputs: Dict[str, Any], configs: Optional[Dict[str, Any]], output, m
     settings = {k: _jsonable(v) for k, v in configs.items() if _ok_json(v)}
     entry = {"id": uuid.uuid4().hex, "ts": time.time(), "output": [os.path.abspath(o) for o in outs], "model_type": model_type or configs.get("model_type") or "",
              "prompt": str(configs.get("prompt") or (inputs or {}).get("prompt") or ""), "key": {k: settings.get(k) for k in KEY_SETTINGS if settings.get(k) is not None},
-             "settings": settings, "media": media}
+             "settings": settings, "media": media, "extra": _extra(inputs, configs, extra)}
     o0 = entry["output"][0]
     try:
         from . import media as _m
@@ -211,14 +231,83 @@ def capture(inputs: Dict[str, Any], configs: Optional[Dict[str, Any]], output, m
     with _lock:
         data = _load()
         win = int(configs.get("window_no") or 1)
+        updated = False
         if win > 1 and data["entries"] and data["entries"][0].get("prompt") == entry["prompt"] and time.time() - data["entries"][0]["ts"] < 3600:
             data["entries"][0].update(output=entry["output"], poster=entry.get("poster", data["entries"][0].get("poster")), ts=entry["ts"])   # sliding window: same generation
             entry = data["entries"][0]
+            updated = True
         else:
             data["entries"].insert(0, entry)
         _save(data)
         enforce_cap(cap_mb)
+    _notify(entry, updated)   # outside the lock: listeners may call back into the history
     return entry
+
+
+# ---------------------------------------------------------------------------- listeners (API v5, 1.6.3)
+_listeners: Dict[str, Any] = {}
+_listeners_lock = threading.Lock()
+
+
+def add_listener(cb) -> Optional[str]:
+    if not callable(cb):
+        return None
+    tok = uuid.uuid4().hex
+    with _listeners_lock:
+        _listeners[tok] = cb
+    return tok
+
+
+def remove_listener(token) -> bool:
+    with _listeners_lock:
+        return _listeners.pop(str(token or ""), None) is not None
+
+
+def _notify(entry: Dict, updated: bool) -> None:
+    """Each callback gets its own copy of the resolved entry (+ "updated"); an exception in one never reaches capture()
+    or the other callbacks."""
+    with _listeners_lock:
+        cbs = list(_listeners.items())
+    if not cbs:
+        return
+    try:
+        base = resolved(entry)
+    except Exception as e:
+        print(f"[Reference Library] history listeners: could not build the payload: {e}")
+        return
+    for tok, cb in cbs:
+        try:
+            cb(dict(copy.deepcopy(base), updated=bool(updated)))
+        except Exception as e:
+            print(f"[Reference Library] history listener {getattr(cb, '__qualname__', cb)!s} failed: {e!r}")
+
+
+def resolved(e: Optional[Dict]) -> Optional[Dict]:
+    """Public, path-resolved copy of an entry (API v5): {id, ts, output[], model_type, prompt, settings,
+    media{field: [{h, kind, path, thumb_path}]}, poster_path, video_source, video_source_original}. path / thumb_path are absolute or None (file gone)."""
+    if not e:
+        return None
+    media = {}
+    for f, items in (e.get("media") or {}).items():
+        media[f] = [{"h": x.get("h"), "kind": x.get("kind"), "path": item_path(x), "thumb_path": thumb_path(x.get("h") or "")} for x in items]
+    poster = e.get("poster")
+    ex = e.get("extra") or {}   # missing on entries recorded before 1.6.3
+    settings = copy.deepcopy(e.get("settings") or {})
+    for k in EXTRA_SETTINGS:   # always present: metadata value, else generate_media's value, else None
+        if settings.get(k) is None:
+            settings[k] = ex.get(k)
+    orig = ex.get("video_source")
+    copy_path = next((x["path"] for x in media.get("video_source") or [] if x.get("path")), None)
+    vs = orig if orig and os.path.isfile(orig) else copy_path   # original file first (an output in "L" mode), else our stored copy
+    return {"id": e["id"], "ts": e["ts"], "output": [os.path.abspath(o) for o in e.get("output") or []],
+            "model_type": e.get("model_type", ""), "prompt": e.get("prompt", ""), "settings": settings,
+            "media": media, "poster_path": thumb_path(os.path.splitext(poster)[0]) if poster else None,
+            "video_source": vs, "video_source_original": orig}
+
+
+def latest() -> Optional[Dict]:
+    ents = _load()["entries"]
+    return ents[0] if ents else None
 
 
 # ---------------------------------------------------------------------------- queries

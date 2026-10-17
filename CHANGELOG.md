@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.3 — 2026-10-17
+
+- **Python API v5** (`wan2gp_reference_library_api`, `API_VERSION = 5`, v1–v4 unchanged): read-only access to the generation history for other plugins. `get_history_entry(eid)`, `find_history_by_output(path)`, `latest_history_entry()`, `history_settings_file(eid=None, video=None)`, `media_fields()`, and a hook `on_history_entry(callback) -> token` / `off_history_entry(token)` called after every saved generation (`updated: True` for a sliding-window continuation). Callbacks get their own copy, each runs in its own try/except, and an exception never breaks the capture. Entries are plain dicts with absolute paths. See the README.
+- Every entry from the API includes **`video_source`** as an absolute path (in "L" / *Continue last video* mode, the previous output WanGP resolved, so a continuation can be chained to its parent shot), plus `image_prompt_type`, `keep_frames_video_source` and `sliding_window_overlap` in `settings`. History capture now records these even when WanGP's metadata cleaning drops them. Older entries give `None`.
+- **Fix: "Reutilizar todos los ajustes" could pick the wrong upload box.** WanGP's *Custom Guide* file input (and possibly others) uses the same `wangp-settings-upload` class as the real *Load Settings From Media File / Json / Zip* loader, and comes first in the page. The loader is now chosen by its surroundings: it sits next to the settings buttons (default / export / include media / reset) and its label reads *Load Settings*. Blocks labelled *Custom Guide* or restricted to specific file types are ruled out, and if no block qualifies nothing is loaded, rather than a guess. Checked against WanGP 18.18.
+- The settings are still restored through WanGP's JSON loader with the media sent by Reference Library. A queue ZIP (queue.json + media) was evaluated and not adopted: its format is internal to WanGP and changes between versions, WanGP loads it without validating the settings, and large control videos would be uploaded twice.
+
 ## 1.6.2 — 2026-10-16
 
 - **Video resize ("Redimensionar")** to **480p / 720p / 1080p** (short side). Aspect ratio kept; the long side is rounded to a multiple of 16 (WanGP-friendly), the short side is the preset exactly. A video already at that size is left alone. **No upscaling** without an explicit confirmation.
