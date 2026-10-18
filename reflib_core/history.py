@@ -379,8 +379,20 @@ def read_embedded(path: str) -> Optional[Dict]:
         return None
 
 
+def for_restore(settings: Optional[Dict]) -> Optional[Dict]:
+    """1.6.5: settings as handed to WanGP's loader when reusing them: a copy with the seed reset to random (-1).
+    The stored history entry is never changed; reusing settings must never copy the seed."""
+    if not settings:
+        return settings
+    d = dict(settings)
+    d.pop("seed", None)
+    d["seed"] = -1
+    return d
+
+
 def settings_file(eid: str = "", video: str = "") -> Optional[str]:
-    """A JSON settings file for WanGP's native "Load Settings From Media File / Json" (history entry or video metadata)."""
+    """A JSON settings file for WanGP's native "Load Settings From Media File / Json" (history entry or video metadata).
+    The seed is always -1 (random) in it (1.6.5)."""
     s = None
     if eid:
         s = (get(eid) or {}).get("settings")
@@ -389,6 +401,7 @@ def settings_file(eid: str = "", video: str = "") -> Optional[str]:
         s = e.get("settings") if e else read_embedded(video)
     if not s:
         return None
+    s = for_restore(s)   # 1.6.5: never the seed of the original generation
     d = os.path.join(tempfile.gettempdir(), "reflib_settings"); os.makedirs(d, exist_ok=True)
     p = os.path.join(d, f"settings_{eid or hashlib.sha1(video.encode()).hexdigest()[:10]}.json")
     json.dump(s, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

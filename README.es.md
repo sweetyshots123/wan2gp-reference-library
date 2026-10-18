@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.4 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.5 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -79,7 +79,7 @@ Un clic selecciona (Ctrl/Mayús como siempre) sin abrir nada. El selector de vis
 
 Cada generación de WanGP queda registrada: imágenes de referencia, imágenes de inicio/final, vídeo de control, máscaras, prompt, todos los ajustes y la ruta del vídeo (capturado con el hook `before_metadata_save` de plugins; no se modifica nada de WanGP). Ábrelo con **🕘 Historial** en la cabecera del explorador o con el botón 🕘 junto al botón del explorador.
 
-- **Reutilizar todos los ajustes**: usa el cargador propio de WanGP ("Load Settings From Media File / Json") para modelo, prompt, semilla, resolución, pasos…, y luego repone refs, vídeo de control, máscaras e imágenes de inicio/final. También sirve para vídeos de la carpeta de salida de WanGP sin entrada en el historial (WanGP lee los metadatos incrustados en el archivo).
+- **Reutilizar todos los ajustes**: usa el cargador propio de WanGP ("Load Settings From Media File / Json") para modelo, prompt, resolución, pasos…, **nunca la semilla** (queda aleatoria, -1; 1.6.5), y luego repone refs, vídeo de control, máscaras e imágenes de inicio/final. También sirve para vídeos de la carpeta de salida de WanGP sin entrada en el historial (WanGP lee los metadatos incrustados en el archivo).
 - **Reutilizar solo referencias** (añade; marca "Reemplazar" para sustituir) y **Guardar refs como colección**.
 - Almacenamiento: deduplicado por hash; solo se copian las imágenes en memoria y las subidas temporales (`history/blobs`), los archivos estables se referencian. Tamaño máximo (2048 MB por defecto) y borrar con deshacer.
 - **Borrar (1.5.6)**: selecciona entradas (clic / Ctrl / Mayús) y "Borrar seleccionadas", o usa **Borrar…** (última hora, últimas 24 h, últimos 7 días, todo, rango de fechas). Siempre con confirmación y recuento, y con deshacer. Solo se eliminan registros y copias hechas por el historial que nadie más usa; nunca los vídeos generados ni los originales. El mismo menú está en "Usadas como referencia" (las imágenes siguen en la librería).
@@ -90,6 +90,8 @@ La vista **Usadas como referencia** (columna izquierda, bajo Recientes) lista to
 El botón ⛶ junto a la X del explorador pasa a pantalla completa (más columnas); para que sea lo predeterminado, activa "Abrir siempre a pantalla completa" en los ajustes de Reference Library.
 
 Bajo el reproductor de vídeos generados de WanGP hay una pequeña barra con **Reutilizar ajustes** y **Solo referencias** para el vídeo mostrado (entrada del historial si existe; si no, los metadatos incrustados en el archivo). Va debajo del reproductor y no tiene atajos, así que no interfiere con Vidosser.
+
+**La semilla nunca se reutiliza (1.6.5).** Todas las formas de reutilizar ajustes (barra del reproductor, historial, lista de salidas, `history_settings_file()` de la API) dejan la semilla aleatoria (`-1`). La semilla se pone a -1 en los ajustes que se pasan al cargador de WanGP, y el campo Seed del formulario de generación se mantiene en -1 unos segundos tras la carga (un vídeo generado que se pasa como archivo lleva su semilla en los metadatos). Si tocas tú el campo Seed, se deja de forzar. El historial sigue guardando la semilla que se usó.
 
 La búsqueda del explorador también encuentra nombres y rutas de carpetas vigiladas y subcarpetas; el autocompletado sugiere carpetas (📁) y al elegir una se selecciona en el árbol.
 
@@ -279,7 +281,7 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `get_history_entry(eid: str) -> dict \| None` | la entrada (forma abajo), o `None` |
 | `find_history_by_output(path) -> dict \| None` | la entrada que generó ese archivo de salida (ruta exacta, si no mismo nombre de archivo), o `None` |
 | `latest_history_entry() -> dict \| None` | la entrada más reciente, o `None` si el historial está vacío |
-| `history_settings_file(eid=None, video=None) -> str \| None` | un JSON de ajustes para *Load Settings From Media File / Json* de WanGP, de la entrada `eid` o del vídeo de salida `video` (su entrada, si no los metadatos incrustados en el archivo). Se escribe en la carpeta temporal. |
+| `history_settings_file(eid=None, video=None) -> str \| None` | un JSON de ajustes para *Load Settings From Media File / Json* de WanGP, de la entrada `eid` o del vídeo de salida `video` (su entrada, si no los metadatos incrustados en el archivo). Se escribe en la carpeta temporal. La semilla en él es siempre `-1` (1.6.5). |
 | `on_history_entry(callback) -> str \| None` | token (`None` si `callback` no es invocable). `callback(entry)` se llama justo después de guardar una entrada, con `"updated": True` cuando una continuación de ventana deslizante actualizó la entrada anterior (mismo `id`) en vez de añadir una. Cada callback recibe su propia copia y va en su propio `try/except`: una excepción se imprime y nunca rompe la captura ni a los demás callbacks. Se llama de forma síncrona en el hilo de guardado de WanGP; pasa el trabajo pesado a otro hilo. |
 | `off_history_entry(token) -> bool` | `True` si se quitó ese listener |
 | `media_fields() -> list[str]` | los campos de entrada que se guardan en `media`: `image_refs, image_start, image_end, video_guide, video_mask, image_mask, image_guide, video_source, audio_guide, audio_guide2, audio_guide3` |

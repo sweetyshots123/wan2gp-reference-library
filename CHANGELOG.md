@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.5 — 2026-10-19
+
+- **Hotfix: "↺ Reutilizar ajustes" (under WanGP's output player) and "Reutilizar todos los ajustes" (history) loaded the settings into the wrong form.** WanGP 18.18 builds a second, complete generation form in its hidden **Edit** tab (the queue task editor, `#edit-tab-content`), with its own "Load Settings From Media File / Json / Zip" loader identical to the real one. Since 1.6.3 both scored the same and the later one, the Edit tab's, won. WanGP loaded the file into the invisible Edit form. Gradio then printed `UserWarning: A function (fill_inputs) returned too many output values (needed: 332, returned: 333)` with a long dump of components and values, and the Generate form, model included, never changed.
+- The loader is now picked from the **Generate** form only. Anything inside the Edit tab is excluded, and the loader on screen in the same tab as the output player wins; a tie goes to the first one. If only the Edit loader can be found, nothing is loaded and you get a clear message instead of a wrong load.
+- **Reusing settings never copies the seed (new).** Every reuse path (output-player bar, history "Reutilizar todos los ajustes", the outputs list, the API's `history_settings_file()`) leaves the seed **random (-1)**. The seed is reset in the settings handed to WanGP's loader. The Generate form's generation Seed (Advanced › General) is then held at -1 for a few seconds, because a generated video handed over as a file carries its seed in its metadata and WanGP may re-render the form on a model switch. Touching the Seed field yourself stops it. Stored history is unchanged: entries, and `get_history_entry()`, still record the seed that was used. "Solo referencias" never touched the seed.
+- Verified end to end on WanGP 18.18 with a real MiniMax-H3 finetune entry: the model switches, and prompt, resolution, frames, steps and the sliding window come back in the Generate form, plus Refs and Audio 1, while the seed stays -1. Gradio logs no warning. Same-model reloads, generated videos without a history entry and the history panel's button all work.
+- Virtual copies move to 1.6.6.
+
 ## 1.6.4 — 2026-10-18
 
 - **"📚 Guardar en librería" (Save to library) on WanGP's own audio and video inputs.** It sits in each input's toolbar, after Media Editor's Crop/Resize buttons and before Gradio's own (undo / ✂ trim / ✕). It shows only while the input holds a file. Generate tab: Control Video 1/2/3 (`video_guide*`), Source Video (`video_source`), Video Mask, Audio 1/2/3 (`audio_guide*`), Source Audio and the voice-replacement samples.

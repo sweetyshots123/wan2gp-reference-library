@@ -3091,14 +3091,14 @@
     // ---- 1.5.5 generation history ("Historial") ----
     const HT = {
         en: { title: "History", tip: "Generation history", search: "Search prompt, model or file…", empty: "No generations recorded yet. Generate a video in WanGP and it shows up here.",
-              reuse_all: "Reuse all settings", reuse_all_tip: "Model, prompt, seed, resolution, steps… through WanGP's own settings loader, plus refs, control video and masks",
+              reuse_all: "Reuse all settings", seed_note: "seed stays random (-1)", reuse_all_tip: "Model, prompt, resolution, steps… (the seed stays random, -1) through WanGP's own settings loader, plus refs, control video and masks",
               reuse_refs: "Reuse references only", replace: "Replace current refs (default: append)", savecol: "Save refs as collection", del: "Delete", undo: "Undo",
               outputs: "Generated videos without history", outputs_tip: "From WanGP's output folder: settings come from the metadata embedded in the file",
               more: "Load more", missing: "output file missing", size: "{mb} MB stored", cap: "Size cap (MB, 0 = no cap)", enabled: "Record generations",
               no_loader: "WanGP's settings loader was not found on the page", loading: "Loading settings in WanGP…", restored: "Restored: {what}",
               refs: "Refs", start: "Start", end: "End", control: "Control", vmask: "Video mask", imask: "Image mask", guide: "Guide", source: "Source", aud1: "Audio 1", aud2: "Audio 2", aud3: "Audio 3", find: "History", nohist: "no history entry", noembed: "no embedded settings" },
         es: { title: "Historial", tip: "Historial de generaciones", search: "Buscar prompt, modelo o archivo…", empty: "Aún no hay generaciones. Genera un vídeo en WanGP y aparecerá aquí.",
-              reuse_all: "Reutilizar todos los ajustes", reuse_all_tip: "Modelo, prompt, semilla, resolución, pasos… con el cargador de ajustes de WanGP, más refs, vídeo de control y máscaras",
+              reuse_all: "Reutilizar todos los ajustes", seed_note: "semilla aleatoria (-1)", reuse_all_tip: "Modelo, prompt, resolución, pasos… (la semilla queda aleatoria, -1) con el cargador de ajustes de WanGP, más refs, vídeo de control y máscaras",
               reuse_refs: "Reutilizar solo referencias", replace: "Reemplazar las refs actuales (por defecto: añadir)", savecol: "Guardar refs como colección", del: "Borrar", undo: "Deshacer",
               outputs: "Vídeos generados sin historial", outputs_tip: "De la carpeta de salida de WanGP: los ajustes salen de los metadatos incrustados en el archivo",
               more: "Cargar más", missing: "falta el archivo de salida", size: "{mb} MB guardados", cap: "Tamaño máximo (MB, 0 = sin límite)", enabled: "Registrar generaciones",
@@ -3201,9 +3201,25 @@
             if (/load settings/i.test(label)) score += 3;
             if (/custom guide/i.test(label)) score -= 6;
             if (input.getAttribute("accept")) score -= 2;   // custom_guide restricts the file types, the loader does not
-            out.push({ input, block: blk, label, score, i });
+            // 1.6.5 hotfix: WanGP 18.18 builds a second, complete form in its hidden "Edit" tab (queue task editor,
+            // #edit-tab-content) with its own identical loader. Loading there refreshes the invisible Edit form (Gradio
+            // then warns about the output count) and the Generate form never changes. Never use it; prefer the loader
+            // that is on screen and shares the tab panel with the output player (#gallery).
+            const edit = !!blk.closest('#edit-tab-content, [id^="edit-tab"]') || inHiddenEditTab(blk);
+            if (edit) score -= 20;
+            if (score > 0) {   // only a block that already qualifies as a settings loader gets the location bonuses
+                if (blk.getClientRects().length) score += 2;
+                const tp = blk.closest('.tabitem, [role="tabpanel"]'), gal = document.getElementById("gallery");
+                if (tp && gal && tp.contains(gal) && !gal.closest('#edit-tab-content')) score += 3;
+            }
+            out.push({ input, block: blk, label, score, i, edit });
         });
-        return out.sort((a, b) => b.score - a.score || b.i - a.i);   // tie: the later one (the loader is after the form)
+        return out.sort((a, b) => b.score - a.score || a.i - b.i);   // tie: the first one (the Generate form comes before the Edit form)
+    }
+    function inHiddenEditTab(blk) {   // fallback when WanGP renames #edit-tab-content: the Edit tab's panel is labelled "Edit"
+        const tp = blk.closest('.tabitem, [role="tabpanel"]'); if (!tp) return false;
+        const lab = tp.getAttribute("aria-labelledby"); const btn = lab && document.getElementById(lab);
+        return !!(btn && /^\s*edit\s*$/i.test(btn.textContent || ""));
     }
     async function nativeLoad(file) {
         const input = settingsInput();
@@ -3211,8 +3227,47 @@
         const dt = new DataTransfer(); dt.items.add(file);
         input.files = dt.files;
         input.dispatchEvent(new Event("change", { bubbles: true }));
-        toast(ht("loading"), "info");
+        toast(ht("loading") + " · " + ht("seed_note"), "info");
+        forceRandomSeed();
         return true;
+    }
+    // 1.6.5: reusing settings NEVER copies the seed. The JSON we hand over already says seed -1; a generated video
+    // handed over as a file still carries its seed in its metadata, and WanGP may re-render the form a few seconds
+    // later (model switch), so the Generate form's Seed field is kept at -1 for a while after the load. It stops as
+    // soon as you touch the Seed field yourself.
+    // WanGP 18.18 has several "Seed (-1 for random)" sliders in the Generate form (generation seed in Advanced Mode >
+    // "General", audio post-processing, Deepy) plus copies in the hidden Edit tab: take the generation one.
+    function seedInput() {
+        const li = settingsInput(); const panel = li && li.closest('.tabitem, [role="tabpanel"]'); if (!panel) return null;
+        const found = [];
+        for (const blk of panel.querySelectorAll(".block")) {
+            if (blk.closest("#edit-tab-content")) continue;
+            const lab = blk.querySelector('[data-testid="block-info"], label span, .label-wrap span, label');
+            if (!lab || !/^\s*seed\b/i.test(lab.textContent || "")) continue;
+            const num = blk.querySelector('input[type="number"]'); if (num) found.push(num);
+        }
+        const general = found.find(n => { const tab = n.closest(".tabitem"); const btn = tab && tab.id && document.querySelector(`button[role="tab"][aria-controls="${CSS.escape(tab.id)}"]`);
+            return btn && /^\s*general\s*$/i.test(btn.textContent || ""); });
+        return general || found[0] || null;
+    }
+    let seedGuard = 0;
+    function forceRandomSeed(ms = 20000) {
+        const run = ++seedGuard, t0 = Date.now(); let touched = false, hooked = null;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        const tick = () => {
+            if (run !== seedGuard || touched) return;
+            const inp = seedInput();
+            if (inp && inp !== hooked) { hooked = inp; inp.addEventListener("focus", () => { if (run === seedGuard) touched = true; }, { once: true }); }
+            if (inp && document.activeElement !== inp && String(inp.value).trim() !== "-1") {
+                setter.call(inp, "-1");
+                inp.dispatchEvent(new Event("input", { bubbles: true }));
+                inp.dispatchEvent(new Event("change", { bubbles: true }));
+                const rng = inp.closest(".block").querySelector('input[type="range"]');
+                if (rng) { setter.call(rng, "-1"); rng.dispatchEvent(new Event("input", { bubbles: true })); rng.dispatchEvent(new Event("change", { bubbles: true })); }
+            }
+            if (Date.now() - t0 < ms) setTimeout(tick, 300);
+        };
+        setTimeout(tick, 300);
     }
     async function reuseAll(eid, path, url) {
         let file = null;
@@ -3271,9 +3326,9 @@
     // ---- 1.5.7 reuse from WanGP's output player (#gallery): a small bar BELOW the player, never over the video
     // (Vidosser draws on the picture itself and owns the keyboard; this bar has no shortcuts and no overlay) ----
     const PVT = {
-        en: { all: "Reuse settings", all_tip: "Reuse ALL settings of the video shown in the player (history entry, else the metadata embedded in the file, through WanGP's own loader)",
+        en: { all: "Reuse settings", all_tip: "Reuse ALL settings of the video shown in the player (history entry, else the metadata embedded in the file, through WanGP's own loader). The seed is never copied: it stays random (-1)",
               refs: "References only", refs_tip: "Add the reference images of the video shown in the player to Reference Images", none: "No generated video selected in the player", label: "Reference Library" },
-        es: { all: "Reutilizar ajustes", all_tip: "Reutiliza TODOS los ajustes del vídeo mostrado en el reproductor (entrada del historial o, si no hay, los metadatos incrustados en el archivo, con el cargador de WanGP)",
+        es: { all: "Reutilizar ajustes", all_tip: "Reutiliza TODOS los ajustes del vídeo mostrado en el reproductor (entrada del historial o, si no hay, los metadatos incrustados en el archivo, con el cargador de WanGP). La semilla nunca se copia: queda aleatoria (-1)",
               refs: "Solo referencias", refs_tip: "Añade a Reference Images las imágenes de referencia del vídeo mostrado en el reproductor", none: "No hay ningún vídeo generado seleccionado en el reproductor", label: "Reference Library" },
     };
     const pvt = (k) => (PVT[lang()] || PVT.en)[k] || PVT.en[k];
@@ -3546,7 +3601,7 @@
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), settingsInput, settingsLoaderCandidates, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

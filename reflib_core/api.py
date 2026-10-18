@@ -500,7 +500,8 @@ def latest_history_entry() -> Optional[Dict[str, Any]]:
 def history_settings_file(eid: Optional[str] = None, video: Optional[str] = None) -> Optional[str]:
     """Path of a JSON settings file for WanGP's "Load Settings From Media File / Json": from the entry `eid`, or for
     the output `video` (its history entry, else the metadata WanGP embedded in the file). Written to the temp folder;
-    None when there are no settings."""
+    None when there are no settings. The seed in it is always -1 (random): reusing settings never copies the seed
+    (1.6.5). get_history_entry() still returns the seed that was used."""
     try:
         return _history().settings_file(str(eid or ""), str(video or ""))
     except Exception as e:

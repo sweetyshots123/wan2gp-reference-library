@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.4"
+PLUGIN_VERSION = "1.6.5"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -1349,7 +1349,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 s = e.get("settings") if e else _h.read_embedded(path)
             if not s:
                 return {"ok": False, "error": tr(lang, "hist_no_settings")}
-            return {"ok": True, "json": json.dumps(s, ensure_ascii=False), "name": "reflib_settings.json"}
+            # 1.6.5: reusing settings never copies the seed (random, -1); the stored entry is untouched
+            return {"ok": True, "json": json.dumps(_h.for_restore(s), ensure_ascii=False), "name": "reflib_settings.json"}
         if action in ("hist_del", "hist_undo_batch"):   # 1.5.6 multi / range delete with confirm count + undo
             if action == "hist_undo_batch":
                 n = _h.undo_batch(str(req.get("batch") or ""))

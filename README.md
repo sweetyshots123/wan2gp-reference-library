@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.4 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.5 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -79,7 +79,7 @@ A click selects (Ctrl/Shift as usual) without opening anything. The header's vie
 
 Every generation WanGP makes is recorded: reference images, start/end images, control video, masks, prompt, all settings and the output path (captured through WanGP's `before_metadata_save` plugin hook; nothing in WanGP is modified). Open **🕘 Historial** from the image browser header or the 🕘 button next to the browser button.
 
-- **Reutilizar todos los ajustes / Reuse all settings**: uses WanGP's own "Load Settings From Media File / Json" loader for model, prompt, seed, resolution, steps…, then puts back refs, control video, masks and start/end images. Also works for videos in WanGP's output folder that have no history entry (WanGP reads the metadata embedded in the file).
+- **Reutilizar todos los ajustes / Reuse all settings**: uses WanGP's own "Load Settings From Media File / Json" loader for model, prompt, resolution, steps…, **never the seed** (it stays random, -1; 1.6.5), then puts back refs, control video, masks and start/end images. Also works for videos in WanGP's output folder that have no history entry (WanGP reads the metadata embedded in the file).
 - **Reuse references only** (append; tick "Replace" to replace) and **Save refs as collection**.
 - Storage: deduped by hash; only in-memory images and temporary uploads are copied (`history/blobs`), stable files are referenced. Size cap (default 2048 MB) and delete with undo.
 - **Deleting (1.5.6)**: select entries (click / Ctrl / Shift) and "Delete selected", or use **Delete…** (last hour, last 24 h, last 7 days, everything, custom range). Always confirmed with a count and undoable. Only history records and history-made copies that nothing else uses are removed; outputs and originals are never deleted. The same menu exists in "Used as reference" (images stay in the library).
@@ -90,6 +90,8 @@ The **Used as reference** view (left column, under Recientes) lists every image 
 The ⛶ button next to the browser's X switches to full screen (more columns); to make it the default, turn on "Always open the image browser full screen" in the Reference Library settings.
 
 Under WanGP's output player there is a small bar with **Reuse settings** and **References only** for the video shown in the player (history entry if any, otherwise the metadata embedded in the file). It sits below the player and has no shortcuts, so it does not interfere with Vidosser.
+
+**The seed is never reused (1.6.5).** Every way of reusing settings (output-player bar, history, outputs list, `history_settings_file()` in the API) leaves the seed random (`-1`). The seed is reset in the settings handed to WanGP's loader, and the Generate form's Seed field is kept at -1 for a few seconds after the load (a generated video handed over as a file still carries its seed in its metadata). Touching the Seed field yourself stops this. The history still records the seed that was used.
 
 The browser search also matches folder names and paths of watched folders and subfolders; the autocomplete lists matching folders (📁) and picking one selects it in the tree.
 
@@ -277,7 +279,7 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `get_history_entry(eid: str) -> dict \| None` | the entry (shape below), or `None` |
 | `find_history_by_output(path) -> dict \| None` | the entry that produced this output file (exact path, else same file name), or `None` |
 | `latest_history_entry() -> dict \| None` | the newest entry, or `None` when the history is empty |
-| `history_settings_file(eid=None, video=None) -> str \| None` | a JSON settings file for WanGP's *Load Settings From Media File / Json*, from entry `eid` or for output `video` (its entry, else the metadata embedded in the file). Written to the temp folder. |
+| `history_settings_file(eid=None, video=None) -> str \| None` | a JSON settings file for WanGP's *Load Settings From Media File / Json*, from entry `eid` or for output `video` (its entry, else the metadata embedded in the file). Written to the temp folder. The seed in it is always `-1` (1.6.5). |
 | `on_history_entry(callback) -> str \| None` | token (`None` if `callback` isn't callable). `callback(entry)` runs right after an entry is saved, with `"updated": True` when a sliding-window continuation updated the previous entry (same `id`) instead of adding one. Each callback gets its own copy and runs in its own `try/except`: an exception is printed and never breaks the capture or the other callbacks. Synchronous on WanGP's saving thread, so hand heavy work to a thread. |
 | `off_history_entry(token) -> bool` | `True` if that listener was removed |
 | `media_fields() -> list[str]` | the input fields recorded in `media`: `image_refs, image_start, image_end, video_guide, video_mask, image_mask, image_guide, video_source, audio_guide, audio_guide2, audio_guide3` |
