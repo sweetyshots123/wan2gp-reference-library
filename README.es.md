@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.3 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.4 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -50,6 +50,14 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **Árbol de carpetas** (barra lateral izquierda, 1.4.1): cada raíz vigilada, desplegable en sus subcarpetas como en el disco, con recuentos. Haz clic en una carpeta para filtrar; *Incluir subcarpetas* alterna entre todo el subárbol y solo esa carpeta. Una ruta de navegación encima de la cuadrícula muestra dónde estás; haz clic en un tramo o en ↑ para subir. El filtro de carpeta se combina con los de colección y etiquetas. Cada raíz tiene ⟳ (reescanear) y × (quitar, dos clics) al pasar el ratón. Las imágenes se **leen en su sitio**: nunca se copian, mueven, modifican ni borran, así que no ocupan espacio extra. Se reescanean al abrir el modal y con **Reescanear** (los archivos sin cambios no se vuelven a hashear). Si un archivo se mueve o se borra, desaparece o reaparece en su nueva ruta; una carpeta que falta se marca. Al añadir una imagen de carpeta a una colección se **copia**, para que las colecciones sigan siendo autónomas. *Quitar* (dos clics) solo la quita del índice. Índice: `folders/index.json`; miniaturas en caché en `collections/.thumbs/`.
 - **Añadir a referencias** (pie de la selección) añade solo las imágenes elegidas a Reference Images de WanGP, por el mismo camino que al aplicar una colección. Las que ya estén en la galería se saltan y nunca se sustituye nada. Las imágenes de carpetas se leen en su sitio; no se copian a ninguna colección. *Cerrar al añadir* cierra el modal después (se recuerda). Si el modelo actual no tiene Reference Images, sale un error.
 - Haz clic en una imagen para verla en grande con sus colecciones, archivos y etiquetas. **Esc** o **×** cierran; las barras y el gestor se refrescan.
+
+## Guardar entradas en la librería (1.6.4)
+
+Cada entrada de audio y vídeo de WanGP (Control Video 1/2/3, Source Video, Video Mask, Audio 1/2/3, Source Audio, muestras de voz) tiene un botón **📚 Guardar en librería** en su barra mientras contiene un archivo. Guarda el valor **actual** de la entrada: recórtala antes con el ✂ de Gradio (vídeo) o la región de la onda (audio) y se guarda el recorte. El archivo se copia en el acto; el original no se toca nunca.
+
+- **Vídeo** → Librería de vídeos. **Audio** → la carpeta gestionada **Audios guardados** (`saved_audio/` dentro del plugin), indexada sola en el explorador de medios.
+- Los recortes se llaman `nombre (recorte)`; los duplicados se reconocen. El aviso tiene **Deshacer**.
+- Gradio recorta el vídeo con ffmpeg.wasm en el navegador (se descarga de unpkg.com la primera vez). Si aún no está listo, Gradio deja el vídeo entero sin avisar; el botón lo detecta, lo guarda con su nombre normal y avisa. Espera un momento y vuelve a recortar.
 
 ## Redimensionar vídeos (1.6.2)
 
@@ -357,6 +365,7 @@ plugins/wan2gp-reference-library/
   pool/                  # unassigned images (1.4): pool.json + <sha256>.<ext>, .trash/
   folders/
     index.json           # watched folders + file index (files stay where they are) (1.4)
+  saved_audio/           # «Audios guardados» (1.6.4): audios guardados desde las entradas de WanGP, carpeta vigilada gestionada
   videos/
     videos.json          # índice (orden, nombres, datos, origen, meta)
     <id>/
@@ -365,7 +374,7 @@ plugins/wan2gp-reference-library/
     .trash/              # vídeos borrados: se pueden recuperar 5 min, se eliminan a los 15 min
 ```
 
-`settings.json`, `collections/` y `videos/` están en .gitignore y no van en los zips. Los ajustes nuevos se añaden desde los valores por defecto; los datos existentes nunca se migran.
+`settings.json`, `collections/`, `videos/` y `saved_audio/` están en .gitignore y no van en los zips. Los ajustes nuevos se añaden desde los valores por defecto; los datos existentes nunca se migran.
 
 ## Uso independiente (reflib_core)
 

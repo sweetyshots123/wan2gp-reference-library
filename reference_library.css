@@ -739,3 +739,16 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-lbbar .reflib-rs-btn { padding: 0 10px; width: auto; }
 .reflib-ib-lbbar .reflib-rs-btn[hidden] { display: none; }
 .reflib-rs-vbtn { white-space: nowrap; flex: 0 0 auto !important; min-width: max-content !important; }
+
+/* 1.6.4 "📚 Guardar en librería" in WanGP's video / audio input toolbars (same footprint as Media Editor's buttons) */
+.reflib-sv-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px 0 7px; margin: 0 2px; box-sizing: border-box;
+  border: 1px solid var(--border-color-primary); border-radius: var(--radius-sm, 4px); background: var(--block-background-fill);
+  color: var(--body-text-color); font: 600 var(--text-sm, 12px)/1 var(--font, system-ui, sans-serif); cursor: pointer; white-space: nowrap;
+  box-shadow: var(--shadow-drop, 0 1px 2px rgba(0,0,0,.15)); transition: background .12s, border-color .12s, color .12s; }
+.reflib-sv-btn[hidden] { display: none !important; }
+.reflib-sv-btn:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--background-fill-secondary); }
+.reflib-sv-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.reflib-sv-btn .reflib-sv-ico { font-size: 13px; line-height: 1; }
+.reflib-sv-btn.narrow .reflib-sv-lbl { display: none; }
+.reflib-sv-btn.narrow { padding: 0 6px; }
+.reflib-sv-btn.busy { opacity: .6; cursor: progress; }

@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.3"
+PLUGIN_VERSION = "1.6.4"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -814,6 +814,9 @@ def _stage_for_gallery(paths):
 # ---------------------------------------------------------------------------- video library helpers
 WATCH_VIDEOS = ("video_guide", "video_guide2", "video_guide3", "video_source")  # inputs Cropper may put a crop into
 WATCH_IMAGES = ("image_start", "image_end", "image_refs", "image_guide")          # image inputs Cropper 1.2 crops
+# 1.6.4 "📚 Guardar en librería": every WanGP video / audio input (WanGP 18.18 names; missing ones are skipped)
+SAVE_VIDEO_INPUTS = ("video_guide", "video_guide2", "video_guide3", "video_source", "video_mask")
+SAVE_AUDIO_INPUTS = ("audio_guide", "audio_guide2", "audio_guide3", "audio_source", "replace_voice_sample", "replace_voice_sample2")
 
 
 def _stage_video(path, name):
@@ -1097,6 +1100,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         self._delete_undo = {}    # token -> {id, name, time, kind}
         self._seen_tabs = []      # form order seen in post_ui_setup ("generate", then "edit")
         self.vtargets = {}        # tab -> {"video": video_guide, "watch": {name: gr.Video}}
+        self.save_targets = {}    # 1.6.4: tab -> {field: gr.Video | gr.Audio} for "Guardar en librería"
         self._vbars = {}          # tab -> dict of video bar components
         self._vbar_localize_order = []
         self._last_video = {}     # tab -> video id (session memory)
@@ -1115,6 +1119,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             traceback.print_exc()
         for name in WATCH_VIDEOS + WATCH_IMAGES:
             self.request_component(name)
+        for name in SAVE_VIDEO_INPUTS + SAVE_AUDIO_INPUTS:
+            if name not in WATCH_VIDEOS + AUDIO_TARGETS + ("video_mask",):
+                self.request_component(name)
         self.add_custom_js(build_js())
         self.add_tab(tab_id="reference_library", label="Reference Library", component_constructor=self.create_ui)
 
@@ -1125,6 +1132,10 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             self._seen_tabs.append(tab)
         try:
             self._setup_video_target(tab, components)
+        except Exception:
+            traceback.print_exc()
+        try:
+            self._setup_save_targets(tab, components)
         except Exception:
             traceback.print_exc()
         gallery, extra = components.get("image_refs"), components.get("image_refs_extra")
@@ -1176,6 +1187,52 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         show = bool(settings.get("video_bar", True)) and (tab != "edit" or bool(settings.get("show_edit_bar", True)))
         # Always inserted (hidden when disabled) so the crop notices still reach the page.
         self.insert_after("video_guide", lambda t=tab, v=show: self.create_vbar(t, v))
+
+    # ------------------------------------------------------------ 1.6.4 "Guardar en librería"
+    def _setup_save_targets(self, tab, components):
+        """Tag every WanGP video / audio input for reference_library.js (it adds the button in the input's toolbar)."""
+        found = {}
+        for name in SAVE_VIDEO_INPUTS + SAVE_AUDIO_INPUTS:
+            comp = components.get(name)
+            want = gr.Video if name in SAVE_VIDEO_INPUTS else gr.Audio
+            if not isinstance(comp, want):
+                continue
+            cl = comp.elem_classes if isinstance(comp.elem_classes, list) else ([comp.elem_classes] if comp.elem_classes else [])
+            comp.elem_classes = cl + ["reflib-savein", f"reflib-si-{name}-{tab}"]
+            found[name] = comp
+        self.save_targets[tab] = found
+
+    def save_input(self, tab, field, raw, value):
+        """Bridge for one input: {action: "save_input", name, trimmed} saves the CURRENT value (after a Gradio trim it is
+        the trimmed upload); {action: "save_input_undo", kind, ref} removes the copy that save created."""
+        from .reflib_core import savein
+        try:
+            req = json.loads(raw or "{}")
+            if not isinstance(req, dict):
+                raise ValueError
+        except Exception:
+            return json.dumps({"ok": False, "error": tr("en", "bad_request")})
+        lang = req.get("lang") if req.get("lang") in LANGS else resolve_lang(load_settings()["language"])
+        out = {"id": req.get("id"), "quiet": True}
+        try:
+            if req.get("action") == "save_input":
+                r = savein.save(field, value, name=str(req.get("name") or "")[:200] or None, trimmed=bool(req.get("trimmed")), lang=lang)
+                vid = r.pop("id", None)   # "id" is the bridge request id: the video id travels as "video_id"
+                out.update(r, video_id=vid)
+                out["changed"] = {"reason": "video-added", "id": vid, "kind": "video"} if r["kind"] == "video" else {"reason": "audio-saved", "id": r["hash"]}
+            elif req.get("action") == "save_input_undo":
+                if req.get("kind") == "video":
+                    out.update(savein.undo_video(str(req.get("ref") or "")))
+                    out["changed"] = {"reason": "video-deleted", "id": req.get("ref"), "kind": "video"}
+                else:
+                    out.update(savein.undo_audio(str(req.get("ref") or "")))
+                    out["changed"] = {"reason": "audio-removed", "id": None}
+            else:
+                out.update(self._err(lang, "bad_request"))
+        except Exception as e:
+            print(f"[Reference Library] save {tab}:{field} failed: {e}")
+            out.update({"ok": False, "error": str(e)})
+        return json.dumps(out)
 
     # ------------------------------------------------------------ 1.5.5 generation history
     def _history_hook(self, configs=None, plugin_data=None, model_type=None, **kw):
@@ -2192,6 +2249,14 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                            outputs=[bridge_resp] + [c for _, c in hcomps], show_progress="hidden", queue=True).then(
                     fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
                     js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
+            # 1.6.4 "Guardar en librería": one bridge per WanGP video / audio input, reading its CURRENT value
+            for tab, comps in list(self.save_targets.items()):
+                for field, comp in comps.items():
+                    sbtn = gr.Button("sbridge", elem_id=f"reflib_bridge_{tab}_save_{field}")
+                    sbtn.click(fn=lambda raw, value, t=tab, f=field: self.save_input(t, f, raw, value), inputs=[bridge_req, comp],
+                               outputs=[bridge_resp], show_progress="hidden", trigger_mode="multiple", queue=True).then(
+                        fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
+                        js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
             vreload_btn = gr.Button("vreload", elem_id="reflib_vreload")
             # Inline rename (pencil, 1.3.0) and a refresh of every collection/video list after changes made elsewhere.
             rename_req = gr.Textbox(value="", elem_id="reflib_rename_req", show_label=False)

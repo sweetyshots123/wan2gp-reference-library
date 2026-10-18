@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.4 — 2026-10-18
+
+- **"📚 Guardar en librería" (Save to library) on WanGP's own audio and video inputs.** It sits in each input's toolbar, after Media Editor's Crop/Resize buttons and before Gradio's own (undo / ✂ trim / ✕). It shows only while the input holds a file. Generate tab: Control Video 1/2/3 (`video_guide*`), Source Video (`video_source`), Video Mask, Audio 1/2/3 (`audio_guide*`), Source Audio and the voice-replacement samples.
+- It saves **what the input holds right now**, so after Gradio's built-in trim it saves the trimmed clip. The file is copied **immediately**, because Gradio's temporary uploads get cleaned. The original file is never touched.
+- **Video** goes to the **Video Library** (`add_video`, source `wangp-input`). **Audio** goes to the new managed folder **"Audios guardados" / "Saved audio"** (`<plugin>/saved_audio/`). It is created on first use and auto-indexed as a watched folder of the media browser, so saved audio shows up there right away with waveform, duration, tags and "Añadir a".
+- A trimmed file is named **`<name> (recorte)`** (EN: `<name> (trim)`), an untouched one keeps its name. Suffixes never stack; a clash becomes `name 2`. Identical content is not saved twice ("Ya está en la librería").
+- A toast confirms it with name and duration, with **Deshacer** (Undo): the video goes to the Video Library trash, the saved audio file is removed.
+- **How Gradio 5.29 trims (WanGP 18.18):** video trim runs ffmpeg.wasm in the browser (downloaded from unpkg.com on first use) and uploads the result as a new `video.mp4`. Audio trim cuts the wavesurfer region with WebAudio and uploads `audio.wav`. Either way the input's value becomes the new file. If ffmpeg.wasm isn't loaded yet (first use, offline) or the handles weren't moved, Gradio silently keeps the full video. Reference Library detects that from the duration, saves it under its normal name and warns "Gradio no llegó a recortar este vídeo".
+- Fix: the "Reutilizar todos los ajustes" loader selector (1.6.3) no longer counts the page itself, or a container of several upload boxes, as "next to WanGP's settings buttons".
+- Plugin only, no WanGP core changes. Vidosser, Media Editor and the 1.6.2 Resize button are unaffected.
+
 ## 1.6.3 — 2026-10-17
 
 - **Python API v5** (`wan2gp_reference_library_api`, `API_VERSION = 5`, v1–v4 unchanged): read-only access to the generation history for other plugins. `get_history_entry(eid)`, `find_history_by_output(path)`, `latest_history_entry()`, `history_settings_file(eid=None, video=None)`, `media_fields()`, and a hook `on_history_entry(callback) -> token` / `off_history_entry(token)` called after every saved generation (`updated: True` for a sliding-window continuation). Callbacks get their own copy, each runs in its own try/except, and an exception never breaks the capture. Entries are plain dicts with absolute paths. See the README.

@@ -691,8 +691,11 @@ def load_folders() -> Dict[str, Any]:
     folders = []
     for f in (data.get("folders") if isinstance(data, dict) else None) or []:
         if isinstance(f, dict) and re.match(r"^[0-9a-f]{8,64}$", str(f.get("id") or "")) and isinstance(f.get("path"), str):
-            folders.append({"id": f["id"], "path": f["path"], "recursive": bool(f.get("recursive")),
-                            "added": float(f.get("added") or 0) or time.time()})
+            entry = {"id": f["id"], "path": f["path"], "recursive": bool(f.get("recursive")),
+                     "added": float(f.get("added") or 0) or time.time()}
+            if isinstance(f.get("managed"), str) and re.match(r"^[a-z_]{1,40}$", f["managed"]):
+                entry["managed"] = f["managed"]   # 1.6.4: a folder the plugin owns (e.g. "saved_audio")
+            folders.append(entry)
     ids = {f["id"] for f in folders}
     files = {}
     for p, v in ((data.get("files") if isinstance(data, dict) else None) or {}).items():
@@ -767,6 +770,27 @@ def add_folder(path: str, recursive: bool = True, background: bool = False) -> D
     else:
         rescan([entry["id"]])
     return entry
+
+
+def ensure_managed_folder(path: str, key: str) -> Dict[str, Any]:
+    """1.6.4: watch a folder the plugin itself owns (inside its data dir, which add_folder refuses for user folders),
+    tagged {"managed": key}, non-recursive. Idempotent: returns the existing entry (its path updated if it moved)."""
+    import uuid
+    os.makedirs(path, exist_ok=True)
+    real = os.path.realpath(os.path.abspath(path))
+    with storage._lock:
+        data = load_folders()
+        for f in data["folders"]:
+            if f.get("managed") == key or _norm(f["path"]) == _norm(real):
+                changed = f.get("managed") != key or f["path"] != real or f["recursive"]
+                f.update(managed=key, path=real, recursive=False)
+                if changed:
+                    _save_folders(data)
+                return dict(f)
+        entry = {"id": uuid.uuid4().hex, "path": real, "recursive": False, "added": time.time(), "managed": key}
+        data["folders"].append(entry)
+        _save_folders(data)
+        return dict(entry)
 
 
 def set_folder_recursive(fid: str, recursive: bool, background: bool = False) -> Dict[str, Any]:
@@ -1661,6 +1685,7 @@ def locate(digest: str) -> Optional[Dict[str, Any]]:
     if not img:
         return None
     froot = {f["id"]: f["path"] for f in cat["folders"]}
+    fman = {f["id"]: f.get("managed") for f in cat["folders"] if f.get("managed")}
     files = [p for p in [img["path"]] + list(img.get("files") or []) if p]
     locs = []
     for fid in img["folders"]:
@@ -1672,7 +1697,8 @@ def locate(digest: str) -> Optional[Dict[str, Any]]:
                 continue
             if root and not rel.startswith(".."):
                 rel = "" if rel == "." else rel.replace(os.sep, "/").replace("\\", "/")
-                locs.append({"fid": fid, "rel": rel, "root": root, "root_name": os.path.basename(root.rstrip("/\\")) or root})
+                locs.append({"fid": fid, "rel": rel, "root": root, "root_name": os.path.basename(root.rstrip("/\\")) or root,
+                             **({"managed": fman[fid]} if fid in fman else {})})
                 break
     cname = {c["id"]: c["name"] for c in cat["collections"]}
     return {"folders": locs, "collections": [{"id": c, "name": cname.get(c, c)} for c in img["colids"]], "in_pool": img["in_pool"]}

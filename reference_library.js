@@ -1325,7 +1325,7 @@
             const ktip = it("k_tree", { i: kc.image, v: kc.video, a: kc.audio });
             let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? root.path : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
-                <span class="reflib-ib-ticon">${FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? root.name : n.name)}</span>
+                <span class="reflib-ib-ticon">${FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root) : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
                 ${root ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
@@ -1350,7 +1350,7 @@
         const parts = n.rel ? n.rel.split("/") : [];
         let html = `<div class="reflib-ib-crumbs"><button type="button" class="reflib-ib-up" data-act="up" title="${esc(it("up"))}">↑</button>
             <button type="button" data-act="crumb" data-fid="">${esc(it("all_images"))}</button><span>›</span>
-            <button type="button" data-act="crumb" data-fid="${esc(root.id)}" data-rel="" title="${esc(root.path)}">${esc(root.name)}</button>`;
+            <button type="button" data-act="crumb" data-fid="${esc(root.id)}" data-rel="" title="${esc(root.path)}">${esc(folderLabel(root))}</button>`;
         parts.forEach((p, k) => {
             html += `<span>›</span><button type="button" data-act="crumb" data-fid="${esc(root.id)}" data-rel="${esc(parts.slice(0, k + 1).join("/"))}">${esc(p)}</button>`;
         });
@@ -1396,7 +1396,7 @@
         if (cols.length) groups.push(join(cols, "chip_or"));
         if (f.node && !f.recent) {
             const root = d.folders.find(x => x.id === f.node.fid);
-            if (root) groups.push(chip("node", "", esc(it("chip_folder", { name: root.name + (f.node.rel ? "/" + f.node.rel : "") }))));
+            if (root) groups.push(chip("node", "", esc(it("chip_folder", { name: folderLabel(root) + (f.node.rel ? "/" + f.node.rel : "") }))));
         }
         for (const tg of [...f.tags]) groups.push(chip("tag", tg, "#" + esc(tg), "tag"));
         const byGroup = new Map();
@@ -2443,7 +2443,7 @@
     }
     function locCrumbs(l) {
         const parts = l.rel ? l.rel.split("/") : [];
-        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${esc(l.root_name)}</button>`;
+        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${esc(l.managed === "saved_audio" ? folderLabel(l) : l.root_name)}</button>`;
         parts.forEach((p, k) => { html += `<span>›</span><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="${esc(parts.slice(0, k + 1).join("/"))}">${esc(p)}</button>`; });
         return html + `</div>`;
     }
@@ -3192,6 +3192,9 @@
             let score = 0, near = false, el = blk;
             for (let k = 0; k < 4 && el && el.parentElement; k++) {   // WanGP's own settings buttons in the same column
                 el = el.parentElement;
+                // 1.6.4: only the block's own neighbourhood counts, never the page itself or a container of several uploads
+                if (el === document.body || el === document.documentElement || el.tagName === "GRADIO-APP" || el.classList.contains("gradio-container")) break;
+                if (el.querySelectorAll(".wangp-settings-upload").length > 1) break;
                 if (el.querySelector(".wangp-settings-export, .wangp-settings-default, .wangp-reset-settings, .wangp-settings-include-media")) { near = true; break; }
             }
             if (near) score += 4;
@@ -3428,11 +3431,122 @@
         }
     }
     setInterval(mountResizeButtons, 700);
+
+    // ================================================================ 1.6.4 "📚 Guardar en librería" on WanGP inputs
+    // Every WanGP video / audio input (tagged .reflib-savein by the plugin) gets a small button in its top toolbar,
+    // after Media Editor's Crop / Resize and before Gradio's own buttons; shown only while the input has a value.
+    // Gradio 5's trim renders the selection in the browser and uploads it as a NEW file ("video.mp4" / "audio.wav")
+    // that becomes the value, so saving the current value saves the trimmed version. We remember the name the input
+    // had before the trim so the copy is "<name> (recorte)", not "video".
+    const SVT = {
+        en: { btn: "Save to library", short: "Save", tip: "Save this input's current file (trimmed if you trimmed it) to the Reference Library",
+              tip_a: "Save this audio (trimmed if you trimmed it) to “Saved audio” in the media browser",
+              tip_v: "Save this video (trimmed if you trimmed it) to the Video Library",
+              saved_a: "“{name}” ({d}) saved to “Saved audio”", saved_v: "“{name}” ({d}) saved to the Video Library",
+              dup_a: "Already in “Saved audio”: “{name}”", dup_v: "Already in the Video Library: “{name}”",
+              undone: "Removed “{name}” from the library", fail: "Could not save: {e}", busy: "Saving…", folder: "Saved audio",
+              not_trimmed: "Gradio didn't actually trim this video (its FFmpeg was still loading), so the full video was saved. Wait a few seconds and trim again if you wanted a trimmed copy." },
+        es: { btn: "Guardar en librería", short: "Guardar", tip: "Guardar el archivo actual de esta entrada (recortado si lo has recortado) en la Reference Library",
+              tip_a: "Guardar este audio (recortado si lo has recortado) en «Audios guardados» del explorador de medios",
+              tip_v: "Guardar este vídeo (recortado si lo has recortado) en la Librería de vídeos",
+              saved_a: "«{name}» ({d}) guardado en «Audios guardados»", saved_v: "«{name}» ({d}) guardado en la Librería de vídeos",
+              dup_a: "Ya está en «Audios guardados»: «{name}»", dup_v: "Ya está en la Librería de vídeos: «{name}»",
+              undone: "«{name}» quitado de la librería", fail: "No se pudo guardar: {e}", busy: "Guardando…", folder: "Audios guardados",
+              not_trimmed: "Gradio no llegó a recortar este vídeo (su FFmpeg aún se estaba cargando), así que se ha guardado completo. Espera unos segundos y vuelve a recortar si querías una copia recortada." },
+    };
+    const svt = (k, p = {}) => String((SVT[lang()] || SVT.en)[k] || SVT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    const SV_AUDIO = /^(audio_guide\d?|audio_source|replace_voice_sample\d?)$/;
+    const svField = (block) => { const m = /\breflib-si-(\w+?)-(generate|edit)\b/.exec(block.className || ""); return m ? { field: m[1], tab: m[2] } : null; };
+    function svValueUrl(block, field) {
+        if (SV_AUDIO.test(field)) {
+            if (!block.querySelector(".waveform-container, .component-wrapper")) return "";
+            const a = block.querySelector("a.download-link[href]"); const au = block.querySelector("audio");
+            return (a && a.getAttribute("href")) || (au && (au.currentSrc || au.getAttribute("src"))) || "wave";
+        }
+        const v = block.querySelector("video");
+        return (v && (v.currentSrc || v.getAttribute("src"))) || "";
+    }
+    function svNameOf(url) {
+        let b = String(url || "").split(/[?#]/)[0].split("/").pop() || "";
+        try { b = decodeURIComponent(b); } catch (e) {}
+        return b.replace(/\.[A-Za-z0-9]{1,5}$/, "");
+    }
+    const svState = new WeakMap();   // block -> {url, orig, trimmed, pending}
+    function svTrack(block, field) {
+        const st = svState.get(block) || { url: "", orig: "", trimmed: false, pending: null };
+        const url = svValueUrl(block, field);
+        if (url !== st.url) {
+            const base = svNameOf(url).toLowerCase();
+            const isTrimUpload = base === "video" || base === "audio";
+            if (st.pending && Date.now() - st.pending.ts < 180000 && url) { st.trimmed = true; st.orig = st.pending.name; st.dur0 = st.pending.dur || 0; }
+            else if (isTrimUpload && st.trimmed && url) { /* a second trim of a trimmed value: keep the original name */ }
+            else { st.trimmed = false; st.orig = svNameOf(url); }
+            st.pending = null; st.url = url;
+            svState.set(block, st);
+        }
+        return st;
+    }
+    // Gradio's "Trim" apply button (text "Trim", not translated by Gradio) inside a tagged input
+    document.addEventListener("click", (e) => {
+        const b = e.target && e.target.closest && e.target.closest("button");
+        if (!b || !/^\s*Trim\s*$/.test(b.textContent || "")) return;
+        const block = b.closest(".reflib-savein"); const f = block && svField(block);
+        if (!f) return;
+        const st = svTrack(block, f.field);
+        const vid = block.querySelector("video");   // duration before the trim: Gradio's video trim can silently return the original
+        st.pending = { ts: Date.now(), name: st.trimmed ? st.orig : (st.orig || svNameOf(st.url)), dur: (vid && isFinite(vid.duration)) ? vid.duration : 0 };
+    }, true);
+    const svDur = (s) => { s = Math.max(0, Number(s) || 0); const m = Math.floor(s / 60), r = s - m * 60; return m ? `${m}:${r.toFixed(1).padStart(4, "0")}` : `${r.toFixed(1)} s`; };
+    async function saveInput(block, btn) {
+        const f = svField(block); if (!f || btn.dataset.busy) return null;
+        const st = svTrack(block, f.field);
+        const isAudio = SV_AUDIO.test(f.field);
+        const vid = isAudio ? null : block.querySelector("video");
+        const fake = !!(st.trimmed && vid && st.dur0 > 0 && isFinite(vid.duration) && Math.abs(vid.duration - st.dur0) < 0.05);
+        btn.dataset.busy = "1"; btn.classList.add("busy");
+        try {
+            const r = await sendBridge({ action: "save_input", target: `${f.tab}:save_${f.field}`, name: st.orig || "", trimmed: !!st.trimmed && !fake });
+            if (!r || !r.ok) return r;
+            const k = isAudio ? "a" : "v";
+            const text = r.created ? svt("saved_" + k, { name: r.name, d: svDur(r.duration) }) : svt("dup_" + k, { name: r.name });
+            const buttons = r.created ? [{ label: t("undo"), onClick: () => sendBridge({ action: "save_input_undo", target: `${f.tab}:save_${f.field}`, kind: r.kind, ref: r.kind === "video" ? r.video_id : r.path })
+                .then(u => { if (u && u.ok) toast(svt("undone", { name: r.name }), "info"); }) }] : [];
+            toast(text, r.created ? "ok" : "info", buttons, r.created ? 9000 : 4000);
+            if (fake) toast(svt("not_trimmed"), "info", [], 12000);
+            return Object.assign(r, { not_trimmed: fake });
+        } catch (e) {
+            toast(svt("fail", { e: (e && e.message) || e }), "error"); return null;
+        } finally { delete btn.dataset.busy; btn.classList.remove("busy"); }
+    }
+    function mountSaveButtons() {
+        for (const block of document.querySelectorAll(".reflib-savein")) {
+            const f = svField(block); if (!f) continue;
+            const st = svTrack(block, f.field);
+            const bar = block.querySelector(".icon-button-wrapper");
+            let b = block.querySelector(".reflib-sv-btn");
+            if (!bar) { if (b) b.hidden = true; continue; }
+            if (!b || b.parentElement !== bar) {
+                if (b) b.remove();
+                b = document.createElement("button"); b.type = "button"; b.className = "reflib-sv-btn";
+                b.innerHTML = '<span class="reflib-sv-ico" aria-hidden="true">📚</span><span class="reflib-sv-lbl"></span>';
+                b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); saveInput(block, b); });
+                const crp = [...bar.querySelectorAll(".crp-tool")].pop();   // after Media Editor's Crop / Resize
+                if (crp) crp.after(b); else bar.prepend(b);
+            }
+            b.hidden = !st.url;
+            const lbl = svt("btn"), tip = svt(SV_AUDIO.test(f.field) ? "tip_a" : "tip_v");
+            const l = b.querySelector(".reflib-sv-lbl"); if (l.textContent !== lbl) l.textContent = lbl;
+            if (b.title !== tip) { b.title = tip; b.setAttribute("aria-label", tip); }
+            b.classList.toggle("narrow", block.getBoundingClientRect().width < 440);
+        }
+    }
+    setInterval(mountSaveButtons, 700);
+    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f ? f.name : "");
     window.referenceLibrary = {
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, settingsInput, settingsLoaderCandidates, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), settingsInput, settingsLoaderCandidates, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.3 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.4 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -50,6 +50,14 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Folder tree** (left sidebar, 1.4.1): every watched root, expandable into its subfolders as on disk, with image counts. Click a folder to filter the grid; *Include subfolders* switches between the whole subtree and that folder only. A breadcrumb above the grid shows the path; click a segment or ↑ to go up. The folder filter combines with the collection and tag filters. Each root has ⟳ (re-scan) and × (remove, two clicks) on hover. Images are **read in place**: never copied, moved, modified or deleted, so they use no extra space. They're re-scanned whenever the modal opens and with **Re-scan** (unchanged files are not re-hashed). Moved or deleted files just drop out or reappear at their new path; a missing folder is flagged. Adding a folder image to a collection **copies** it, so collections stay self-contained. *Remove* (two clicks) only removes the folder from the index. Index: `folders/index.json`; thumbnails cached in `collections/.thumbs/`.
 - **Add to references** (selection footer) appends only the selected images to WanGP's Reference Images through the same gallery path as a collection apply. Images already in the gallery are skipped and nothing is replaced. Folder images are read from where they are; they aren't copied into a collection. *Close after adding* closes the modal afterwards (remembered). If the current model has no Reference Images, you get an error.
 - Click an image for a larger preview, its collections, files and tags. **Esc** or **×** closes; the bars and manager refresh.
+
+## Save inputs to the library (1.6.4)
+
+Every WanGP audio and video input (Control Video 1/2/3, Source Video, Video Mask, Audio 1/2/3, Source Audio, voice samples) gets a **📚 Guardar en librería / Save to library** button in its toolbar while it holds a file. It saves the input's **current** value, so trim it first with Gradio's ✂ (video) or the waveform region (audio) and the trimmed clip is what gets saved. The file is copied at once; the original is never touched.
+
+- **Video** → Video Library. **Audio** → the managed folder **Saved audio / Audios guardados** (`saved_audio/` in the plugin folder), auto-indexed in the media browser.
+- Trimmed files are named `name (recorte)` (EN: `name (trim)`); duplicates are recognised. The toast has **Undo**.
+- Gradio trims video with ffmpeg.wasm in the browser (loaded from unpkg.com the first time). If it isn't ready, Gradio keeps the full video without saying so; the button notices and saves it under its normal name with a warning. Wait a moment and trim again.
 
 ## Resize videos (1.6.2)
 
@@ -361,6 +369,7 @@ plugins/wan2gp-reference-library/
   pool/                  # unassigned images (1.4): pool.json + <sha256>.<ext>, .trash/
   folders/
     index.json           # watched folders + file index (files stay where they are) (1.4)
+  saved_audio/           # "Saved audio" (1.6.4): audio saved from WanGP inputs, managed + auto-indexed watched folder
   videos/
     videos.json          # index (order, names, facts, source, meta)
     <id>/
@@ -369,7 +378,7 @@ plugins/wan2gp-reference-library/
     .trash/              # deleted videos, restorable for 5 min, purged after 15 min
 ```
 
-`settings.json`, `autotags.json`, `autotag_settings.json`, `models/`, `collections/`, `videos/`, `pool/` and `folders/` are gitignored and excluded from release zips. New settings are added from the defaults; existing data is never migrated.
+`settings.json`, `autotags.json`, `autotag_settings.json`, `models/`, `collections/`, `videos/`, `saved_audio/`, `pool/` and `folders/` are gitignored and excluded from release zips. New settings are added from the defaults; existing data is never migrated.
 
 ## Standalone use (reflib_core)
 

@@ -37,3 +37,4 @@ models/
 __pycache__/
 *.pyc
 .resize_tmp/
+saved_audio/
