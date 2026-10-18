@@ -43,6 +43,10 @@ def known_path(h: str) -> Optional[str]:
     i = imagelib.catalog()["by_hash"].get(str(h or ""))
     if not i:
         return None
+    if i.get("virtual"):   # 1.6.6: a virtual copy reveals its original
+        from . import virtuals
+        c = virtuals.get(i["virtual"]["id"])
+        return virtuals.source_path(c) if c else None
     for p in (i.get("path"),) + tuple(i.get("files") or ()):
         if p and os.path.isfile(p):
             return p

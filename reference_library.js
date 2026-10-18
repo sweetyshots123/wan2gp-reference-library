@@ -1032,10 +1032,12 @@
         const media = mk !== "image" ? `<span class="reflib-ib-kbadge k-${mk}" aria-hidden="true">${mk === "video" ? "🎬" : "🎵"}</span>
                 <span class="reflib-ib-dur" title="${esc(img.dur ? it("pv_dur") : it("dur_none"))}">${img.dur ? esc(fmtDur(img.dur)) : "…"}</span>
                 ${mk === "audio" ? `<button type="button" class="reflib-ib-aplay ${ilib.audioHash === img.hash ? "on" : ""}" data-act="aplay" data-hash="${img.hash}" title="${esc(it(ilib.audioHash === img.hash ? "pause" : "play"))}" aria-label="${esc(it("play"))}">${ilib.audioHash === img.hash ? "❚❚" : "▶"}</button>` : ""}` : "";
-        return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
+        return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${img.virtual ? "virtual" + (img.virtual.broken ? " broken" : "") : ""} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
               <div class="reflib-ib-thumb ${th === "" ? "nothumb" : ""}">${th ? `<img src="${th}" alt="" decoding="async">` : ""}${media}
                 <label class="reflib-ib-cb" title="${esc(it("sel_visible"))}"><input type="checkbox" ${on ? "checked" : ""}></label>
-                <span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : it("folder_badge"))}</span>
+                ${img.virtual ? `<span class="reflib-ib-vbadge ${img.virtual.broken ? "broken" : ""}" title="${esc(vct(img.virtual.broken ? "broken_tip" : "badge_tip"))}">${img.virtual.broken ? "⚠ " + esc(vct("broken")) : VICO + esc(vct("badge"))}</span>`
+                  : `<span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : it("folder_badge"))}</span>`}
+                ${img.vcopies ? `<span class="reflib-ib-vcount" title="${esc(vct("copies_tip", { n: img.vcopies }))}">${VICO}${img.vcopies}</span>` : ""}
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
                 ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
               <div class="reflib-ib-name" title="${esc(img.names.join(" · "))}">${esc(img.name)}</div>
@@ -1323,11 +1325,11 @@
             const kc = n.k || { image: n.all, video: 0, audio: 0 };
             const count = ilib.f.kind ? kc[ilib.f.kind] : (ilib.f.sub ? n.all : n.direct);   // 1.6.0: per media type
             const ktip = it("k_tree", { i: kc.image, v: kc.video, a: kc.audio });
-            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? root.path : n.rel) + " — " + ktip)}">
+            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.path) : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
-                <span class="reflib-ib-ticon">${FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root) : n.name)}</span>
+                <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
-                ${root ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
+                ${root && !root.virtual ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
             return html;
         };
@@ -2010,15 +2012,26 @@
         const folderOnly = full ? (full.folders || []).length && !(full.collections || []).length && !full.in_pool : lite && lite.folders.length && !lite.cols.length && !lite.pool;
         const src = full && full.src ? full.src : ilib.thumbs.get(h);
         const pmk = (full && full.kind) || (lite && lite.kind) || "image";   // 1.6.0
+        const fv = full && full.virtual, lv = fv || (lite && lite.virtual) || null;   // 1.6.6 virtual copy / original's copies
+        const rendering = !!(fv && full.render === "rendering");
+        const vBox = lv ? `<div class="reflib-vc-box ${lv.broken ? "broken" : ""}"><div class="reflib-vc-head">${VICO}${esc(vct("is_virtual"))}</div>
+                ${fv ? `<div class="reflib-vc-orig"><span>${esc(vct("orig"))}</span> <b title="${esc((fv.orig && fv.orig.path) || "")}">${esc((fv.orig && fv.orig.name) || "?")}</b></div>
+                <div class="reflib-ib-muted">${esc(vParams(fv.params, pmk))}</div>
+                ${fv.broken ? `<div class="reflib-vc-warn">⚠ ${esc(vct("orig_missing", { path: (fv.orig && fv.orig.path) || "?" }))}</div>` : (fv.orig_in_library ? "" : `<div class="reflib-vc-warn">${esc(vct("orig_gone"))}</div>`)}
+                ${rendering ? `<div class="reflib-ib-muted reflib-vc-rendering">⏳ ${esc(vct("rendering"))}</div>` : ""}${full.render_error ? `<div class="reflib-vc-warn">${esc(vct("render_fail", { e: full.render_error }))}</div>` : ""}
+                <div class="reflib-ib-pvbtns">${vBtn("vorig", (fv.orig && fv.orig.hash) || "", "reflib-ib-btn reflib-vc-showorig", vct("show_orig"), vct("show_orig"), fv.broken || !fv.orig_in_library, true)}</div>` : ""}</div>`
+            : (full && full.copies && full.copies.length ? `<h4>${esc(vct("copies", { n: full.copies.length }))}</h4><div class="reflib-vc-list">${full.copies.map(c => `<button type="button" class="reflib-ib-chip" data-act="vshow" data-hash="${esc(c.hash)}" title="${esc(vParams(c.params, c.kind))}">${VICO}${esc(c.name)}</button>`).join("")}</div>` : "");
+        if (rendering) vPollRender(h);
         host.innerHTML = `<aside class="reflib-ib-preview k-${pmk}"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
               <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
-              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}</div>
+              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}</div>
+              ${vBox}
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
               <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
                   full && full.codec ? full.codec : "", full && full.rate ? (full.rate / 1000) + " kHz" : "", full && full.size ? (full.size > 1048576 ? (full.size / 1048576).toFixed(1) + " MB" : Math.round(full.size / 1024) + " KB") : ""].filter(Boolean).join(" · "))
-                  : (full && full.width ? `${full.width}×${full.height} · ${Math.round((full.size || 0) / 1024)} KB` : "")}</div>
+                  : (full && full.width ? `${full.width}×${full.height}${full.size ? ` · ${Math.round(full.size / 1024)} KB` : ""}` : "")}</div>
               ${added ? `<div class="reflib-ib-muted reflib-ib-pv-when">${esc(it(folderOnly ? "seen_on" : "added_on", { when: whenText(added) }))}</div>` : ""}
               <h4>${esc(it("preview_cols"))}</h4><div class="reflib-ib-pv-list">${cols.length ? cols.map(c => `<span class="reflib-ib-chip static">${esc(c)}</span>`).join("") : esc(it("in_none"))}</div>
               ${files.length ? `<h4>${esc(it("preview_folders"))}</h4><div class="reflib-ib-pv-files">${files.map(p => `<div title="${esc(p)}">${esc(p)}</div>`).join("")}</div>` : ""}
@@ -2443,7 +2456,7 @@
     }
     function locCrumbs(l) {
         const parts = l.rel ? l.rel.split("/") : [];
-        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${esc(l.managed === "saved_audio" ? folderLabel(l) : l.root_name)}</button>`;
+        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${l.managed === "virtual" ? VICO : ""}${esc(l.managed ? folderLabel(l) : l.root_name)}</button>`;
         parts.forEach((p, k) => { html += `<span>›</span><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="${esc(parts.slice(0, k + 1).join("/"))}">${esc(p)}</button>`; });
         return html + `</div>`;
     }
@@ -2501,7 +2514,9 @@
         showPreview(h, idx);
         const m = document.createElement("div");
         m.className = "reflib-ib-ctx";
-        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image") + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
+        const cv = (ilib.q.items[idx] || {}).virtual;   // 1.6.6
+        m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + (cv ? vBtn("vedit", h, "reflib-ib-ctxitem", "✎ " + vct("edit"), vct("edit_tip"), cv.broken) + vBtn("vorig", cv.orig, "reflib-ib-ctxitem", vct("show_orig"), vct("show_orig"), cv.broken, true) : cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image"))
+            + (cv && cv.broken ? "" : vBtn("vnew", h, "reflib-ib-ctxitem", vct("new"), vct("new_tip"), false, true)) + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2524,11 +2539,12 @@
             box.className = "reflib-ib-lightbox fit"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
             box.innerHTML = `<div class="reflib-ib-lbstage"><img alt=""></div>
                 <div class="reflib-ib-lbbar"><button type="button" data-lb="prev">‹</button><span class="reflib-ib-lbpos"></span><button type="button" data-lb="next">›</button>
-                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button><button type="button" data-lb="resize" class="reflib-rs-btn"></button></div>
+                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button><button type="button" data-lb="resize" class="reflib-rs-btn"></button><button type="button" data-lb="vnew" class="reflib-vc-lbbtn"></button><button type="button" data-lb="vedit" class="reflib-vc-lbbtn"></button></div>
                 <div class="reflib-ib-lbname"></div><button type="button" class="reflib-ib-lbclose">×</button>`;
             box.addEventListener("click", (e) => {
                 const b = e.target.closest("[data-lb]");
                 if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; }
+                if (k === "vnew" || k === "vedit") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; if (!b.disabled) { closeLightbox(); vOpen(hh, k === "vedit" ? "edit" : "new"); } return; }
                 if (k === "resize") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; const r0 = b.getBoundingClientRect(); closeLightbox(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: hh }); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
                 if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
                 if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"));
@@ -2546,7 +2562,10 @@
         const fb = box.querySelector('[data-lb="fit"]'), ob = box.querySelector('[data-lb="one"]');
         const cb = box.querySelector('[data-lb="crop"]'), cok = !!cropApi(), isAud = it2.kind === "audio";
         const rb = box.querySelector('[data-lb="resize"]'); rb.textContent = "⤡ " + rt("btn"); rb.title = rt("tip"); rb.hidden = it2.kind !== "video";
-        cb.textContent = "✂ " + it("crop"); cb.hidden = isAud; cb.disabled = !cok; cb.title = it(cok ? "crop_tip" : "crop_na");
+        cb.textContent = "✂ " + it("crop"); cb.hidden = isAud || !!it2.virtual; cb.disabled = !cok; cb.title = it(cok ? "crop_tip" : "crop_na");
+        const vn = box.querySelector('[data-lb="vnew"]'), ve = box.querySelector('[data-lb="vedit"]'), vbr = !!(it2.virtual && it2.virtual.broken);   // 1.6.6
+        vn.innerHTML = VICO + esc(vct("new")); vn.title = vct("new_tip"); vn.disabled = vbr;
+        ve.textContent = "✎ " + vct("edit"); ve.title = vct("edit_tip"); ve.hidden = !it2.virtual; ve.disabled = vbr;
         fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
@@ -2604,9 +2623,13 @@
             `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${esc(l)} <i>${n}</i></button>`).join("");
     }
     const murl = new Map();
-    function mediaUrl(h) {
+    function mediaUrl(h, tries = 0) {
         if (murl.has(h)) return Promise.resolve(murl.get(h));
-        return sendIlib({ action: "media_url", hash: h }).then(r => { const u = r && r.ok ? r.url : null; if (u) murl.set(h, u); return u; }).catch(() => null);
+        return sendIlib({ action: "media_url", hash: h }).then(r => {
+            const u = r && r.ok ? r.url : null; if (u) murl.set(h, u);
+            if (!u && r && r.rendering && tries < 90) return new Promise(res => setTimeout(res, 1500)).then(() => mediaUrl(h, tries + 1));   // 1.6.6 virtual copy
+            return u;
+        }).catch(() => null);
     }
     function stopAudio() {
         if (ilib.audio) { try { ilib.audio.pause(); } catch (e) {} ilib.audio = null; }
@@ -2743,6 +2766,9 @@
         if (act === "locate") { closeCtx(); doLocate(el.dataset.hash); return; }
         if (act === "crop") { closeCtx(); if (!el.disabled) doCrop(el.dataset.hash); return; }
         if (act === "resize") { const r0 = el.getBoundingClientRect(); closeCtx(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: el.dataset.hash }); return; }
+        if (act === "vnew" || act === "vedit") { closeCtx(); if (!el.disabled) vOpen(el.dataset.hash, act === "vedit" ? "edit" : "new"); return; }
+        if (act === "vorig") { closeCtx(); if (!el.disabled) vShowOriginal(el.dataset.hash); return; }
+        if (act === "vshow") { vShowCopy(el.dataset.hash); return; }
         if (act === "loccrumb") { locateTo(el.dataset.fid, el.dataset.rel || "", ilib.preview); return; }
         if (act === "ctxbig") { closeCtx(); openLightbox(+el.dataset.idx); return; }
         if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
@@ -3533,9 +3559,14 @@
         if (url !== st.url) {
             const base = svNameOf(url).toLowerCase();
             const isTrimUpload = base === "video" || base === "audio";
-            if (st.pending && Date.now() - st.pending.ts < 180000 && url) { st.trimmed = true; st.orig = st.pending.name; st.dur0 = st.pending.dur || 0; }
+            if (st.pending && Date.now() - st.pending.ts < 180000 && url) {
+                const pr = st.pending.range, was = st.trimmed && st.range;   // 1.6.6: in/out as fractions of the ORIGINAL
+                st.range = pr ? (was ? { fs: was.fs + pr.fs * (was.fe - was.fs), fe: was.fs + pr.fe * (was.fe - was.fs) } : pr) : null;
+                if (!st.trimmed) st.origUrl = st.pending.url;
+                st.trimmed = true; st.orig = st.pending.name; st.dur0 = st.pending.dur || 0;
+            }
             else if (isTrimUpload && st.trimmed && url) { /* a second trim of a trimmed value: keep the original name */ }
-            else { st.trimmed = false; st.orig = svNameOf(url); }
+            else { st.trimmed = false; st.orig = svNameOf(url); st.origUrl = url; st.range = null; }
             st.pending = null; st.url = url;
             svState.set(block, st);
         }
@@ -3549,7 +3580,8 @@
         if (!f) return;
         const st = svTrack(block, f.field);
         const vid = block.querySelector("video");   // duration before the trim: Gradio's video trim can silently return the original
-        st.pending = { ts: Date.now(), name: st.trimmed ? st.orig : (st.orig || svNameOf(st.url)), dur: (vid && isFinite(vid.duration)) ? vid.duration : 0 };
+        st.pending = { ts: Date.now(), name: st.trimmed ? st.orig : (st.orig || svNameOf(st.url)), dur: (vid && isFinite(vid.duration)) ? vid.duration : 0,
+                       url: st.url, range: svTrimRange(block, SV_AUDIO.test(f.field)) };
     }, true);
     const svDur = (s) => { s = Math.max(0, Number(s) || 0); const m = Math.floor(s / 60), r = s - m * 60; return m ? `${m}:${r.toFixed(1).padStart(4, "0")}` : `${r.toFixed(1)} s`; };
     async function saveInput(block, btn) {
@@ -3560,6 +3592,16 @@
         const fake = !!(st.trimmed && vid && st.dur0 > 0 && isFinite(vid.duration) && Math.abs(vid.duration - st.dur0) < 0.05);
         btn.dataset.busy = "1"; btn.classList.add("busy");
         try {
+            if (st.trimmed && !fake && st.range && st.origUrl && (st.range.fs > 0.0005 || st.range.fe < 0.9995)) {   // 1.6.6
+                const pr = await sendBridge({ action: "save_input_probe", target: `${f.tab}:save_${f.field}`, orig: st.origUrl }).catch(() => null);
+                if (pr && pr.ok && pr.orig) {
+                    delete btn.dataset.busy; btn.classList.remove("busy");
+                    const ch = await svChoice(btn, pr.orig.name);
+                    if (!ch) return null;
+                    btn.dataset.busy = "1"; btn.classList.add("busy");
+                    if (ch === "virtual") return await svSaveVirtual(f, st, btn);
+                }
+            }
             const r = await sendBridge({ action: "save_input", target: `${f.tab}:save_${f.field}`, name: st.orig || "", trimmed: !!st.trimmed && !fake });
             if (!r || !r.ok) return r;
             const k = isAudio ? "a" : "v";
@@ -3596,12 +3638,395 @@
         }
     }
     setInterval(mountSaveButtons, 700);
-    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f ? f.name : "");
+    // ================================================================ 1.6.6 virtual copies (Lightroom-like)
+    // A virtual copy stores only params over ONE library original: image {rect}, video {rect?, start?, end?}, audio
+    // {start, end}. The server renders it on demand (cache) whenever a real file is needed; the original is never touched.
+    // Images use Cropper's rect mode when window.cropper.fileApi >= 2 (cropFile({mode:"rect", initialRect}) ->
+    // {ok, rect:{x,y,w,h}, width, height}); otherwise (and for video frames) the built-in rect tool below.
+    const VFOLDER = "__virtual";
+    // two joined squares, drawn (the "⧉" character is missing from many fonts)
+    var VICO = '<svg class="reflib-vc-ico" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false"><rect x="1.25" y="4.75" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.75" y="1.25" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+    const VCT = {
+        en: { badge: "virtual", badge_tip: "Virtual copy: only the crop / in-out is stored, the original file is untouched", broken: "broken", broken_tip: "The original file of this virtual copy is missing",
+              copies_tip: "{n} virtual cop(ies) of this file", folder: "Virtual copies", new: "New virtual copy", new_tip: "Stores only a crop (or in/out) pointing at this file: nothing is duplicated",
+              edit: "Edit crop", edit_tip: "Change this virtual copy's crop / in-out (the original stays untouched)", show_orig: "Show original", orig: "Original:", copies: "Virtual copies ({n})", is_virtual: "Virtual copy",
+              p_rect: "Crop {w}×{h} at {x}, {y}", p_inout: "In {a} · Out {b} ({d})", p_none: "No changes yet (same as the original)", rendering: "Preparing the preview…", render_fail: "Couldn't render: {e}",
+              orig_missing: "Original file missing: {path}", orig_gone: "The original is no longer in the library", t_new: "New virtual copy of “{name}”", t_edit: "Edit “{name}”", save_new: "Create copy", save: "Save",
+              cancel: "Cancel", reset: "Reset", aspect: "Aspect", free: "Free", original: "Original", rect_on: "Crop the frame", set_in: "Set in", set_out: "Set out", play: "Play selection", stop: "Stop",
+              in_l: "In (s)", out_l: "Out (s)", len: "Length {d}", hint_img: "Drag to draw the crop, drag the edges or corners to adjust it. Enter saves, Esc cancels.",
+              hint_av: "Drag the handles, or press I / O at the current time. Space plays the selection. Enter saves, Esc cancels.", show: "Show", cropper2: "Crop in Media Editor", cropper2_tip: "Draw the frame crop in Media Editor (rect only: nothing is rendered or written)",
+              me_fail: "Media Editor could not open it ({e}): using the built-in crop tool",
+              sv_file: "Save the trimmed file", sv_file_tip: "A new file with only the trimmed part", sv_virtual: "Virtual copy of “{name}”",
+              sv_virtual_tip: "Duplicates nothing: remembers the in/out over the library original", sv_saved: "Virtual copy “{name}” ({d}) of “{orig}” created", sv_undone: "Virtual copy removed" },
+        es: { badge: "virtual", badge_tip: "Copia virtual: solo se guarda el recorte / entrada-salida, el archivo original no se toca", broken: "rota", broken_tip: "Falta el archivo original de esta copia virtual",
+              copies_tip: "{n} copia(s) virtual(es) de este archivo", folder: "Copias virtuales", new: "Nueva copia virtual", new_tip: "Guarda solo un recorte (o entrada/salida) que apunta a este archivo: no se duplica nada",
+              edit: "Editar recorte", edit_tip: "Cambiar el recorte / entrada-salida de esta copia virtual (el original no se toca)", show_orig: "Mostrar original", orig: "Original:", copies: "Copias virtuales ({n})", is_virtual: "Copia virtual",
+              p_rect: "Recorte {w}×{h} en {x}, {y}", p_inout: "Entrada {a} · Salida {b} ({d})", p_none: "Aún sin cambios (igual que el original)", rendering: "Preparando la vista previa…", render_fail: "No se pudo generar: {e}",
+              orig_missing: "Falta el archivo original: {path}", orig_gone: "El original ya no está en la librería", t_new: "Nueva copia virtual de «{name}»", t_edit: "Editar «{name}»", save_new: "Crear copia", save: "Guardar",
+              cancel: "Cancelar", reset: "Restablecer", aspect: "Proporción", free: "Libre", original: "Original", rect_on: "Recortar el encuadre", set_in: "Marcar entrada", set_out: "Marcar salida", play: "Reproducir selección", stop: "Parar",
+              in_l: "Entrada (s)", out_l: "Salida (s)", len: "Duración {d}", hint_img: "Arrastra para dibujar el recorte y ajusta bordes o esquinas. Intro guarda, Esc cancela.",
+              hint_av: "Arrastra los tiradores o pulsa I / O en el instante actual. Espacio reproduce la selección. Intro guarda, Esc cancela.", show: "Mostrar", cropper2: "Recortar en Media Editor", cropper2_tip: "Dibuja el recorte del encuadre en Media Editor (solo el rectángulo: no se genera ni se escribe nada)",
+              me_fail: "Media Editor no pudo abrirlo ({e}): se usa la herramienta de recorte propia",
+              sv_file: "Guardar el archivo recortado", sv_file_tip: "Un archivo nuevo con solo la parte recortada", sv_virtual: "Copia virtual de «{name}»",
+              sv_virtual_tip: "No duplica nada: recuerda la entrada y salida sobre el original de la librería", sv_saved: "Copia virtual «{name}» ({d}) de «{orig}» creada", sv_undone: "Copia virtual quitada" },
+    };
+    const vct = (k, p = {}) => String((VCT[lang()] || VCT.en)[k] || VCT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    const vTime = (s) => { s = Math.max(0, +s || 0); const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r.toFixed(2).padStart(5, "0")}`; };
+    function vParams(p, kind) {   // one-line summary of a copy's params
+        p = p || {}; const out = [];
+        if (p.rect) out.push(vct("p_rect", { x: p.rect[0], y: p.rect[1], w: p.rect[2], h: p.rect[3] }));
+        if (p.end != null) out.push(vct("p_inout", { a: vTime(p.start || 0), b: vTime(p.end), d: svDur(p.end - (p.start || 0)) }));
+        return out.length ? out.join(" · ") : vct("p_none");
+    }
+    function cropApi2() { const c = window.cropper; return c && typeof c.cropFile === "function" && (+c.fileApi || 0) >= 2 ? c : null; }
+    // Media Editor 1.7.0 rect mode (fileApi 2): renders nothing, returns { ok, mode:"rect", kind, rect:{x,y,w,h}, width, height,
+    // sourceWidth, sourceHeight, preset }. Integers in SOURCE pixels, origin top-left; for images in the upright (EXIF-transposed)
+    // frame, which is the frame our renderer crops (it applies exif_transpose first); video rects come snapped to even values.
+    // Returns { rect:[x,y,w,h] } | { cancelled } | { busy } | { error }.
+    async function vMeRect(api, src, kind, rect) {
+        const W = +src.width || 0, H = +src.height || 0;
+        const opts = { path: src.path, url: src.url, kind, name: src.name, source: "reference-library", mode: "rect" };
+        if (rect && rect.length === 4) opts.initialRect = { x: rect[0], y: rect[1], w: rect[2], h: rect[3] };
+        let res;
+        try { res = await api.cropFile(opts); } catch (e) { res = { ok: false, error: String((e && e.message) || e) }; }
+        if (!res || res.cancelled) return { cancelled: true };
+        if (res.busy) return { busy: true };
+        const r = res.ok && res.rect;
+        if (!r || ![r.x, r.y, r.w, r.h].every(Number.isFinite) || r.w <= 0 || r.h <= 0) return { error: (res && (res.error || res.code)) || "no rect" };
+        let x = r.x, y = r.y, w = r.w, h = r.h;
+        const sw = +(res.sourceWidth || res.width) || W, sh = +(res.sourceHeight || res.height) || H;
+        if (W && H && sw && sh && (Math.abs(sw - W) > 1 || Math.abs(sh - H) > 1)) {   // its frame differs from ours: scale
+            const kx = W / sw, ky = H / sh; x *= kx; w *= kx; y *= ky; h *= ky;
+        }
+        x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
+        w = Math.round(Math.min(w, (W || x + w) - x)); h = Math.round(Math.min(h, (H || y + h) - y));
+        if (kind === "video") { x -= x % 2; y -= y % 2; w -= w % 2; h -= h % 2; }
+        return { rect: [x, y, w, h], preset: res.preset || "" };
+    }
+    function vBtn(act, h, cls, label, tip, dis, icon) {
+        return `<button type="button" class="${cls}" data-act="${act}" data-hash="${esc(h)}" ${dis ? "disabled" : ""} title="${esc(tip || label)}">${icon ? VICO : ""}${esc(label)}</button>`;
+    }
+    function vShowOriginal(h) {   // "Mostrar original": its folder when it has one, else everything; selected + scrolled to
+        if (!h) return;
+        sendIlib({ action: "locate", hash: h }).then(r => {
+            if (r && r.ok && r.folders && r.folders.length && r.folders[0].fid !== VFOLDER) { const l = r.folders[0]; locateTo(l.fid, l.rel, h); return; }
+            const f = ilib.f;
+            f.node = null; f.recent = false; f.used = false; f.cols = new Set(); f.none = false; f.kind = ""; f.tags.clear && f.tags.clear();
+            if (f.q) { f.q = ""; const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
+            newQuery(); renderKindBar(); focusImage(h);
+        }).catch(() => {});
+    }
+    function vShowCopy(h) { if (h) locateTo(VFOLDER, "", h); }
+    let vPollT = null;
+    function vPollRender(h) {   // a virtual video / audio preview is rendered in the background: wait for it, then reload
+        clearTimeout(vPollT);
+        vPollT = setTimeout(() => {
+            if (ilib.preview !== h) return;
+            sendIlib({ action: "virt_status", hash: h }).then(r => {
+                if (!r || ilib.preview !== h) return;
+                if (r.state === "rendering") { vPollRender(h); return; }
+                murl.delete(h);
+                const i = ilib.q.items.findIndex(x => x && x.hash === h); showPreview(h, i);
+            }).catch(() => {});
+        }, 1200);
+    }
+    function vRefresh(h) { ilib.thumbs.delete(h); murl.delete(h); }
+    async function vOpen(h, mode) {
+        if (!h) return null;
+        const src = await sendIlib({ action: "virt_src", hash: h }).catch(() => null);
+        if (!src || !src.ok) return null;   // the error toast comes from handleToast
+        const edit = mode === "edit" && src.virtual;
+        let params = null;
+        const api = src.kind === "image" ? cropApi2() : null;
+        if (api) {   // images: Media Editor's rect mode (fileApi 2); video / audio use our editor (in/out + its "Recortar en Media Editor")
+            if (ilib.lightbox) closeLightbox();
+            const m = await vMeRect(api, src, "image", (src.params || {}).rect);
+            if (m.cancelled) return null;
+            if (m.busy) { toast(it("crop_busy"), "info"); return null; }
+            if (m.rect) params = { rect: m.rect };
+            else { toast(vct("me_fail", { e: m.error }), "info", [], 6000); params = await vEditor(src, edit, true); if (!params) return null; }   // fallback: built-in tool
+        } else {
+            params = await vEditor(src, edit);
+            if (!params) return null;
+        }
+        const r = await sendIlib({ action: edit ? "virt_update" : "virt_create", hash: h, params }).catch(() => null);
+        if (!r || !r.ok) return null;
+        vRefresh(r.hash);
+        if (edit) {
+            toast(r.message, "ok", [], 4000);
+            refreshData();
+            if (ilib.preview === r.hash) { const i = ilib.q.items.findIndex(x => x && x.hash === r.hash); showPreview(r.hash, i); }
+            const card = ilib.root && ilib.root.querySelector(`.reflib-ib-card[data-hash="${r.hash}"] .reflib-ib-thumb img`); if (card) card.remove();
+            queueThumbs && queueThumbs([r.hash]);
+        } else {
+            toast(r.message, "ok", [{ label: vct("show"), onClick: () => vShowCopy(r.hash) },
+                { label: it("undo"), onClick: () => sendIlib({ action: "delete_all", hashes: [r.hash] }).then(u => { ilibApply(u); }).catch(() => {}) }], 10000);
+            vShowCopy(r.hash);
+            refreshData();   // folder list / counts: the "⧉ Copias virtuales" pseudo folder may be new
+        }
+        return r;
+    }
+    // ---- the built-in editor: rect tool (images, video frames) + in/out timeline (video, audio) ----
+    function vEditor(src, edit, noMe) {
+        return new Promise((resolve) => {
+            const kind = src.kind, P = src.params || {};
+            const W = +src.width || 0, H = +src.height || 0;
+            let D = +src.duration || 0;
+            const st = { rect: P.rect ? { x: P.rect[0], y: P.rect[1], w: P.rect[2], h: P.rect[3] } : null, aspect: "free",
+                         rectOn: kind === "image" || !!P.rect, tin: P.start != null ? +P.start : 0, tout: P.end != null ? +P.end : D, playSel: false };
+            const bg = document.createElement("div"); bg.className = "reflib-vc-bg";
+            const hasRect = kind !== "audio", hasTl = kind !== "image";
+            const ASP = [["free", vct("free")], ["orig", vct("original")], ["1:1", "1:1"], ["4:3", "4:3"], ["3:4", "3:4"], ["16:9", "16:9"], ["9:16", "9:16"]];
+            bg.innerHTML = `<div class="reflib-vc-dlg k-${kind}" role="dialog" aria-modal="true" aria-label="${esc(vct(edit ? "t_edit" : "t_new", { name: src.name }))}">
+                <div class="reflib-vc-title">${VICO}${esc(vct(edit ? "t_edit" : "t_new", { name: src.name }))}</div>
+                ${kind !== "audio" ? `<div class="reflib-vc-stage"><div class="reflib-vc-media">${kind === "image" ? `<img alt="" draggable="false">` : `<video playsinline preload="auto"></video>`}
+                    <div class="reflib-vc-ov"><div class="reflib-vc-rect" hidden>${["n", "s", "e", "w", "nw", "ne", "sw", "se"].map(d => `<i data-h="${d}" class="h-${d}"></i>`).join("")}</div></div></div></div>` : `<audio preload="auto"></audio>`}
+                <div class="reflib-vc-tools">${hasRect ? `${kind === "video" ? `<label class="reflib-vc-chk"><input type="checkbox" class="reflib-vc-recton" ${st.rectOn ? "checked" : ""}> ${esc(vct("rect_on"))}</label>` : ""}
+                    <label class="reflib-vc-asp">${esc(vct("aspect"))} <select class="reflib-vc-aspect">${ASP.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select></label>
+                    <span class="reflib-vc-read"></span>${kind === "video" && !noMe && cropApi2() ? `<button type="button" class="reflib-ib-btn reflib-vc-me" data-v="me" title="${esc(vct("cropper2_tip"))}">✂ ${esc(vct("cropper2"))}</button>` : ""}` : ""}</div>
+                ${hasTl ? `<div class="reflib-vc-tl"><div class="reflib-vc-track ${kind === "audio" ? "wave" : ""}"><div class="reflib-vc-dim l"></div><div class="reflib-vc-dim r"></div><div class="reflib-vc-sel"></div><div class="reflib-vc-ph"></div>
+                    <button type="button" class="reflib-vc-hd in" aria-label="${esc(vct("in_l"))}"></button><button type="button" class="reflib-vc-hd out" aria-label="${esc(vct("out_l"))}"></button></div>
+                    <div class="reflib-vc-tlrow"><button type="button" class="reflib-ib-btn" data-v="in">⟦ ${esc(vct("set_in"))}</button>
+                      <label>${esc(vct("in_l"))} <input type="number" class="reflib-vc-in" min="0" step="0.01"></label>
+                      <button type="button" class="reflib-ib-btn reflib-vc-play" data-v="play">▶ ${esc(vct("play"))}</button>
+                      <label>${esc(vct("out_l"))} <input type="number" class="reflib-vc-out" min="0" step="0.01"></label>
+                      <button type="button" class="reflib-ib-btn" data-v="out">${esc(vct("set_out"))} ⟧</button><span class="reflib-vc-len"></span></div></div>` : ""}
+                <div class="reflib-vc-hint">${esc(vct(kind === "image" ? "hint_img" : "hint_av"))}</div>
+                <div class="reflib-vc-btns"><button type="button" class="reflib-ib-btn" data-v="reset">${esc(vct("reset"))}</button><span class="reflib-ib-spacer"></span>
+                  <button type="button" class="reflib-ib-btn" data-v="cancel">${esc(vct("cancel"))}</button><button type="button" class="reflib-ib-btn reflib-ib-primary" data-v="save">${esc(vct(edit ? "save" : "save_new"))}</button></div></div>`;
+            const q = (s) => bg.querySelector(s);
+            const media = q(kind === "image" ? "img" : kind === "video" ? "video" : "audio");
+            const ov = q(".reflib-vc-ov"), rectEl = q(".reflib-vc-rect"), read = q(".reflib-vc-read");
+            // ---------- rect (source pixels) ----------
+            const ratio = () => { const a = st.aspect; if (a === "free") return 0; if (a === "orig") return W / H; const [x, y] = a.split(":").map(Number); return x / y; };
+            const box = () => media.getBoundingClientRect();
+            const scale = () => { const b = box(); return b.width ? W / b.width : 1; };
+            function clampRect(r) {
+                let { x, y, w, h } = r;
+                w = Math.max(8, Math.min(w, W)); h = Math.max(8, Math.min(h, H));
+                x = Math.max(0, Math.min(x, W - w)); y = Math.max(0, Math.min(y, H - h));
+                return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+            }
+            function fitAspect(r) {   // keep the centre, shrink to the ratio
+                const k = ratio(); if (!k || !r) return r;
+                let w = r.w, h = r.h;
+                if (w / h > k) w = h * k; else h = w / k;
+                return clampRect({ x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h });
+            }
+            function drawRect() {
+                if (!rectEl) return;
+                const on = hasRect && st.rectOn && W && H;
+                ov.classList.toggle("off", !on);
+                if (!on || !st.rect) { rectEl.hidden = true; if (read) read.textContent = on ? "" : `${W}×${H}`; return; }
+                const s = scale(), r = st.rect;
+                rectEl.hidden = false;
+                Object.assign(rectEl.style, { left: r.x / s + "px", top: r.y / s + "px", width: r.w / s + "px", height: r.h / s + "px" });
+                if (read) read.textContent = `${r.w}×${r.h} px · x ${r.x}, y ${r.y}`;
+            }
+            let drag = null;
+            if (ov) {
+                ov.addEventListener("pointerdown", (e) => {
+                    if (!st.rectOn || e.button !== 0) return;
+                    e.preventDefault(); ov.setPointerCapture(e.pointerId);
+                    const b = box(), s = scale(), px = (e.clientX - b.left) * s, py = (e.clientY - b.top) * s;
+                    const hd = e.target.dataset && e.target.dataset.h;
+                    if (hd && st.rect) drag = { mode: hd, sx: px, sy: py, r0: Object.assign({}, st.rect) };
+                    else if (st.rect && e.target === rectEl) drag = { mode: "move", sx: px, sy: py, r0: Object.assign({}, st.rect) };
+                    else { drag = { mode: "se", sx: px, sy: py, r0: { x: px, y: py, w: 0, h: 0 }, fresh: true }; }
+                });
+                ov.addEventListener("pointermove", (e) => {
+                    if (!drag) return;
+                    const b = box(), s = scale();
+                    const px = Math.max(0, Math.min(W, (e.clientX - b.left) * s)), py = Math.max(0, Math.min(H, (e.clientY - b.top) * s));
+                    const dx = px - drag.sx, dy = py - drag.sy, r0 = drag.r0;
+                    if (drag.mode === "move") { st.rect = clampRect({ x: r0.x + dx, y: r0.y + dy, w: r0.w, h: r0.h }); drawRect(); return; }
+                    let x1 = r0.x, y1 = r0.y, x2 = r0.x + r0.w, y2 = r0.y + r0.h;
+                    if (drag.fresh) { x1 = Math.min(drag.sx, px); x2 = Math.max(drag.sx, px); y1 = Math.min(drag.sy, py); y2 = Math.max(drag.sy, py); }
+                    else {
+                        if (drag.mode.includes("w")) x1 = Math.min(r0.x + dx, x2 - 8); if (drag.mode.includes("e")) x2 = Math.max(x2 + dx, x1 + 8);
+                        if (drag.mode.includes("n")) y1 = Math.min(r0.y + dy, y2 - 8); if (drag.mode.includes("s")) y2 = Math.max(y2 + dy, y1 + 8);
+                    }
+                    let w = x2 - x1, h = y2 - y1;
+                    const k = ratio();
+                    if (k && w > 0 && h > 0) {   // aspect: the dragged edge leads
+                        if (drag.mode === "n" || drag.mode === "s") w = h * k; else h = w / k;
+                        if (drag.fresh) { if (px < drag.sx) x1 = drag.sx - w; if (py < drag.sy) y1 = drag.sy - h; }
+                        else { if (drag.mode.includes("w")) x1 = x2 - w; if (drag.mode.includes("n")) y1 = y2 - h; }
+                    }
+                    if (w >= 2 && h >= 2) { st.rect = clampRect({ x: x1, y: y1, w, h }); if (k) st.rect = fitAspect(st.rect); drawRect(); }
+                });
+                const end = () => { if (drag && drag.fresh && st.rect && (st.rect.w < 8 || st.rect.h < 8)) st.rect = null; drag = null; drawRect(); };
+                ov.addEventListener("pointerup", end); ov.addEventListener("pointercancel", end);
+            }
+            const aspSel = q(".reflib-vc-aspect");
+            if (aspSel) aspSel.addEventListener("change", () => { st.aspect = aspSel.value; if (st.rect) st.rect = fitAspect(st.rect); else if (st.aspect !== "free") st.rect = fitAspect({ x: 0, y: 0, w: W, h: H }); drawRect(); });
+            const rOn = q(".reflib-vc-recton");
+            if (rOn) rOn.addEventListener("change", () => { st.rectOn = rOn.checked; if (st.rectOn && !st.rect) st.rect = clampRect({ x: W * 0.1, y: H * 0.1, w: W * 0.8, h: H * 0.8 }); drawRect(); });
+            // ---------- in / out ----------
+            const track = q(".reflib-vc-track"), selEl = q(".reflib-vc-sel"), ph = q(".reflib-vc-ph"), hin = q(".reflib-vc-hd.in"), hout = q(".reflib-vc-hd.out");
+            const iin = q(".reflib-vc-in"), iout = q(".reflib-vc-out"), lenEl = q(".reflib-vc-len"), playB = q(".reflib-vc-play");
+            const dl = q(".reflib-vc-dim.l"), dr = q(".reflib-vc-dim.r");
+            function drawTl() {
+                if (!track || !D) return;
+                st.tin = Math.max(0, Math.min(st.tin, D)); st.tout = Math.max(st.tin + 0.1, Math.min(st.tout, D));
+                const a = st.tin / D * 100, b = st.tout / D * 100;
+                hin.style.left = a + "%"; hout.style.left = b + "%"; selEl.style.left = a + "%"; selEl.style.width = (b - a) + "%";
+                dl.style.width = a + "%"; dr.style.left = b + "%";
+                if (document.activeElement !== iin) iin.value = st.tin.toFixed(2);
+                if (document.activeElement !== iout) iout.value = st.tout.toFixed(2);
+                iin.max = iout.max = D.toFixed(2);
+                lenEl.textContent = vct("len", { d: svDur(st.tout - st.tin) });
+            }
+            function drawPh() { if (ph && D) ph.style.left = (Math.min(media.currentTime || 0, D) / D * 100) + "%"; }
+            let tdrag = null;
+            const tAt = (e) => { const b = track.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)) * D; };
+            if (track) {
+                track.addEventListener("pointerdown", (e) => {
+                    if (e.button !== 0 || !D) return;
+                    e.preventDefault(); track.setPointerCapture(e.pointerId);
+                    tdrag = e.target === hin ? "in" : e.target === hout ? "out" : "seek";
+                    if (tdrag === "seek") { media.currentTime = tAt(e); drawPh(); }
+                });
+                track.addEventListener("pointermove", (e) => {
+                    if (!tdrag || tdrag === "seek") { if (tdrag === "seek") { media.currentTime = tAt(e); drawPh(); } return; }
+                    const tt = tAt(e);
+                    if (tdrag === "in") st.tin = Math.min(tt, st.tout - 0.1); else st.tout = Math.max(tt, st.tin + 0.1);
+                    media.currentTime = tdrag === "in" ? st.tin : st.tout; drawTl(); drawPh();
+                });
+                const tend = () => { tdrag = null; };
+                track.addEventListener("pointerup", tend); track.addEventListener("pointercancel", tend);
+                for (const [hd, which] of [[hin, "in"], [hout, "out"]]) hd.addEventListener("keydown", (e) => {   // keyboard nudge: ←/→ 0.1 s (Shift 1 s)
+                    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                    e.preventDefault(); e.stopPropagation();
+                    const d = (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 0.1);
+                    if (which === "in") st.tin = Math.min(st.tin + d, st.tout - 0.1); else st.tout = Math.max(st.tout + d, st.tin + 0.1);
+                    drawTl();
+                });
+                iin.addEventListener("change", () => { st.tin = Math.min(+iin.value || 0, st.tout - 0.1); drawTl(); });
+                iout.addEventListener("change", () => { st.tout = Math.max(+iout.value || 0, st.tin + 0.1); drawTl(); });
+            }
+            function togglePlay() {
+                if (!media || kind === "image") return;
+                if (!media.paused && st.playSel) { media.pause(); return; }
+                st.playSel = true; media.currentTime = st.tin; media.play().catch(() => {});
+            }
+            if (media && kind !== "image") {
+                media.addEventListener("timeupdate", () => { drawPh(); if (st.playSel && media.currentTime >= st.tout) { media.pause(); media.currentTime = st.tout; } });
+                media.addEventListener("play", () => { if (playB) playB.textContent = "❚❚ " + vct("stop"); const loop = () => { drawPh(); if (!media.paused) requestAnimationFrame(loop); }; loop(); });
+                media.addEventListener("pause", () => { st.playSel = false; if (playB) playB.textContent = "▶ " + vct("play"); });
+                media.addEventListener("loadedmetadata", () => {
+                    if (!D && isFinite(media.duration)) { D = media.duration; if (P.end == null) st.tout = D; }
+                    drawTl(); drawRect();
+                    if (P.start) media.currentTime = +P.start;
+                });
+            }
+            // ---------- dialog ----------
+            const done = (v) => { try { media && media.pause && media.pause(); } catch (e) {} window.removeEventListener("keydown", key, true); window.removeEventListener("resize", onRs); bg.remove(); resolve(v); };
+            const result = () => {
+                const out = {};
+                if (hasRect && st.rectOn && st.rect) out.rect = [st.rect.x, st.rect.y, st.rect.w, st.rect.h];
+                if (hasTl && D) { out.start = +st.tin.toFixed(3); out.end = +st.tout.toFixed(3); }
+                return out;
+            };
+            const key = (e) => {
+                if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); done(null); return; }
+                const typing = e.target && e.target.tagName === "INPUT" && e.target.type === "number";
+                if (e.key === "Enter" && !typing) { e.preventDefault(); e.stopImmediatePropagation(); done(result()); return; }
+                if (typing || e.target.tagName === "SELECT") return;
+                if (hasTl && (e.key === "i" || e.key === "I")) { e.preventDefault(); e.stopImmediatePropagation(); st.tin = Math.min(media.currentTime || 0, st.tout - 0.1); drawTl(); }
+                else if (hasTl && (e.key === "o" || e.key === "O")) { e.preventDefault(); e.stopImmediatePropagation(); st.tout = Math.max(media.currentTime || 0, st.tin + 0.1); drawTl(); }
+                else if (hasTl && e.key === " ") { e.preventDefault(); e.stopImmediatePropagation(); togglePlay(); }
+            };
+            const onRs = () => drawRect();
+            bg.addEventListener("click", (e) => {
+                const b = e.target.closest("[data-v]");
+                if (!b) { if (e.target === bg) done(null); return; }
+                const v = b.dataset.v;
+                if (v === "cancel") done(null);
+                else if (v === "save") done(result());
+                else if (v === "reset") { st.rect = kind === "image" ? null : null; st.tin = 0; st.tout = D; if (rOn) { rOn.checked = false; st.rectOn = false; } drawRect(); drawTl(); }
+                else if (v === "in") { st.tin = Math.min(media.currentTime || 0, st.tout - 0.1); drawTl(); }
+                else if (v === "out") { st.tout = Math.max(media.currentTime || 0, st.tin + 0.1); drawTl(); }
+                else if (v === "play") togglePlay();
+                else if (v === "me") meCrop();
+            });
+            async function meCrop() {   // video frame crop in Media Editor's rect mode; our dialog steps aside meanwhile
+                const api = cropApi2(); if (!api || bg.__meBusy) return;
+                bg.__meBusy = true; try { media && media.pause && media.pause(); } catch (e) {}
+                window.removeEventListener("keydown", key, true); bg.style.display = "none";
+                const m = await vMeRect(api, src, "video", st.rectOn && st.rect ? [st.rect.x, st.rect.y, st.rect.w, st.rect.h] : null);
+                bg.style.display = ""; window.addEventListener("keydown", key, true); bg.__meBusy = false;
+                if (m.busy) toast(it("crop_busy"), "info");
+                else if (m.error) toast(vct("me_fail", { e: m.error }), "info", [], 6000);
+                if (!m.rect) return;
+                const full = m.rect[0] === 0 && m.rect[1] === 0 && Math.abs(m.rect[2] - W) <= 1 && Math.abs(m.rect[3] - H) <= 1;
+                st.rect = full ? null : { x: m.rect[0], y: m.rect[1], w: m.rect[2], h: m.rect[3] }; st.rectOn = !full;
+                if (rOn) rOn.checked = st.rectOn;
+                st.aspect = "free"; if (aspSel) aspSel.value = "free";
+                drawRect();
+            }
+            bg.addEventListener("dblclick", (e) => e.stopPropagation());
+            window.addEventListener("keydown", key, true); window.addEventListener("resize", onRs);
+            document.body.appendChild(bg);
+            if (kind === "image") { media.addEventListener("load", drawRect); media.src = src.url; }
+            else media.src = src.url;
+            if (kind === "audio" && src.orig_hash) {   // the waveform under the timeline: the original's card thumbnail
+                const put = (u) => { if (u && track) track.style.backgroundImage = `url("${u}")`; };
+                const th = ilib.thumbs.get(src.orig_hash);
+                if (th) put(th); else sendIlib({ action: "thumbs", hashes: [src.orig_hash] }).then(r => put(r && r.thumbs && r.thumbs[src.orig_hash])).catch(() => {});
+            }
+            drawTl(); drawRect();
+            setTimeout(() => { const sb = q('[data-v="save"]'); if (sb) sb.focus(); }, 0);
+            bg.__vc = { st, result, done, get D() { return D; } };   // tests
+        });
+    }
+    // ---- "Guardar en librería": offer a virtual copy when the pre-trim file is a library item ----
+    function svTrimRange(block, isAudio) {   // fractions of Gradio's trim timeline at the moment "Trim" is pressed
+        try {
+            if (isAudio) {
+                let reg = null;
+                const walk = (root) => { for (const el of root.querySelectorAll("*")) { if (reg) return; if (el.shadowRoot) walk(el.shadowRoot); const pt = el.getAttribute && el.getAttribute("part"); if (pt && /(^|\s)region(\s|$)/.test(pt) && !/handle/.test(pt)) reg = el; } };
+                walk(block);
+                if (!reg) return null;
+                const fs = parseFloat(reg.style.left) / 100, fe = 1 - parseFloat(reg.style.right) / 100;
+                return isFinite(fs) && isFinite(fe) && fe > fs ? { fs, fe } : null;
+            }
+            const l = block.querySelector(".handle.left"), r = block.querySelector(".handle.right");
+            if (!l || !r) return null;
+            const fs = parseFloat(l.style.left) / 100, fe = parseFloat(r.style.left) / 100;
+            return isFinite(fs) && isFinite(fe) && fe > fs ? { fs, fe } : null;
+        } catch (e) { return null; }
+    }
+    function svChoice(btn, origName) {
+        return new Promise((resolve) => {
+            document.querySelectorAll(".reflib-sv-menu").forEach(m => m.remove());
+            const m = document.createElement("div"); m.className = "reflib-sv-menu"; m.setAttribute("role", "menu");
+            m.innerHTML = `<button type="button" role="menuitem" data-c="file" title="${esc(vct("sv_file_tip"))}"><span>📚 ${esc(vct("sv_file"))}</span><small>${esc(vct("sv_file_tip"))}</small></button>
+                <button type="button" role="menuitem" data-c="virtual" title="${esc(vct("sv_virtual_tip"))}"><span>${VICO}${esc(vct("sv_virtual", { name: origName }))}</span><small>${esc(vct("sv_virtual_tip"))}</small></button>`;
+            const r = btn.getBoundingClientRect();
+            m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 330)) + "px"; m.style.top = (r.bottom + 4) + "px";
+            const done = (v) => { m.remove(); document.removeEventListener("pointerdown", out, true); window.removeEventListener("keydown", key, true); resolve(v); };
+            const out = (e) => { if (!m.contains(e.target)) done(null); };
+            const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); done(null); } };
+            m.addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (b) { e.stopPropagation(); done(b.dataset.c); } });
+            document.addEventListener("pointerdown", out, true); window.addEventListener("keydown", key, true);
+            document.body.appendChild(m); m.querySelector("button").focus();
+        });
+    }
+    async function svSaveVirtual(f, st, btn) {
+        const tgt = `${f.tab}:save_${f.field}`;
+        const r = await sendBridge({ action: "save_input_virtual", target: tgt, orig: st.origUrl, fs: st.range.fs, fe: st.range.fe });
+        if (!r || !r.ok) return r;
+        toast(vct("sv_saved", { name: r.name, d: svDur(r.duration), orig: r.orig_name }), "ok",
+            [{ label: t("undo"), onClick: () => sendBridge({ action: "save_input_undo", target: tgt, kind: "virtual", ref: r.virtual_id }).then(u => { if (u && u.ok) toast(vct("sv_undone"), "info"); }) }], 9000);
+        return r;
+    }
+    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f ? f.name : "");
     window.referenceLibrary = {
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vShowOriginal, vShowCopy, cropApi2, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

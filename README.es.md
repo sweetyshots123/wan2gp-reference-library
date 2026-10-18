@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.5 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.6 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -50,6 +50,12 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **Árbol de carpetas** (barra lateral izquierda, 1.4.1): cada raíz vigilada, desplegable en sus subcarpetas como en el disco, con recuentos. Haz clic en una carpeta para filtrar; *Incluir subcarpetas* alterna entre todo el subárbol y solo esa carpeta. Una ruta de navegación encima de la cuadrícula muestra dónde estás; haz clic en un tramo o en ↑ para subir. El filtro de carpeta se combina con los de colección y etiquetas. Cada raíz tiene ⟳ (reescanear) y × (quitar, dos clics) al pasar el ratón. Las imágenes se **leen en su sitio**: nunca se copian, mueven, modifican ni borran, así que no ocupan espacio extra. Se reescanean al abrir el modal y con **Reescanear** (los archivos sin cambios no se vuelven a hashear). Si un archivo se mueve o se borra, desaparece o reaparece en su nueva ruta; una carpeta que falta se marca. Al añadir una imagen de carpeta a una colección se **copia**, para que las colecciones sigan siendo autónomas. *Quitar* (dos clics) solo la quita del índice. Índice: `folders/index.json`; miniaturas en caché en `collections/.thumbs/`.
 - **Añadir a referencias** (pie de la selección) añade solo las imágenes elegidas a Reference Images de WanGP, por el mismo camino que al aplicar una colección. Las que ya estén en la galería se saltan y nunca se sustituye nada. Las imágenes de carpetas se leen en su sitio; no se copian a ninguna colección. *Cerrar al añadir* cierra el modal después (se recuerda). Si el modelo actual no tiene Reference Images, sale un error.
 - Haz clic en una imagen para verla en grande con sus colecciones, archivos y etiquetas. **Esc** o **×** cierran; las barras y el gestor se refrescan.
+
+## Copias virtuales (1.6.6)
+
+Una copia virtual es un recorte y/o una entrada/salida **que apunta a un archivo de la librería**, como las copias virtuales de Lightroom: no se duplica nada y el original nunca se modifica. Imágenes: un rectángulo. Vídeo: rectángulo y/o entrada/salida. Audio: entrada/salida. Se crea con **Nueva copia virtual** (clic derecho, Detalles, visor) y se cambia luego con **Editar recorte**. Se renderiza bajo demanda en `virtuals/.cache/` cuando algo necesita el archivo real (vista previa, referencias, librería de vídeos, redimensionar).
+
+Las copias llevan la insignia **virtual** y aparecen en **Copias virtuales**. Detalles muestra **Original: …** con **Mostrar original**, y el original lista sus copias. Borrar una copia nunca borra el original. Si el original desaparece, la copia se marca como **rota** hasta que el archivo vuelva. Con **Media Editor 1.7.0+** (`fileApi >= 2`), el rectángulo de las imágenes se elige en el modo solo-rectángulo de Media Editor (`cropFile({mode:"rect", initialRect})`, sin generar archivos), y las copias de vídeo tienen un botón **✂ Recortar en Media Editor** para el encuadre. Los rectángulos van en píxeles con la orientación EXIF ya aplicada. Con un Media Editor anterior, sin él o si rechaza el archivo, se usa una herramienta de recorte propia. Tras recortar una entrada con Gradio, **Guardar en librería** ofrece **Copia virtual de «original»** cuando el archivo sin recortar está en la librería.
 
 ## Guardar entradas en la librería (1.6.4)
 
@@ -368,6 +374,7 @@ plugins/wan2gp-reference-library/
   folders/
     index.json           # watched folders + file index (files stay where they are) (1.4)
   saved_audio/           # «Audios guardados» (1.6.4): audios guardados desde las entradas de WanGP, carpeta vigilada gestionada
+  virtuals/              # copias virtuales (1.6.6): virtuals.json (parámetros) + .cache/ (renders, se puede borrar)
   videos/
     videos.json          # índice (orden, nombres, datos, origen, meta)
     <id>/

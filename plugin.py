@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.5"
+PLUGIN_VERSION = "1.6.6"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -194,6 +194,13 @@ TEXT = {
         "err_image_missing": "Image file not found",
         "err_target_missing": "That WanGP input isn't available for the current model.",
         "vlib_added": "{n} video(s) added to the Video Library ({k} already there).",
+        "virt_created": "Virtual copy «{name}» created (the original is untouched).",
+        "virt_updated": "Virtual copy «{name}» updated.",
+        "virt_deleted": "{n} virtual cop(ies) deleted (originals untouched).",
+        "virt_restored": "{n} virtual cop(ies) restored.",
+        "virt_broken": "The original of this virtual copy is missing.",
+        "virt_no_orig": "The original is not in the library.",
+        "virt_bad": "Invalid crop / in-out: {e}",
         "err_not_image": "Not an image file",
         "err_zip_missing": "Zip file not found",
         "err_bad_zip": "Not a valid zip file",
@@ -428,6 +435,13 @@ TEXT = {
         "err_image_missing": "No se encuentra el archivo de la imagen",
         "err_target_missing": "Esa entrada de WanGP no está disponible con el modelo actual.",
         "vlib_added": "{n} vídeo(s) añadidos a la Librería de vídeos ({k} ya estaban).",
+        "virt_created": "Copia virtual «{name}» creada (el original no se toca).",
+        "virt_updated": "Copia virtual «{name}» actualizada.",
+        "virt_deleted": "{n} copia(s) virtual(es) borrada(s) (los originales siguen intactos).",
+        "virt_restored": "{n} copia(s) virtual(es) recuperada(s).",
+        "virt_broken": "Falta el original de esta copia virtual.",
+        "virt_no_orig": "El original no está en la librería.",
+        "virt_bad": "Recorte / entrada-salida no válidos: {e}",
         "err_not_image": "No es un archivo de imagen",
         "err_zip_missing": "No se encuentra el archivo zip",
         "err_bad_zip": "El archivo no es un zip válido",
@@ -1220,6 +1234,33 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 vid = r.pop("id", None)   # "id" is the bridge request id: the video id travels as "video_id"
                 out.update(r, video_id=vid)
                 out["changed"] = {"reason": "video-added", "id": vid, "kind": "video"} if r["kind"] == "video" else {"reason": "audio-saved", "id": r["hash"]}
+            elif req.get("action") == "save_input_probe":   # 1.6.6: is the pre-trim file a library item?
+                o = self._input_original(req.get("orig"), field)
+                out.update({"ok": True, "orig": o})
+            elif req.get("action") == "save_input_virtual":   # 1.6.6: the trim as a virtual copy of the library original
+                from .reflib_core import virtuals as _vc
+                o = self._input_original(req.get("orig"), field)
+                if not o:
+                    raise ValueError(tr(lang, "virt_no_orig"))
+                if req.get("fs") is not None:   # fractions of Gradio's trim timeline -> seconds of the ORIGINAL
+                    src = (imagelib.entry_for(o["hash"]) or {}).get("path")
+                    d = _vc.original_facts(src, o["kind"])["duration"] if src else 0
+                    if not d:
+                        raise ValueError(tr(lang, "virt_no_orig"))
+                    fs, fe = max(0.0, min(1.0, float(req["fs"]))), max(0.0, min(1.0, float(req.get("fe", 1))))
+                    span = {"start": fs * d, "end": fe * d}
+                else:
+                    span = {"start": req.get("start"), "end": req.get("end")}
+                c = _vc.create(o["hash"], span, lang=lang)
+                imagelib.invalidate()
+                out.update({"ok": True, "kind": "virtual", "created": True, "hash": c["hash"], "name": c["name"], "duration": _vc.duration(c),
+                            "orig_name": o["name"], "virtual_id": c["id"]})
+                out["changed"] = {"reason": "virtual-added", "id": c["hash"]}
+            elif req.get("action") == "save_input_undo" and req.get("kind") == "virtual":
+                from .reflib_core import virtuals as _vc
+                out.update({"ok": _vc.soft_delete([str(req.get("ref") or "")])["deleted"] > 0})
+                imagelib.invalidate()
+                out["changed"] = {"reason": "virtual-removed", "id": None}
             elif req.get("action") == "save_input_undo":
                 if req.get("kind") == "video":
                     out.update(savein.undo_video(str(req.get("ref") or "")))
@@ -1233,6 +1274,35 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             print(f"[Reference Library] save {tab}:{field} failed: {e}")
             out.update({"ok": False, "error": str(e)})
         return json.dumps(out)
+
+    @staticmethod
+    def _input_original(url, field):
+        """1.6.6: the library item behind a WanGP input's PRE-trim value (a Gradio upload URL). Only files inside Gradio's
+        upload folder are read (hashed), and only to look the content up in the library catalog."""
+        from urllib.parse import unquote
+        u = unquote(str(url or ""))
+        if "/file=" not in u:
+            return None
+        path = u.split("/file=", 1)[1].split("?", 1)[0]
+        try:
+            from gradio.utils import get_upload_folder
+            roots = [get_upload_folder()]
+        except Exception:
+            roots = []
+        if os.environ.get("GRADIO_TEMP_DIR"):
+            roots.append(os.environ["GRADIO_TEMP_DIR"])
+        rp = os.path.realpath(path)
+        if not any(rp.startswith(os.path.realpath(r) + os.sep) for r in roots if r) or not os.path.isfile(rp):
+            return None
+        try:
+            digest = storage._file_hash(rp)
+        except OSError:
+            return None
+        ent = imagelib.catalog()["by_hash"].get(digest)
+        want = "video" if field in SAVE_VIDEO_INPUTS else "audio"
+        if not ent or ent.get("virtual") or ent.get("kind") != want:
+            return None
+        return {"hash": digest, "name": ent.get("name") or "", "kind": ent.get("kind")}
 
     # ------------------------------------------------------------ 1.5.5 generation history
     def _history_hook(self, configs=None, plugin_data=None, model_type=None, **kw):
@@ -1531,7 +1601,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not img or h in seen or img.get("kind", "image") != "image":   # 1.6.0: only images go to Reference Images
                 continue
             cands = [img["path"]] + list(img.get("files") or [])
-            path = next((c for c in cands if c and os.path.isfile(c)), None)
+            path = imagelib.media_path(h) if img.get("virtual") else next((c for c in cands if c and os.path.isfile(c)), None)   # 1.6.6
             if path:
                 paths.append(path)
                 seen.add(h)
@@ -3223,6 +3293,87 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             return tr(lang, "rescanned_missing", files=st.get("files", 0), m=len(st["missing"]))
         return tr(lang, "rescanned", files=st.get("files", 0), added=st.get("added", 0), removed=st.get("removed", 0))
 
+    # ------------------------------------------------------------ 1.6.6 virtual copies
+    @staticmethod
+    def _virtual_hashes(hashes):
+        by = imagelib.catalog()["by_hash"]
+        return [h for h in hashes or [] if (by.get(h) or {}).get("virtual")]
+
+    def _virtual_delete(self, hashes, lang, action):
+        """Delete the virtual copies of a selection (never their originals); the rest of the selection goes through the
+        normal delete. One undo token for both ("v:<copies>|<files>")."""
+        from .reflib_core import virtuals as _vc
+        vh = set(self._virtual_hashes(hashes))
+        by = imagelib.catalog()["by_hash"]
+        r = _vc.soft_delete(by[h]["virtual"]["id"] for h in vh)
+        rest = [h for h in hashes if h not in vh]
+        msg = tr(lang, "virt_deleted", n=r["deleted"])
+        token = r["token"]
+        if rest:
+            res = imagelib.delete_everywhere(rest) if action == "delete_all" else None
+            if res and res["deleted"]:
+                msg += " · " + tr(lang, "ilib_deleted_all", n=res["deleted"], c=res["collections"])
+                token += "|" + res["token"]
+        imagelib.invalidate()
+        out = {"ok": True, "kind": "ok", "message": msg, "toast": msg, "undo_remove": token, "reload": True, "virtual_deleted": r["deleted"]}
+        out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+        return out
+
+    def _virtual(self, action, req, lang):
+        from .reflib_core import virtuals as _vc
+        h = str(req.get("hash") or "")
+        ent = imagelib.entry_for(h) or {}
+        try:
+            if action == "virt_src":   # what the editor needs: the ORIGINAL's file + facts, and the copy's params
+                c = _vc.by_hash(h) if ent.get("virtual") else None
+                if ent.get("virtual") and not c:
+                    return self._err(lang, "err_image_missing")
+                if c:
+                    src = _vc.source_path(c)
+                    if not src:
+                        return {"ok": False, "broken": True, "error": tr(lang, "virt_broken")}
+                    kind, name, params, ohash = c["kind"], c["name"], c.get("params") or {}, (c.get("orig") or {}).get("hash")
+                else:
+                    src = next((q for q in [ent.get("path")] + list(ent.get("files") or []) if q and os.path.isfile(q)), None) if ent else None
+                    if not src:
+                        return self._err(lang, "err_image_missing")
+                    kind, name, params, ohash = ent.get("kind") or "image", ent.get("name") or os.path.basename(src), {}, h
+                facts = _vc.original_facts(src, kind)
+                return {"ok": True, "kind": kind, "name": os.path.splitext(name)[0] if not c else name, "path": os.path.abspath(src),
+                        "url": _serve_url(src), "params": params, "virtual": bool(c), "orig_hash": ohash, **facts}
+            if action == "virt_create":
+                c = _vc.create(h, req.get("params") if isinstance(req.get("params"), dict) else None, name=req.get("name"), lang=lang)
+                imagelib.invalidate()
+                out = self._ok(lang, "virt_created", name=c["name"])
+                out.update(hash=c["hash"], copy=_vc.describe(c), reload=True, quiet=True)
+                return out
+            if action == "virt_update":
+                c = _vc.by_hash(h)
+                if not c:
+                    return self._err(lang, "err_image_missing")
+                c = _vc.update(c["id"], req.get("params") if isinstance(req.get("params"), dict) else None, name=req.get("name"))
+                imagelib.invalidate()
+                out = self._ok(lang, "virt_updated", name=c["name"])
+                out.update(hash=c["hash"], copy=_vc.describe(c), reload=True, quiet=True)
+                return out
+            if action == "virt_status":
+                c = _vc.by_hash(h)
+                if not c:
+                    return {"ok": True, "state": "gone"}
+                st = _vc.render_async(c["id"])
+                out = {"ok": True, "state": st.get("state"), "error": st.get("error")}
+                if st.get("state") == "ready":
+                    out["url"] = _serve_url(st["path"])
+                return out
+        except _vc.VirtualError as e:
+            msg = str(e)
+            if msg in ("original missing",):
+                return {"ok": False, "broken": True, "error": tr(lang, "virt_broken")}
+            if msg == "original not in the library":
+                return {"ok": False, "error": tr(lang, "virt_no_orig")}
+            return {"ok": False, "error": tr(lang, "virt_bad", e=msg)}
+        return self._err(lang, "bad_request")
+
     def ilib(self, raw, request: gr.Request = None):
         try:
             req = json.loads(raw or "{}")
@@ -3343,7 +3494,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     out = {"ok": bool(vid), "kind": "video", "video_id": vid} if vid else {"ok": False, "error": "not saved"}
             elif action == "media_url":   # 1.6.0: stream one video/audio in the browser (hover, viewer, details)
                 u = imagelib.media_url(str(req.get("hash") or ""))
-                out = {"ok": bool(u), "url": u}
+                ve = (imagelib.entry_for(str(req.get("hash") or "")) or {}).get("virtual")
+                if not u and ve and not ve.get("broken"):   # 1.6.6: a virtual copy still rendering is not an error
+                    out = {"ok": True, "url": None, "rendering": True}
+                else:
+                    out = {"ok": bool(u), "url": u}
             elif action == "media_dur":   # 1.6.0: durations probed so far (background, throttled)
                 from .reflib_core import mediainfo
                 dd = {}
@@ -3366,6 +3521,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     except Exception as e:
                         print(f"[Reference Library] to video library failed: {e}")
                 out = {"ok": bool(n_add or n_dup), "added": n_add, "dup": n_dup, "message": tr(lang, "vlib_added", n=n_add, k=n_dup)}
+            elif action and action.startswith("virt_"):   # 1.6.6 virtual copies
+                out = self._virtual(action, req, lang)
             elif action == "preview":
                 p = imagelib.preview(str(req.get("hash") or ""))
                 out = {"ok": bool(p), "image": p} if p else self._err(lang, "err_image_missing")
@@ -3391,6 +3548,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out["added"], out["skipped"], out["collection_id"] = res["added"], res["skipped"], res["collection"]["id"]
                 out["reload"] = True
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action in ("delete", "delete_all") and self._virtual_hashes(hashes):   # 1.6.6
+                out = self._virtual_delete(hashes, lang, action)
             elif action == "delete":
                 res = imagelib.pool_delete(hashes)
                 if res["deleted"]:
@@ -3418,6 +3577,15 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 else:
                     msg = tr(lang, "ilib_folder_only", k=res["folder_only"])
                     out = {"ok": True, "kind": "info", "message": msg, "toast": msg}
+                out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action == "undo_remove" and str(req.get("token") or "").startswith("v:"):   # 1.6.6 virtual copies (+ maybe files)
+                from .reflib_core import virtuals as _vc
+                tok = str(req.get("token"))
+                n = _vc.restore(tok.split("|")[0])
+                if "|" in tok:
+                    n += imagelib.undo_remove(tok.split("|", 1)[1])["restored"]
+                out = self._ok(lang, "virt_restored", n=n)
+                out["reload"] = True
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
             elif action == "undo_remove":
                 res = imagelib.undo_remove(str(req.get("token") or ""))
@@ -3473,7 +3641,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()

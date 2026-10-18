@@ -142,7 +142,42 @@ def list_images() -> List[Dict[str, Any]]:
             by_hash[h].setdefault("files", [])
             by_hash[h].setdefault("locs", [])
             by_hash[h].setdefault("added", 0.0)
+        _virtual_entries(by_hash, order, tags)
+        for h in order:
+            by_hash[h].setdefault("in_pool", False)
+            by_hash[h].setdefault("folders", [])
+            by_hash[h].setdefault("files", [])
+            by_hash[h].setdefault("locs", [])
+            by_hash[h].setdefault("added", 0.0)
         return [by_hash[h] for h in order]
+
+
+def _virtual_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
+    """1.6.6: virtual copies as library items (synthetic hash, pseudo folder VFOLDER). `path` is the render target, never
+    the original, so nothing that copies an item's file (collections) can copy the original by mistake."""
+    try:
+        from . import virtuals as _vc
+        copies = _vc.entries()
+    except Exception as e:
+        print(f"[Reference Library] virtual copies unavailable: {e}")
+        return
+    for c in copies:
+        vh = _vc.vhash(c["id"])
+        if vh in by_hash:
+            continue
+        o = c.get("orig") or {}
+        src = o.get("path") if o.get("path") and os.path.isfile(o["path"]) else None
+        if src is None:
+            oe = by_hash.get(o.get("hash") or "")
+            if oe and not oe.get("virtual"):
+                src = next((q for q in [oe.get("path")] + list(oe.get("files") or []) if q and os.path.isfile(q)), None)
+        target = _vc.render_target(c, src) if src else ""
+        by_hash[vh] = {"hash": vh, "name": c["name"], "names": [c["name"]], "file": c["name"], "path": target or "",
+                       "collections": [], "tags": list(tags.get(vh, [])), "in_pool": False, "folders": [], "files": [],
+                       "locs": [[_vc.VFOLDER, ""]], "added": float(c.get("created") or 0),
+                       "virtual": {"id": c["id"], "orig": o.get("hash") or "", "broken": src is None, "kind": c["kind"],
+                                   "dur": _vc.duration(c)}}
+        order.append(vh)
 
 
 def tag_counts(images: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
@@ -209,7 +244,7 @@ def add_to_collection(hashes: Iterable[str], collection_id: str) -> Dict[str, An
         sources, skipped = [], 0
         for h in hashes:
             img = by_hash.get(h)
-            if h in have or img is None or not os.path.isfile(img["path"]):
+            if h in have or img is None or img.get("virtual") or not os.path.isfile(img["path"]):   # 1.6.6: copies stay virtual
                 skipped += 1
                 continue
             sources.append((img["path"], img["name"]))
@@ -313,6 +348,13 @@ def _media_thumb(src: str, cache: str, kind: str) -> Optional[str]:
 
 
 def _make_thumb(h: str, cands: List[str], size: int = 220) -> Optional[str]:
+    ent = catalog()["by_hash"].get(h)
+    if ent and ent.get("virtual"):   # 1.6.6: crop / in-out frame / trimmed waveform, from the original
+        from . import virtuals as _vc
+        cache = os.path.join(_thumbs_dir(), h + ".jpg")
+        if _vc.make_thumb(ent["virtual"]["id"], cache, 440 if ent["kind"] != "image" else max(size, 220)):
+            return _cached_thumb(h)
+        return None
     for src in cands:
         k = kind_of(src)
         if k in ("video", "audio") and os.path.isfile(src):
@@ -408,14 +450,29 @@ SERVE_URL = None   # 1.6.0 host hook: path -> URL the browser can stream (WanGP:
 
 
 def media_path(digest: str) -> Optional[str]:
+    """The playable / sendable file. 1.6.6: a virtual copy is rendered here (blocking) - its own file, never the original
+    with the params ignored."""
     img = catalog()["by_hash"].get(str(digest or ""))
     if not img:
         return None
+    if img.get("virtual"):
+        from . import virtuals as _vc
+        try:
+            return _vc.render(img["virtual"]["id"])
+        except Exception as e:
+            print(f"[Reference Library] virtual copy render failed: {e}")
+            return None
     return next((c for c in [img["path"]] + list(img.get("files") or []) if c and os.path.isfile(c)), None)
 
 
 def media_url(digest: str) -> Optional[str]:
-    p = media_path(digest)
+    img = catalog()["by_hash"].get(str(digest or ""))
+    if img and img.get("virtual"):   # 1.6.6: never block a hover / viewer on a video render
+        from . import virtuals as _vc
+        st = _vc.render_async(img["virtual"]["id"])
+        p = st.get("path") if st.get("state") == "ready" else None
+    else:
+        p = media_path(digest)
     if not p or not SERVE_URL:
         return None
     try:
@@ -424,8 +481,54 @@ def media_url(digest: str) -> Optional[str]:
         return None
 
 
+def _virtual_preview(img: Dict[str, Any], size: int) -> Dict[str, Any]:
+    from . import virtuals as _vc
+    c = _vc.get(img["virtual"]["id"]) or {}
+    d = _vc.describe(c) if c else {"broken": True, "params": {}, "orig": {}}
+    out = {"hash": img["hash"], "name": img["name"], "names": list(img["names"]), "files": [], "collections": [], "in_pool": False,
+           "folders": [], "tags": list(img["tags"]), "added": img["added"], "kind": img["kind"], "virtual": d,
+           "locations": [{"fid": _vc.VFOLDER, "rel": "", "root": "", "root_name": "", "managed": "virtual"}]}
+    out["src"] = _cached_thumb(img["hash"]) or (None if d["broken"] else _make_thumb(img["hash"], [], size))
+    for k in ("width", "height", "dur"):
+        if d.get(k):
+            out[k] = d[k]
+    if d["broken"]:
+        return out
+    if img["kind"] == "image":   # the crop itself at preview size (cheap)
+        try:
+            rp = _vc.render(c["id"])
+            out["src"] = _img_data_uri(rp, size) or out["src"]
+            out["size"] = os.path.getsize(rp)
+        except Exception:
+            pass
+        return out
+    st = _vc.render_async(c["id"])
+    out["render"] = st.get("state")
+    if st.get("state") == "ready":
+        out["url"] = SERVE_URL(st["path"]) if SERVE_URL else None
+        try:
+            out["size"] = os.path.getsize(st["path"])
+        except OSError:
+            pass
+    elif st.get("error"):
+        out["render_error"] = st["error"]
+    return out
+
+
 def preview(digest: str, size: int = 1024) -> Optional[Dict[str, Any]]:
     img = catalog()["by_hash"].get(str(digest or ""))
+    if img and img.get("virtual"):
+        return _virtual_preview(img, size)
+    out = _preview(img, size) if img else None
+    if out is not None:   # 1.6.6: the original lists its virtual copies
+        from . import virtuals as _vc
+        by = catalog()["by_hash"]
+        out["copies"] = [{"hash": _vc.vhash(c["id"]), "name": c["name"], "kind": c["kind"], "params": c.get("params") or {}}
+                         for c in _vc.copies_of(img["hash"]) if _vc.vhash(c["id"]) in by]
+    return out
+
+
+def _preview(img: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
     for img in [img] if img else []:
         if True:
             cat = catalog()
@@ -1402,7 +1505,8 @@ def _auto_map():
 
 def _index_key() -> tuple:
     out = [("auto", _auto_map()[0])]
-    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path()):
+    from . import virtuals as _vc
+    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path(), _vc.index_path()):
         try:
             st = os.stat(p)
             out.append((p, st.st_mtime_ns, st.st_size))
@@ -1432,8 +1536,18 @@ def catalog() -> Dict[str, Any]:
                       "locs": tuple((intern(a), intern(b)) for a, b in i["locs"]), "tags": tuple(i["tags"]),
                       "tagf": frozenset(_fold(t) for t in i["tags"]), "fold": fold, "added": i["added"],
                       "auto": amap.get(i["hash"], frozenset()), "body": bmap.get(i["hash"]),
-                      "kind": kind_of(i["path"]) or kind_of(i["name"]) or "image"})
+                      "kind": (i["virtual"]["kind"] if i.get("virtual") else (kind_of(i["path"]) or kind_of(i["name"]) or "image")),
+                      "virtual": i.get("virtual")})
     folders = list_folders()
+    nvirt = sum(1 for i in items if i["virtual"])
+    if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
+        from . import virtuals as _vc
+        folders.append({"id": _vc.VFOLDER, "path": "", "recursive": False, "count": nvirt, "missing": False, "name": "virtual",
+                        "managed": "virtual", "virtual": True})
+    vcount: Dict[str, int] = {}
+    for i in items:
+        if i["virtual"]:
+            vcount[i["virtual"]["orig"]] = vcount.get(i["virtual"]["orig"], 0) + 1
     fids = {f["id"] for f in folders}
     direct: Dict[str, Dict[str, set]] = {f["id"]: {"": set()} for f in folders}
     subtree: Dict[str, Dict[str, set]] = {f["id"]: {"": set()} for f in folders}
@@ -1465,10 +1579,10 @@ def catalog() -> Dict[str, Any]:
     data = {"rev": _cat["rev"], "items": items, "by_hash": {i["hash"]: i for i in items}, "tree": tree, "nodefold": nodefold,
             "tags": sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"]))),
             "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"]),
-            "kinds": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS}}
+            "kinds": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, "vcount": vcount}
     try:   # 1.6.0: durations of every video/audio, probed in the background (throttled), never on this path
         from . import mediainfo
-        mediainfo.want((i["hash"], i["path"], i["kind"]) for i in items if i["kind"] != "image")
+        mediainfo.want((i["hash"], i["path"], i["kind"]) for i in items if i["kind"] != "image" and not i["virtual"])
     except Exception:
         pass
     with _cat_lock:
@@ -1606,9 +1720,18 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
     if i["kind"] != "image":   # 1.6.0
         from . import mediainfo
         out["kind"] = i["kind"]
-        mi = mediainfo.get(i["hash"])
+        mi = mediainfo.get(i["hash"]) if not i.get("virtual") else None
         if mi:
             out["dur"] = mi.get("duration") or 0
+    v = i.get("virtual")
+    if v:   # 1.6.6
+        out["virtual"] = {"orig": v["orig"], "broken": v["broken"]}
+        if i["kind"] != "image":
+            out["dur"] = v.get("dur") or 0
+    else:
+        n = (catalog().get("vcount") or {}).get(i["hash"])
+        if n:
+            out["vcopies"] = n
     return out
 
 
@@ -1649,7 +1772,7 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0) -> Dict[str, An
     page = [_light(i) for i in items[offset:offset + limit]]
     try:   # on-screen media without a duration yet are probed first
         from . import mediainfo
-        mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image"), front=True)
+        mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image" and not i.get("virtual")), front=True)
     except Exception:
         pass
     for x in page:
@@ -1684,6 +1807,9 @@ def locate(digest: str) -> Optional[Dict[str, Any]]:
     img = cat["by_hash"].get(str(digest or ""))
     if not img:
         return None
+    if img.get("virtual"):   # 1.6.6: a virtual copy lives in the pseudo folder
+        from . import virtuals as _vc
+        return {"folders": [{"fid": _vc.VFOLDER, "rel": "", "root": "", "root_name": "", "managed": "virtual"}], "collections": [], "in_pool": False}
     froot = {f["id"]: f["path"] for f in cat["folders"]}
     fman = {f["id"]: f.get("managed") for f in cat["folders"] if f.get("managed")}
     files = [p for p in [img["path"]] + list(img.get("files") or []) if p]
@@ -1723,7 +1849,7 @@ def resolve_selection(sel) -> List[str]:
 def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict[str, Any]:
     """What the selection footer needs, without the client holding every selected item."""
     by = catalog()["by_hash"]
-    n = deletable = folder_only = on_disk = in_one = 0
+    n = deletable = folder_only = on_disk = in_one = nvirt = 0
     cols, tags = set(), {}
     kinds = {k: 0 for k in KINDS}
     for h in hashes:
@@ -1732,6 +1858,13 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             continue
         n += 1
         kinds[i["kind"]] += 1
+        if i.get("virtual"):   # 1.6.6: deleting a copy is always possible (the original stays)
+            deletable += 1
+            nvirt += 1
+            if len(tags) < 60:
+                for t in i["tags"]:
+                    tags.setdefault(_fold(t), t)
+            continue
         if i["colids"] or i["in_pool"]:
             deletable += 1
             cols |= i["colids"]
@@ -1745,7 +1878,7 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             for t in i["tags"]:
                 tags.setdefault(_fold(t), t)
     return {"n": n, "deletable": deletable, "cols": len(cols), "folder_only": folder_only, "on_disk": on_disk,
-            "in_one": in_one, "tags": list(tags.values()), "kinds": kinds}
+            "in_one": in_one, "tags": list(tags.values()), "kinds": kinds, "virtual": nvirt}
 
 
 def facets(f, limit: int = 400) -> Dict[str, int]:

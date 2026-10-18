@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.5 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.6 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -50,6 +50,12 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Folder tree** (left sidebar, 1.4.1): every watched root, expandable into its subfolders as on disk, with image counts. Click a folder to filter the grid; *Include subfolders* switches between the whole subtree and that folder only. A breadcrumb above the grid shows the path; click a segment or ↑ to go up. The folder filter combines with the collection and tag filters. Each root has ⟳ (re-scan) and × (remove, two clicks) on hover. Images are **read in place**: never copied, moved, modified or deleted, so they use no extra space. They're re-scanned whenever the modal opens and with **Re-scan** (unchanged files are not re-hashed). Moved or deleted files just drop out or reappear at their new path; a missing folder is flagged. Adding a folder image to a collection **copies** it, so collections stay self-contained. *Remove* (two clicks) only removes the folder from the index. Index: `folders/index.json`; thumbnails cached in `collections/.thumbs/`.
 - **Add to references** (selection footer) appends only the selected images to WanGP's Reference Images through the same gallery path as a collection apply. Images already in the gallery are skipped and nothing is replaced. Folder images are read from where they are; they aren't copied into a collection. *Close after adding* closes the modal afterwards (remembered). If the current model has no Reference Images, you get an error.
 - Click an image for a larger preview, its collections, files and tags. **Esc** or **×** closes; the bars and manager refresh.
+
+## Virtual copies (1.6.6)
+
+A virtual copy is a crop and/or in/out **pointing at a library file**, like a Lightroom virtual copy: no pixels are duplicated and the original is never changed. Images: a rect. Video: a rect and/or in/out. Audio: in/out. Make one with **Nueva copia virtual** (right-click, Detalles, viewer) and change it later with **Editar recorte**. It renders on demand into `virtuals/.cache/` whenever something needs the actual file (preview, refs, Video Library, resize).
+
+Copies carry a **virtual** badge and are listed under **Copias virtuales**. Detalles shows **Original: …** with **Mostrar original**, and the original lists its copies. Deleting a copy never deletes the original. If the original disappears, the copy is shown as **rota** (broken) until the file is back. With **Media Editor 1.7.0+** (`fileApi >= 2`), image rects are picked in Media Editor's rect-only mode (`cropFile({mode:"rect", initialRect})`, nothing rendered), and video copies get a **✂ Recortar en Media Editor** button for the frame rect. Rects are in upright pixels (EXIF orientation applied first). With an older Media Editor, none, or if it refuses the file, a built-in rect tool is used. After a Gradio trim on an input, **Guardar en librería** offers **Copia virtual de «original»** when the untrimmed file is in the library.
 
 ## Save inputs to the library (1.6.4)
 
@@ -372,6 +378,7 @@ plugins/wan2gp-reference-library/
   folders/
     index.json           # watched folders + file index (files stay where they are) (1.4)
   saved_audio/           # "Saved audio" (1.6.4): audio saved from WanGP inputs, managed + auto-indexed watched folder
+  virtuals/              # virtual copies (1.6.6): virtuals.json (params) + .cache/ (renders, safe to delete)
   videos/
     videos.json          # index (order, names, facts, source, meta)
     <id>/

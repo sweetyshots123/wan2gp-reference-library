@@ -752,3 +752,81 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-sv-btn.narrow .reflib-sv-lbl { display: none; }
 .reflib-sv-btn.narrow { padding: 0 6px; }
 .reflib-sv-btn.busy { opacity: .6; cursor: progress; }
+/* 1.6.6 virtual copies */
+.reflib-ib-vbadge { position: absolute; top: 5px; right: 5px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; line-height: 16px;
+    background: #7c3aed; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); pointer-events: auto; z-index: 2; }
+.reflib-ib-vbadge.broken { background: #b91c1c; }
+.reflib-ib-vcount { position: absolute; top: 5px; left: 32px; padding: 1px 6px; border-radius: 10px; font-size: 10.5px; font-weight: 700; line-height: 15px;
+    background: rgba(124,58,237,.85); color: #fff; z-index: 2; }
+.reflib-ib-card.virtual .reflib-ib-thumb { outline: 2px dashed rgba(124,58,237,.65); outline-offset: -2px; }
+.reflib-ib-card.broken .reflib-ib-thumb img { filter: grayscale(1) opacity(.45); }
+.reflib-vc-ticon { display: inline-block; width: 16px; text-align: center; font-size: 14px; color: #8b5cf6; }
+.reflib-vc-box { margin: 8px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(124,58,237,.45); background: rgba(124,58,237,.08); font-size: 12.5px; }
+.reflib-vc-box.broken { border-color: rgba(185,28,28,.55); background: rgba(185,28,28,.08); }
+.reflib-vc-head { font-weight: 700; color: #7c3aed; margin-bottom: 4px; }
+.dark .reflib-vc-head { color: #a78bfa; }
+.reflib-vc-orig { margin-bottom: 2px; word-break: break-word; }
+.reflib-vc-warn { margin-top: 4px; color: #b91c1c; font-weight: 600; word-break: break-word; }
+.dark .reflib-vc-warn { color: #fca5a5; }
+.reflib-vc-box .reflib-ib-pvbtns { margin-top: 6px; }
+.reflib-vc-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.reflib-vc-list .reflib-ib-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflib-vc-lbbtn[hidden] { display: none; }
+/* editor */
+.reflib-vc-bg { position: fixed; inset: 0; z-index: 10097; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; }
+.reflib-vc-dlg { box-sizing: border-box; width: min(1100px, 94vw); max-height: 94vh; overflow: auto; padding: 14px 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--background-fill-primary, #fff); color: var(--body-text-color, #111); border: 1px solid var(--border-color-primary, #d1d5db); box-shadow: 0 18px 60px rgba(0,0,0,.5); font-size: 13px; }
+.dark .reflib-vc-dlg { background: #1f2430; color: #e5e7eb; border-color: #3a4152; }
+.reflib-vc-dlg.k-audio { width: min(820px, 94vw); }
+.reflib-vc-title { font-weight: 700; font-size: 15px; }
+.reflib-vc-stage { display: flex; justify-content: center; align-items: center; background: #0b0d12; border-radius: 8px; padding: 8px; min-height: 120px; }
+.reflib-vc-media { position: relative; display: inline-block; line-height: 0; user-select: none; }
+.reflib-vc-media img, .reflib-vc-media video { display: block; max-width: min(1060px, 88vw); max-height: 58vh; }
+.reflib-vc-ov { position: absolute; inset: 0; overflow: hidden; cursor: crosshair; touch-action: none; }
+.reflib-vc-ov.off { pointer-events: none; cursor: default; }
+.reflib-vc-rect { position: absolute; box-sizing: border-box; border: 2px solid #a78bfa; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); cursor: move; }
+.reflib-vc-rect[hidden] { display: none; }
+.reflib-vc-rect::before, .reflib-vc-rect::after { content: ""; position: absolute; pointer-events: none; border: 0 solid rgba(255,255,255,.35); }
+.reflib-vc-rect::before { left: 33.33%; right: 33.33%; top: 0; bottom: 0; border-left-width: 1px; border-right-width: 1px; }
+.reflib-vc-rect::after { top: 33.33%; bottom: 33.33%; left: 0; right: 0; border-top-width: 1px; border-bottom-width: 1px; }
+.reflib-vc-rect i { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid #7c3aed; border-radius: 3px; box-sizing: border-box; }
+.reflib-vc-rect i.h-nw { left: -7px; top: -7px; cursor: nwse-resize; } .reflib-vc-rect i.h-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.reflib-vc-rect i.h-ne { right: -7px; top: -7px; cursor: nesw-resize; } .reflib-vc-rect i.h-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.reflib-vc-rect i.h-n { left: calc(50% - 6px); top: -7px; cursor: ns-resize; } .reflib-vc-rect i.h-s { left: calc(50% - 6px); bottom: -7px; cursor: ns-resize; }
+.reflib-vc-rect i.h-w { top: calc(50% - 6px); left: -7px; cursor: ew-resize; } .reflib-vc-rect i.h-e { top: calc(50% - 6px); right: -7px; cursor: ew-resize; }
+.reflib-vc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; min-height: 0; }
+.reflib-vc-tools:empty { display: none; }
+.reflib-vc-tools select, .reflib-vc-tlrow input { margin-left: 4px; padding: 3px 6px; border-radius: 6px; font: inherit; color: inherit;
+    background: var(--input-background-fill, #fff); border: 1px solid var(--border-color-primary, #d1d5db); }
+.dark .reflib-vc-tools select, .dark .reflib-vc-tlrow input { background: #151922; border-color: #3a4152; color: #e5e7eb; }
+.reflib-vc-tlrow input { width: 76px; font-variant-numeric: tabular-nums; }
+.reflib-vc-chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.reflib-vc-read, .reflib-vc-len { font-variant-numeric: tabular-nums; opacity: .8; }
+.reflib-vc-tl { display: flex; flex-direction: column; gap: 8px; }
+.reflib-vc-track { position: relative; height: 34px; border-radius: 6px; cursor: pointer; touch-action: none; background: #2a3040 center / 100% 100% no-repeat; }
+.reflib-vc-track.wave { height: 90px; background-color: #181c26; }
+.reflib-vc-sel { position: absolute; top: 0; bottom: 0; background: rgba(167,139,250,.28); border-top: 2px solid #a78bfa; border-bottom: 2px solid #a78bfa; box-sizing: border-box; pointer-events: none; }
+.reflib-vc-dim { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.5); pointer-events: none; }
+.reflib-vc-dim.l { left: 0; } .reflib-vc-dim.r { right: 0; }
+.reflib-vc-ph { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fbbf24; pointer-events: none; }
+.reflib-vc-hd { all: unset; position: absolute; top: -4px; bottom: -4px; width: 12px; margin-left: -6px; border-radius: 4px; background: #a78bfa; cursor: ew-resize; box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
+.reflib-vc-hd:focus-visible { outline: 2px solid #fff; }
+.reflib-vc-tlrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reflib-vc-hint { font-size: 11.5px; opacity: .7; }
+.reflib-vc-btns { display: flex; align-items: center; gap: 8px; }
+.reflib-vc-btns .reflib-ib-spacer { flex: 1; }
+/* "Guardar en librería" choice */
+.reflib-sv-menu { position: fixed; z-index: 10096; width: 320px; padding: 4px; border-radius: 10px; display: flex; flex-direction: column; gap: 2px;
+    background: var(--background-fill-primary, #fff); color: var(--body-text-color, #111); border: 1px solid var(--border-color-primary, #d1d5db); box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.dark .reflib-sv-menu { background: #1f2430; color: #e5e7eb; border-color: #3a4152; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.reflib-sv-menu button { all: unset; box-sizing: border-box; cursor: pointer; padding: 8px 10px; border-radius: 7px; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
+.reflib-sv-menu button small { font-weight: 400; font-size: 11.5px; opacity: .72; }
+.reflib-sv-menu button:hover, .reflib-sv-menu button:focus-visible { background: rgba(124,58,237,.16); }
+.reflib-vc-ico { display: inline-block; width: 1em; height: 1em; vertical-align: -0.14em; margin-right: .3em; flex: none; }
+.reflib-ib-vcount .reflib-vc-ico { margin-right: .15em; }
+.reflib-vc-ticon .reflib-vc-ico { margin: 0; width: 14px; height: 14px; vertical-align: -2px; }
+.reflib-sv-menu button > span { display: inline-flex; align-items: center; }
+.reflib-ib-pvbtns button:has(> .reflib-vc-ico), .reflib-ib-ctxitem:has(> .reflib-vc-ico), .reflib-ib-loc button:has(> .reflib-vc-ico), .reflib-vc-list .reflib-ib-chip { display: inline-flex; align-items: center; white-space: nowrap; }
+.reflib-vc-head, .reflib-vc-title, .reflib-ib-vbadge { display: inline-flex; align-items: center; }
+.reflib-vc-head .reflib-vc-ico, .reflib-vc-title .reflib-vc-ico { margin-right: .4em; }
+.reflib-vc-me { margin-left: auto; }
