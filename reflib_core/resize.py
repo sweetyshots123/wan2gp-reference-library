@@ -59,6 +59,8 @@ def _ffprobe_info(path: str) -> Dict[str, Any]:
                 info["duration"] = float(vs.get("duration") or (d.get("format") or {}).get("duration") or 0)
         except Exception:
             pass
+    if info["width"] and info["duration"] <= 0:   # 1.6.7: no duration in the container (MediaRecorder WebM)
+        info["duration"] = media.scan_duration(path, "v:0")
     if not info["width"]:
         p = media.probe(path)
         info.update(width=p.get("width", 0), height=p.get("height", 0), duration=p.get("duration", 0.0))

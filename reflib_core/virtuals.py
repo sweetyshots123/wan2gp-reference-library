@@ -262,6 +262,25 @@ def update(vid: str, params: Any = None, name: Optional[str] = None) -> Dict[str
     return dict(c, hash=vhash(vid))
 
 
+def refresh_facts(vid: str, facts: Dict[str, Any]) -> bool:
+    """1.6.7: copies made before the duration fix stored duration 0 for files without a container duration (MediaRecorder
+    WebM). Store freshly measured facts when they differ (params untouched). True when something changed."""
+    if not isinstance(facts, dict) or not (facts.get("width") or facts.get("duration")):
+        return False
+    with _lock:
+        data = load()
+        c = next((x for x in data["copies"] if x["id"] == vid), None)
+        if not c:
+            return False
+        old = c.get("facts") or {}
+        new = {k: facts.get(k, old.get(k)) for k in ("width", "height", "duration")}
+        if all(abs(float(old.get(k) or 0) - float(new.get(k) or 0)) < 0.002 for k in new):
+            return False
+        c["facts"] = new
+        _save(data)
+    return True
+
+
 def soft_delete(ids: Iterable[str]) -> Dict[str, Any]:
     """Copies -> trash (restorable for TRASH_TTL). The original is never touched. Returns {deleted, token}."""
     want = {str(i) for i in ids or []}
@@ -399,7 +418,7 @@ def render(vid: str) -> str:
             if c["kind"] == "image":
                 _render_image(src, part, c["params"])
             else:
-                _render_av(src, part, c["kind"], c["params"])
+                _render_av(src, part, c["kind"], c["params"], original_facts(src, c["kind"]) if c["kind"] == "video" else None)
             os.replace(part, out)
         finally:
             if os.path.exists(part):
@@ -426,14 +445,15 @@ def _render_image(src: str, out: str, p: Dict[str, Any]) -> None:
             im.save(out, "PNG")
 
 
-def _render_av(src: str, out: str, kind: str, p: Dict[str, Any]) -> None:
+def _render_av(src: str, out: str, kind: str, p: Dict[str, Any], c_facts: Optional[Dict[str, Any]] = None) -> None:
     exe = media.find_binary("ffmpeg")
     if not exe:
         raise VirtualError("ffmpeg not found")
     cmd = [exe, "-y", "-hide_banner", "-loglevel", "error", "-nostdin"]
     if p.get("start") is not None:
         cmd += ["-ss", f"{float(p['start']):.3f}"]
-    cmd += ["-i", src]
+    # 1.6.7: browser recordings (MediaRecorder WebM) have no duration / cues and sometimes missing pts: regenerate them
+    cmd += ["-fflags", "+genpts", "-i", src]
     if p.get("end") is not None:
         cmd += ["-t", f"{float(p['end']) - float(p.get('start') or 0):.3f}"]
     if kind == "video":
@@ -447,7 +467,11 @@ def _render_av(src: str, out: str, kind: str, p: Dict[str, Any]) -> None:
             x, y, w, h = p["rect"]
             vf.append(f"crop={w}:{h}:{x}:{y}")
         vf += ["setsar=1", "format=yuv420p"]
-        cmd += ["-map", "0:v:0", "-map", "0:a?", "-vf", ",".join(vf), *args, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
+        if (c_facts or {}).get("width"):
+            cmd += ["-map", "0:v:0", "-map", "0:a?", "-vf", ",".join(vf), *args]
+        else:   # 1.6.7: an audio-only .webm / .mkv (browser voice recording) is listed as a video: keep just its sound
+            cmd += ["-vn", "-map", "0:a:0"]
+        cmd += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
     else:
         cmd += ["-vn", "-map", "0:a:0", "-c:a", "pcm_s16le", out]
     r = subprocess.run(cmd, capture_output=True, timeout=3600, creationflags=_NO_WINDOW)
@@ -473,6 +497,13 @@ def render_async(vid: str) -> Dict[str, Any]:
         _jobs[vid] = {"state": "rendering"}
 
     def run():
+        try:
+            if c["kind"] != "image" and not float((c.get("facts") or {}).get("duration") or 0):   # 1.6.7: heal 1.6.6 zeros
+                src = source_path(c)
+                if src:
+                    refresh_facts(vid, original_facts(src, c["kind"]))
+        except Exception:
+            pass
         try:
             path = render(vid)
             st = {"state": "ready", "path": path}

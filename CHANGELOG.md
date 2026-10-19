@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.7 — 2026-10-19
+
+- **Fix: the in/out trimmer of a virtual copy was dead on browser / webcam recordings.** Files recorded with a browser's MediaRecorder (Chrome "webcam capture" WebM, also live-written Matroska and audio WebM) store **no duration** in the container: ffprobe reports `N/A` and the browser `Infinity`. 1.6.6 measured 0 s, so the timeline showed a single handle, Entrada / Salida stayed empty, and dragging or Marcar entrada / salida did nothing. Now:
+  - The server measures such files by **reading their packet timestamps** with ffprobe (no decoding; about 0.3 s for a 3.5 min / 65 MB clip). This applies to the editor, the cards' duration, Video Library / resize facts and audio.
+  - Copies saved by 1.6.6 with a 0 s duration **heal themselves** the next time they're opened or previewed. Durations cached as 0 are measured again once.
+  - In the browser, when no duration is known, the trimmer seeks far ahead to make the browser read the real length, then returns to the start.
+  - If the duration really can't be found, the trimmer **is never left dead**. A clear message explains it, and the in/out seconds can be typed or set with Marcar entrada / salida while playing.
+  - Renders use `-fflags +genpts` for these recordings. An audio-only `.webm` listed as a video renders its sound instead of failing.
+- **Media Editor trim mode (fileApi 3).** With a Media Editor that offers `cropFile({mode:"trim", initialTrim, initialRect, allowRect})`, video copies pick in/out **and** the frame crop there, and audio copies pick in/out (no rect). Our own timeline is not shown, editing hands the stored in/out and rect back, and keeping the full length stores no in/out. Older Media Editor (1.7.0 = fileApi 2), none, or an error from it: the built-in trimmer above (error toast first). Image copies keep the 1.6.6 rect mode.
+- Unchanged: the 1.6.5 "Reutilizar ajustes" fix (seed always random), Vidosser, the 1.6.2 Resize button. Plugin only, no WanGP core or Media Editor changes.
+
 ## 1.6.6 — 2026-10-19
 
 - **Virtual copies (Lightroom-style).** A virtual copy stores only **parameters pointing at the original**: an image **rect**; for video a **rect and/or in/out**; for audio **in/out**. Nothing is duplicated, and the original is never modified. It is rendered **on demand** into a cache (`<plugin>/virtuals/.cache/`) when something needs the pixels: preview, viewer, "Añadir a referencias", Video Library, resize. Changing the params replaces the old render.

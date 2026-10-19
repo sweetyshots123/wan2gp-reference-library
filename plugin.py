@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.6"
+PLUGIN_VERSION = "1.6.7"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3339,6 +3339,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                         return self._err(lang, "err_image_missing")
                     kind, name, params, ohash = ent.get("kind") or "image", ent.get("name") or os.path.basename(src), {}, h
                 facts = _vc.original_facts(src, kind)
+                if c and _vc.refresh_facts(c["id"], facts):   # 1.6.7: heal a duration stored as 0 by 1.6.6
+                    imagelib.invalidate()
                 return {"ok": True, "kind": kind, "name": os.path.splitext(name)[0] if not c else name, "path": os.path.abspath(src),
                         "url": _serve_url(src), "params": params, "virtual": bool(c), "orig_hash": ohash, **facts}
             if action == "virt_create":

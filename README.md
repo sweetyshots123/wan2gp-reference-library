@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.6 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.7 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -55,7 +55,7 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 
 A virtual copy is a crop and/or in/out **pointing at a library file**, like a Lightroom virtual copy: no pixels are duplicated and the original is never changed. Images: a rect. Video: a rect and/or in/out. Audio: in/out. Make one with **Nueva copia virtual** (right-click, Detalles, viewer) and change it later with **Editar recorte**. It renders on demand into `virtuals/.cache/` whenever something needs the actual file (preview, refs, Video Library, resize).
 
-Copies carry a **virtual** badge and are listed under **Copias virtuales**. Detalles shows **Original: …** with **Mostrar original**, and the original lists its copies. Deleting a copy never deletes the original. If the original disappears, the copy is shown as **rota** (broken) until the file is back. With **Media Editor 1.7.0+** (`fileApi >= 2`), image rects are picked in Media Editor's rect-only mode (`cropFile({mode:"rect", initialRect})`, nothing rendered), and video copies get a **✂ Recortar en Media Editor** button for the frame rect. Rects are in upright pixels (EXIF orientation applied first). With an older Media Editor, none, or if it refuses the file, a built-in rect tool is used. After a Gradio trim on an input, **Guardar en librería** offers **Copia virtual de «original»** when the untrimmed file is in the library.
+Copies carry a **virtual** badge and are listed under **Copias virtuales**. Detalles shows **Original: …** with **Mostrar original**, and the original lists its copies. Deleting a copy never deletes the original. If the original disappears, the copy is shown as **rota** (broken) until the file is back. With **Media Editor 1.7.0+** (`fileApi >= 2`), image rects are picked in Media Editor's rect-only mode (`cropFile({mode:"rect", initialRect})`, nothing rendered), and video copies get a **✂ Recortar en Media Editor** button for the frame rect. Rects are in upright pixels (EXIF orientation applied first). With an older Media Editor, none, or if it refuses the file, a built-in rect tool is used. **1.6.7:** with Media Editor `fileApi >= 3`, video and audio copies are trimmed in its **trim mode** (in/out, plus the frame crop for video) instead of the built-in timeline. Browser / webcam recordings (MediaRecorder WebM) have no duration in the file; it is measured from the packets, and if it still can't be read, the in/out seconds can be typed. After a Gradio trim on an input, **Guardar en librería** offers **Copia virtual de «original»** when the untrimmed file is in the library.
 
 ## Save inputs to the library (1.6.4)
 

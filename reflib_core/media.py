@@ -52,6 +52,48 @@ def _ratio(text):
             return 0.0
 
 
+def scan_duration(path, stream="v:0", timeout=120) -> float:
+    """Duration of a file whose container doesn't say it (1.6.7): browser MediaRecorder WebM / Matroska written live has
+    no duration and no cues, so format/stream duration are missing and players report Infinity. Reads only the packet
+    timestamps of one stream (no decoding: ~0.3 s for a 65 MB / 3.5 min webcam clip) and returns the end of the last
+    packet. 0.0 when there's no ffprobe or nothing readable."""
+    exe = find_binary("ffprobe")
+    if not exe or not isinstance(path, str) or not os.path.isfile(path):
+        return 0.0
+    cmd = [exe, "-v", "error", "-select_streams", stream, "-show_entries", "packet=pts_time,dts_time,duration_time",
+           "-of", "csv=p=0", path]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=timeout,
+                             creationflags=_NO_WINDOW)
+    except Exception:
+        return 0.0
+    end = 0.0
+    first = None
+    for line in (res.stdout or "").splitlines():
+        parts = line.strip().split(",")
+        if not parts:
+            continue
+        t = None
+        for v in parts[:2]:
+            try:
+                t = float(v)
+                break
+            except Exception:
+                continue
+        if t is None:
+            continue
+        try:
+            d = float(parts[2]) if len(parts) > 2 else 0.0
+        except Exception:
+            d = 0.0
+        if first is None or t < first:
+            first = t
+        end = max(end, t + max(0.0, d))
+    if first and first > 0 and first < end:   # streams that don't start at 0 (rare in recordings): the span
+        end -= first
+    return round(end, 3) if end > 0 else 0.0
+
+
 def _probe_ffprobe(path):
     exe = find_binary("ffprobe")
     if not exe:
@@ -91,6 +133,8 @@ def _probe_ffprobe(path):
                 break
         except Exception:
             continue
+    if duration <= 0:   # 1.6.7: MediaRecorder WebM & co. carry no duration
+        duration = scan_duration(path, "v:0")
     try:
         frames = int(s.get("nb_frames") or 0)
     except Exception:
@@ -117,6 +161,8 @@ def _probe_cv2(path):
         if width <= 0 or height <= 0:
             return None
         duration = frames / fps if fps > 0 and frames > 0 else 0.0
+        if duration <= 0:
+            duration = scan_duration(path, "v:0")
         return {"width": width, "height": height, "fps": round(fps, 3), "frames": max(frames, 0), "duration": round(duration, 3)}
     except Exception:
         return None

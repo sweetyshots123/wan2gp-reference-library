@@ -3641,8 +3641,8 @@
     // ================================================================ 1.6.6 virtual copies (Lightroom-like)
     // A virtual copy stores only params over ONE library original: image {rect}, video {rect?, start?, end?}, audio
     // {start, end}. The server renders it on demand (cache) whenever a real file is needed; the original is never touched.
-    // Images use Cropper's rect mode when window.cropper.fileApi >= 2 (cropFile({mode:"rect", initialRect}) ->
-    // {ok, rect:{x,y,w,h}, width, height}); otherwise (and for video frames) the built-in rect tool below.
+    // Images use Media Editor's rect mode when window.cropper.fileApi >= 2; video / audio use its trim mode when fileApi >= 3
+    // (1.6.7). Otherwise (or when it refuses a file) the built-in rect tool / in-out editor below.
     const VFOLDER = "__virtual";
     // two joined squares, drawn (the "⧉" character is missing from many fonts)
     var VICO = '<svg class="reflib-vc-ico" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false"><rect x="1.25" y="4.75" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.75" y="1.25" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
@@ -3655,7 +3655,8 @@
               cancel: "Cancel", reset: "Reset", aspect: "Aspect", free: "Free", original: "Original", rect_on: "Crop the frame", set_in: "Set in", set_out: "Set out", play: "Play selection", stop: "Stop",
               in_l: "In (s)", out_l: "Out (s)", len: "Length {d}", hint_img: "Drag to draw the crop, drag the edges or corners to adjust it. Enter saves, Esc cancels.",
               hint_av: "Drag the handles, or press I / O at the current time. Space plays the selection. Enter saves, Esc cancels.", show: "Show", cropper2: "Crop in Media Editor", cropper2_tip: "Draw the frame crop in Media Editor (rect only: nothing is rendered or written)",
-              me_fail: "Media Editor could not open it ({e}): using the built-in crop tool",
+              me_fail: "Media Editor could not open it ({e}): using the built-in crop tool", me_fail_trim: "Media Editor could not open it ({e}): using the built-in in/out editor",
+              dur_reading: "Reading the duration…", dur_unknown: "This file doesn't say how long it is (e.g. a browser/webcam recording). Type the in and out points in seconds, or use Set in / Set out while it plays.",
               sv_file: "Save the trimmed file", sv_file_tip: "A new file with only the trimmed part", sv_virtual: "Virtual copy of “{name}”",
               sv_virtual_tip: "Duplicates nothing: remembers the in/out over the library original", sv_saved: "Virtual copy “{name}” ({d}) of “{orig}” created", sv_undone: "Virtual copy removed" },
         es: { badge: "virtual", badge_tip: "Copia virtual: solo se guarda el recorte / entrada-salida, el archivo original no se toca", broken: "rota", broken_tip: "Falta el archivo original de esta copia virtual",
@@ -3666,7 +3667,8 @@
               cancel: "Cancelar", reset: "Restablecer", aspect: "Proporción", free: "Libre", original: "Original", rect_on: "Recortar el encuadre", set_in: "Marcar entrada", set_out: "Marcar salida", play: "Reproducir selección", stop: "Parar",
               in_l: "Entrada (s)", out_l: "Salida (s)", len: "Duración {d}", hint_img: "Arrastra para dibujar el recorte y ajusta bordes o esquinas. Intro guarda, Esc cancela.",
               hint_av: "Arrastra los tiradores o pulsa I / O en el instante actual. Espacio reproduce la selección. Intro guarda, Esc cancela.", show: "Mostrar", cropper2: "Recortar en Media Editor", cropper2_tip: "Dibuja el recorte del encuadre en Media Editor (solo el rectángulo: no se genera ni se escribe nada)",
-              me_fail: "Media Editor no pudo abrirlo ({e}): se usa la herramienta de recorte propia",
+              me_fail: "Media Editor no pudo abrirlo ({e}): se usa la herramienta de recorte propia", me_fail_trim: "Media Editor no pudo abrirlo ({e}): se usa el editor de entrada/salida propio",
+              dur_reading: "Leyendo la duración…", dur_unknown: "Este archivo no indica cuánto dura (p. ej. una grabación del navegador o la webcam). Escribe la entrada y la salida en segundos, o usa Marcar entrada / Marcar salida mientras se reproduce.",
               sv_file: "Guardar el archivo recortado", sv_file_tip: "Un archivo nuevo con solo la parte recortada", sv_virtual: "Copia virtual de «{name}»",
               sv_virtual_tip: "No duplica nada: recuerda la entrada y salida sobre el original de la librería", sv_saved: "Copia virtual «{name}» ({d}) de «{orig}» creada", sv_undone: "Copia virtual quitada" },
     };
@@ -3679,6 +3681,7 @@
         return out.length ? out.join(" · ") : vct("p_none");
     }
     function cropApi2() { const c = window.cropper; return c && typeof c.cropFile === "function" && (+c.fileApi || 0) >= 2 ? c : null; }
+    function cropApi3() { const c = window.cropper; return c && typeof c.cropFile === "function" && (+c.fileApi || 0) >= 3 ? c : null; }
     // Media Editor 1.7.0 rect mode (fileApi 2): renders nothing, returns { ok, mode:"rect", kind, rect:{x,y,w,h}, width, height,
     // sourceWidth, sourceHeight, preset }. Integers in SOURCE pixels, origin top-left; for images in the upright (EXIF-transposed)
     // frame, which is the frame our renderer crops (it applies exif_transpose first); video rects come snapped to even values.
@@ -3691,7 +3694,10 @@
         try { res = await api.cropFile(opts); } catch (e) { res = { ok: false, error: String((e && e.message) || e) }; }
         if (!res || res.cancelled) return { cancelled: true };
         if (res.busy) return { busy: true };
-        const r = res.ok && res.rect;
+        return vNormRect(res, W, H, kind);
+    }
+    function vNormRect(res, W, H, kind) {   // Media Editor rect (rect / trim mode) -> our [x,y,w,h] in our source frame
+        const r = res && res.ok && res.rect;
         if (!r || ![r.x, r.y, r.w, r.h].every(Number.isFinite) || r.w <= 0 || r.h <= 0) return { error: (res && (res.error || res.code)) || "no rect" };
         let x = r.x, y = r.y, w = r.w, h = r.h;
         const sw = +(res.sourceWidth || res.width) || W, sh = +(res.sourceHeight || res.height) || H;
@@ -3702,6 +3708,33 @@
         w = Math.round(Math.min(w, (W || x + w) - x)); h = Math.round(Math.min(h, (H || y + h) - y));
         if (kind === "video") { x -= x % 2; y -= y % 2; w -= w % 2; h -= h % 2; }
         return { rect: [x, y, w, h], preset: res.preset || "" };
+    }
+    // 1.6.7 Media Editor trim mode (fileApi 3): cropFile({path, mode:"trim", initialTrim?:{start,end}, initialRect?, allowRect?})
+    // -> { ok, mode:"trim", kind, start, end, duration, rect?, sourceWidth?, sourceHeight?, preset? }. Full length kept = start 0,
+    // end = duration; rect only when allowRect and the user cropped (same conventions as rect mode). Duration comes from its
+    // server-side ffprobe, so files without a container duration (MediaRecorder WebM) work. Returns { params } | cancelled |
+    // busy | { error }.
+    async function vMeTrim(api, src) {
+        const P = src.params || {}, W = +src.width || 0, H = +src.height || 0;
+        const pic = src.kind === "video" && W > 0 && H > 0;   // an audio-only .webm is listed as a video: trim its sound only
+        const opts = { path: src.path, url: src.url, kind: pic ? "video" : "audio", name: src.name, source: "reference-library", mode: "trim" };
+        if (P.end != null) opts.initialTrim = { start: +P.start || 0, end: +P.end };
+        if (pic) { opts.allowRect = true; if (P.rect && P.rect.length === 4) opts.initialRect = { x: P.rect[0], y: P.rect[1], w: P.rect[2], h: P.rect[3] }; }
+        let res;
+        try { res = await api.cropFile(opts); } catch (e) { res = { ok: false, error: String((e && e.message) || e) }; }
+        if (!res || res.cancelled) return { cancelled: true };
+        if (res.busy) return { busy: true };
+        const a = +res.start, b = +res.end;
+        if (!res.ok || !Number.isFinite(a) || !Number.isFinite(b) || b <= a) return { error: (res && (res.error || res.code)) || "no trim" };
+        const dur = +res.duration || +src.duration || 0, out = {};
+        if (!(a < 0.02 && dur && b > dur - 0.02)) { out.start = +Math.max(0, a).toFixed(3); out.end = +(dur ? Math.min(b, dur) : b).toFixed(3); }
+        if (pic && res.rect) {
+            const n = vNormRect(res, W, H, "video");
+            if (n.error) return n;
+            const r = n.rect, full = r[0] === 0 && r[1] === 0 && Math.abs(r[2] - W) <= 2 && Math.abs(r[3] - H) <= 2;
+            if (!full) out.rect = r;
+        }
+        return { params: out };
     }
     function vBtn(act, h, cls, label, tip, dis, icon) {
         return `<button type="button" class="${cls}" data-act="${act}" data-hash="${esc(h)}" ${dis ? "disabled" : ""} title="${esc(tip || label)}">${icon ? VICO : ""}${esc(label)}</button>`;
@@ -3737,8 +3770,15 @@
         if (!src || !src.ok) return null;   // the error toast comes from handleToast
         const edit = mode === "edit" && src.virtual;
         let params = null;
-        const api = src.kind === "image" ? cropApi2() : null;
-        if (api) {   // images: Media Editor's rect mode (fileApi 2); video / audio use our editor (in/out + its "Recortar en Media Editor")
+        const api = src.kind === "image" ? cropApi2() : null, api3 = src.kind !== "image" ? cropApi3() : null;
+        if (api3) {   // 1.6.7 video / audio: Media Editor's trim mode (in/out + optional frame rect); our timeline stays hidden
+            if (ilib.lightbox) closeLightbox();
+            const m = await vMeTrim(api3, src);
+            if (m.cancelled) return null;
+            if (m.busy) { toast(it("crop_busy"), "info"); return null; }
+            if (m.params) params = m.params;
+            else { toast(vct("me_fail_trim", { e: m.error }), "info", [], 6000); params = await vEditor(src, edit, true); if (!params) return null; }   // fallback
+        } else if (api) {   // images: Media Editor's rect mode (fileApi 2); video / audio use our editor (in/out + its "Recortar en Media Editor")
             if (ilib.lightbox) closeLightbox();
             const m = await vMeRect(api, src, "image", (src.params || {}).rect);
             if (m.cancelled) return null;
@@ -3773,7 +3813,9 @@
             const W = +src.width || 0, H = +src.height || 0;
             let D = +src.duration || 0;
             const st = { rect: P.rect ? { x: P.rect[0], y: P.rect[1], w: P.rect[2], h: P.rect[3] } : null, aspect: "free",
-                         rectOn: kind === "image" || !!P.rect, tin: P.start != null ? +P.start : 0, tout: P.end != null ? +P.end : D, playSel: false };
+                         rectOn: kind === "image" || !!P.rect, tin: P.start != null ? +P.start : 0, tout: P.end != null ? +P.end : (D || null), playSel: false,
+                         durState: D ? "ok" : "probing" };   // 1.6.7: "probing" | "ok" | "unknown" (then seconds are typed by hand)
+            const tOut = () => st.tout == null ? Infinity : st.tout;
             const bg = document.createElement("div"); bg.className = "reflib-vc-bg";
             const hasRect = kind !== "audio", hasTl = kind !== "image";
             const ASP = [["free", vct("free")], ["orig", vct("original")], ["1:1", "1:1"], ["4:3", "4:3"], ["3:4", "3:4"], ["16:9", "16:9"], ["9:16", "9:16"]];
@@ -3790,7 +3832,7 @@
                       <label>${esc(vct("in_l"))} <input type="number" class="reflib-vc-in" min="0" step="0.01"></label>
                       <button type="button" class="reflib-ib-btn reflib-vc-play" data-v="play">▶ ${esc(vct("play"))}</button>
                       <label>${esc(vct("out_l"))} <input type="number" class="reflib-vc-out" min="0" step="0.01"></label>
-                      <button type="button" class="reflib-ib-btn" data-v="out">${esc(vct("set_out"))} ⟧</button><span class="reflib-vc-len"></span></div></div>` : ""}
+                      <button type="button" class="reflib-ib-btn" data-v="out">${esc(vct("set_out"))} ⟧</button><span class="reflib-vc-len"></span></div><div class="reflib-vc-nodur" hidden>${esc(vct("dur_unknown"))}</div></div>` : ""}
                 <div class="reflib-vc-hint">${esc(vct(kind === "image" ? "hint_img" : "hint_av"))}</div>
                 <div class="reflib-vc-btns"><button type="button" class="reflib-ib-btn" data-v="reset">${esc(vct("reset"))}</button><span class="reflib-ib-spacer"></span>
                   <button type="button" class="reflib-ib-btn" data-v="cancel">${esc(vct("cancel"))}</button><button type="button" class="reflib-ib-btn reflib-ib-primary" data-v="save">${esc(vct(edit ? "save" : "save_new"))}</button></div></div>`;
@@ -3866,8 +3908,18 @@
             const track = q(".reflib-vc-track"), selEl = q(".reflib-vc-sel"), ph = q(".reflib-vc-ph"), hin = q(".reflib-vc-hd.in"), hout = q(".reflib-vc-hd.out");
             const iin = q(".reflib-vc-in"), iout = q(".reflib-vc-out"), lenEl = q(".reflib-vc-len"), playB = q(".reflib-vc-play");
             const dl = q(".reflib-vc-dim.l"), dr = q(".reflib-vc-dim.r");
+            const tlEl = q(".reflib-vc-tl"), nodurEl = q(".reflib-vc-nodur");
             function drawTl() {
-                if (!track || !D) return;
+                if (!track) return;
+                tlEl.classList.toggle("nodur", !D);
+                if (nodurEl) nodurEl.hidden = !!D || st.durState !== "unknown";
+                if (!D) {   // 1.6.7: no duration (yet): the handles can't be placed, but the seconds can still be typed / marked
+                    if (document.activeElement !== iin) iin.value = (+st.tin || 0).toFixed(2);
+                    if (document.activeElement !== iout) iout.value = st.tout != null ? st.tout.toFixed(2) : "";
+                    iin.removeAttribute("max"); iout.removeAttribute("max");
+                    lenEl.textContent = st.durState === "probing" ? vct("dur_reading") : (st.tout != null && st.tout > st.tin ? vct("len", { d: svDur(st.tout - st.tin) }) : "");
+                    return;
+                }
                 st.tin = Math.max(0, Math.min(st.tin, D)); st.tout = Math.max(st.tin + 0.1, Math.min(st.tout, D));
                 const a = st.tin / D * 100, b = st.tout / D * 100;
                 hin.style.left = a + "%"; hout.style.left = b + "%"; selEl.style.left = a + "%"; selEl.style.width = (b - a) + "%";
@@ -3890,7 +3942,7 @@
                 track.addEventListener("pointermove", (e) => {
                     if (!tdrag || tdrag === "seek") { if (tdrag === "seek") { media.currentTime = tAt(e); drawPh(); } return; }
                     const tt = tAt(e);
-                    if (tdrag === "in") st.tin = Math.min(tt, st.tout - 0.1); else st.tout = Math.max(tt, st.tin + 0.1);
+                    if (tdrag === "in") st.tin = Math.min(tt, tOut() - 0.1); else st.tout = Math.max(tt, st.tin + 0.1);
                     media.currentTime = tdrag === "in" ? st.tin : st.tout; drawTl(); drawPh();
                 });
                 const tend = () => { tdrag = null; };
@@ -3899,11 +3951,11 @@
                     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                     e.preventDefault(); e.stopPropagation();
                     const d = (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 0.1);
-                    if (which === "in") st.tin = Math.min(st.tin + d, st.tout - 0.1); else st.tout = Math.max(st.tout + d, st.tin + 0.1);
+                    if (which === "in") st.tin = Math.max(0, Math.min(st.tin + d, tOut() - 0.1)); else st.tout = Math.max((st.tout == null ? st.tin : st.tout) + d, st.tin + 0.1);
                     drawTl();
                 });
-                iin.addEventListener("change", () => { st.tin = Math.min(+iin.value || 0, st.tout - 0.1); drawTl(); });
-                iout.addEventListener("change", () => { st.tout = Math.max(+iout.value || 0, st.tin + 0.1); drawTl(); });
+                iin.addEventListener("change", () => { st.tin = Math.max(0, Math.min(+iin.value || 0, tOut() - 0.1)); drawTl(); });
+                iout.addEventListener("change", () => { st.tout = iout.value === "" && !D ? null : Math.max(+iout.value || 0, st.tin + 0.1); drawTl(); });
             }
             function togglePlay() {
                 if (!media || kind === "image") return;
@@ -3914,11 +3966,26 @@
                 media.addEventListener("timeupdate", () => { drawPh(); if (st.playSel && media.currentTime >= st.tout) { media.pause(); media.currentTime = st.tout; } });
                 media.addEventListener("play", () => { if (playB) playB.textContent = "❚❚ " + vct("stop"); const loop = () => { drawPh(); if (!media.paused) requestAnimationFrame(loop); }; loop(); });
                 media.addEventListener("pause", () => { st.playSel = false; if (playB) playB.textContent = "▶ " + vct("play"); });
+                // 1.6.7 duration: the server's (ffprobe, packet scan when the container has none) comes first; else the
+                // element's; a MediaRecorder WebM reports Infinity until it is seeked to the end: seek far, read, seek back.
+                const setDur = (d) => {
+                    if (D || !(isFinite(d) && d > 0)) return !!D;
+                    D = d; st.durState = "ok";
+                    if (st.tout == null) st.tout = D;
+                    drawTl(); drawPh(); return true;
+                };
                 media.addEventListener("loadedmetadata", () => {
-                    if (!D && isFinite(media.duration)) { D = media.duration; if (P.end == null) st.tout = D; }
+                    if (!D && !setDur(media.duration)) {
+                        const back = +P.start || 0;
+                        const on = () => { if (setDur(media.duration)) { media.removeEventListener("durationchange", on); media.removeEventListener("timeupdate", on); try { media.currentTime = back; } catch (e) {} } };
+                        media.addEventListener("durationchange", on); media.addEventListener("timeupdate", on);
+                        try { media.currentTime = 1e101; } catch (e) {}
+                    } else if (P.start) media.currentTime = +P.start;
                     drawTl(); drawRect();
-                    if (P.start) media.currentTime = +P.start;
                 });
+                const giveUp = () => { if (!D && st.durState !== "unknown") { st.durState = "unknown"; drawTl(); } };
+                media.addEventListener("error", giveUp);
+                setTimeout(giveUp, 8000);   // never leave the timeline "reading" forever
             }
             // ---------- dialog ----------
             const done = (v) => { try { media && media.pause && media.pause(); } catch (e) {} window.removeEventListener("keydown", key, true); window.removeEventListener("resize", onRs); bg.remove(); resolve(v); };
@@ -3926,6 +3993,7 @@
                 const out = {};
                 if (hasRect && st.rectOn && st.rect) out.rect = [st.rect.x, st.rect.y, st.rect.w, st.rect.h];
                 if (hasTl && D) { out.start = +st.tin.toFixed(3); out.end = +st.tout.toFixed(3); }
+                else if (hasTl && st.tout != null && st.tout > st.tin) { out.start = +st.tin.toFixed(3); out.end = +st.tout.toFixed(3); }   // typed by hand
                 return out;
             };
             const key = (e) => {
@@ -3933,7 +4001,7 @@
                 const typing = e.target && e.target.tagName === "INPUT" && e.target.type === "number";
                 if (e.key === "Enter" && !typing) { e.preventDefault(); e.stopImmediatePropagation(); done(result()); return; }
                 if (typing || e.target.tagName === "SELECT") return;
-                if (hasTl && (e.key === "i" || e.key === "I")) { e.preventDefault(); e.stopImmediatePropagation(); st.tin = Math.min(media.currentTime || 0, st.tout - 0.1); drawTl(); }
+                if (hasTl && (e.key === "i" || e.key === "I")) { e.preventDefault(); e.stopImmediatePropagation(); st.tin = Math.min(media.currentTime || 0, tOut() - 0.1); drawTl(); }
                 else if (hasTl && (e.key === "o" || e.key === "O")) { e.preventDefault(); e.stopImmediatePropagation(); st.tout = Math.max(media.currentTime || 0, st.tin + 0.1); drawTl(); }
                 else if (hasTl && e.key === " ") { e.preventDefault(); e.stopImmediatePropagation(); togglePlay(); }
             };
@@ -3944,8 +4012,8 @@
                 const v = b.dataset.v;
                 if (v === "cancel") done(null);
                 else if (v === "save") done(result());
-                else if (v === "reset") { st.rect = kind === "image" ? null : null; st.tin = 0; st.tout = D; if (rOn) { rOn.checked = false; st.rectOn = false; } drawRect(); drawTl(); }
-                else if (v === "in") { st.tin = Math.min(media.currentTime || 0, st.tout - 0.1); drawTl(); }
+                else if (v === "reset") { st.rect = kind === "image" ? null : null; st.tin = 0; st.tout = D || null; if (rOn) { rOn.checked = false; st.rectOn = false; } drawRect(); drawTl(); }
+                else if (v === "in") { st.tin = Math.min(media.currentTime || 0, tOut() - 0.1); drawTl(); }
                 else if (v === "out") { st.tout = Math.max(media.currentTime || 0, st.tin + 0.1); drawTl(); }
                 else if (v === "play") togglePlay();
                 else if (v === "me") meCrop();
@@ -4026,7 +4094,7 @@
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vShowOriginal, vShowCopy, cropApi2, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

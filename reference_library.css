@@ -830,3 +830,9 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-vc-head, .reflib-vc-title, .reflib-ib-vbadge { display: inline-flex; align-items: center; }
 .reflib-vc-head .reflib-vc-ico, .reflib-vc-title .reflib-vc-ico { margin-right: .4em; }
 .reflib-vc-me { margin-left: auto; }
+/* 1.6.7: in/out timeline without a known duration (MediaRecorder WebM): typed seconds still work */
+.reflib-vc-tl.nodur .reflib-vc-track { opacity: .45; cursor: not-allowed; }
+.reflib-vc-tl.nodur .reflib-vc-hd, .reflib-vc-tl.nodur .reflib-vc-sel, .reflib-vc-tl.nodur .reflib-vc-dim, .reflib-vc-tl.nodur .reflib-vc-ph { display: none; }
+.reflib-vc-nodur { margin-top: 6px; padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.4;
+  color: #8a5a00; background: rgba(255, 176, 32, .14); border: 1px solid rgba(255, 176, 32, .45); }
+.dark .reflib-vc-nodur, body.dark .reflib-vc-nodur { color: #ffcf7a; background: rgba(255, 176, 32, .10); }

@@ -39,7 +39,9 @@ def _load() -> None:
         with open(_path(), "r", encoding="utf-8") as f:
             d = json.load(f)
         if isinstance(d, dict):
-            _info.update({k: v for k, v in (d.get("items") or {}).items() if isinstance(v, dict)})
+            # 1.6.7: a 0 duration measured before the packet-scan fallback (MediaRecorder WebM) is probed again, once
+            _info.update({k: v for k, v in (d.get("items") or {}).items()
+                          if isinstance(v, dict) and (v.get("duration") or v.get("missing") or (v.get("v") or 0) >= 2)})
     except Exception:
         pass
 
@@ -93,6 +95,8 @@ def probe_audio(path: str) -> Dict:
         dur = float((d.get("format") or {}).get("duration") or 0)
     except Exception:
         dur = 0.0
+    if dur <= 0:   # 1.6.7: live-written WebM / Ogg (MediaRecorder) has no container duration
+        dur = media.scan_duration(path, "a:0" if a else "0")
     return {"duration": round(dur, 3), "codec": a.get("codec_name") or "", "rate": int(a.get("sample_rate") or 0), "ch": int(a.get("channels") or 0)}
 
 
@@ -103,6 +107,7 @@ def _probe(path: str, kind: str) -> Dict:
     else:
         out = probe_audio(path)
     out["at"] = round(time.time())
+    out["v"] = 2
     return out
 
 
