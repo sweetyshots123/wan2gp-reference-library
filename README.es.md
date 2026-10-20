@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.9 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.7.0 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -50,6 +50,18 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **Árbol de carpetas** (barra lateral izquierda, 1.4.1): cada raíz vigilada, desplegable en sus subcarpetas como en el disco, con recuentos. Haz clic en una carpeta para filtrar; *Incluir subcarpetas* alterna entre todo el subárbol y solo esa carpeta. Una ruta de navegación encima de la cuadrícula muestra dónde estás; haz clic en un tramo o en ↑ para subir. El filtro de carpeta se combina con los de colección y etiquetas. Cada raíz tiene ⟳ (reescanear) y × (quitar, dos clics) al pasar el ratón. Las imágenes se **leen en su sitio**: nunca se copian, mueven, modifican ni borran, así que no ocupan espacio extra. Se reescanean al abrir el modal y con **Reescanear** (los archivos sin cambios no se vuelven a hashear). Si un archivo se mueve o se borra, desaparece o reaparece en su nueva ruta; una carpeta que falta se marca. Al añadir una imagen de carpeta a una colección se **copia**, para que las colecciones sigan siendo autónomas. *Quitar* (dos clics) solo la quita del índice. Índice: `folders/index.json`; miniaturas en caché en `collections/.thumbs/`.
 - **Añadir a referencias** (pie de la selección) añade solo las imágenes elegidas a Reference Images de WanGP, por el mismo camino que al aplicar una colección. Las que ya estén en la galería se saltan y nunca se sustituye nada. Las imágenes de carpetas se leen en su sitio; no se copian a ninguna colección. *Cerrar al añadir* cierra el modal después (se recuerda). Si el modelo actual no tiene Reference Images, sale un error.
 - Haz clic en una imagen para verla en grande con sus colecciones, archivos y etiquetas. **Esc** o **×** cierran; las barras y el gestor se refrescan.
+
+## Librería de máscaras por vídeo (1.7.0)
+
+Las máscaras que creas en **Video Mask** de WanGP (creador de máscaras / Matanyone, o subidas) se guardan en la librería **junto al Control Video para el que se hicieron**. Se enlazan por el contenido del vídeo (el mismo archivo cargado desde cualquier sitio es el mismo vídeo). Una copia virtual con recorte o entrada/salida tiene **sus propias** máscaras.
+
+- **Guardar:** con **Guardar en la librería de máscaras las máscaras que creo en Video Mask** activado (Ajustes, activado por defecto), cada valor nuevo de Video Mask se guarda como máscara del Control Video actual. Si ese vídeo aún no está en la librería, se añade a la Librería de vídeos. Las generaciones que usaron Control Video y Video Mask también guardan su máscara, si el vídeo ya está en la librería. Junto a 📚 en la barra de Video Mask, **🎭 Guardar máscara** la guarda a mano. La misma máscara nunca se guarda dos veces para un vídeo.
+- **Explorador:** la barra de tipos tiene **🎭 Máscaras** y un filtro **🎭 con máscara** (solo vídeos con máscaras). Las máscaras que solo están en la librería de máscaras no salen en Vídeos; un vídeo de la librería asignado como máscara sale en las dos. Las tarjetas de vídeo muestran **🎭n** y las de máscara una etiqueta **máscara**. Las máscaras tienen también una carpeta **🎭 Máscaras**.
+- **Detalles de un vídeo:** **Máscaras (n)**, de la más nueva a la más antigua. Cada una tiene miniatura y vista previa ▶, fecha, tamaño, duración y origen, un nombre editable (Intro guarda), **Usar con máscara** y 🗑 (con Deshacer). Aparece un aviso ⚠ cuando la **duración o el tamaño** de la máscara no coinciden con los del vídeo (una copia virtual se compara con su tamaño recortado). Borrar una máscara **nunca borra el vídeo**.
+- **Detalles de una máscara:** «Máscara de «vídeo»», **Usar con su vídeo**, **Mostrar vídeo**, **Asignar como máscara de…** y **Borrar**.
+- **Usar con máscara** pone el vídeo en **Control Video** y la máscara en **Video Mask** en una sola acción. Usa la lógica de 1.6.9 (esperar → enviar → comprobar → reenviar), así que funciona aunque WanGP esté ocupado. Si el modelo actual oculta Video Mask, un aviso te pide elegir en Control Video una opción que use máscara.
+- **Asignar como máscara de…** (clic derecho en un vídeo o una máscara, o desde los detalles de la máscara): elige el vídeo al que pertenece (doble clic, o **Asignar a este vídeo**; Esc cancela). El archivo se queda donde está.
+- El botón de librería de Video Mask se abre en **Máscaras** (también se pueden elegir vídeos normales).
 
 ## Copias virtuales (1.6.6)
 
@@ -269,11 +281,11 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 - Sigue su **propio** ajuste **Recortes de imágenes hechos con Cropper** (*Guardar en la colección «Recortes» automáticamente* / *Preguntar cada vez* / *No guardar*), aparte del de vídeos. El aviso (con el botón **Guardar en la colección** en modo *Preguntar*) sale cuando la imagen recortada llega a una de las entradas de imagen. La imagen de control es una imagen PIL sin nombre de archivo; ahí se usa el aviso de recorte más reciente (< 20 s).
 - **Duplicados:** nunca dos veces en la misma colección: mismos bytes (sha256) o mismo `meta["dedupe_key"]`. Las colecciones en la papelera de deshacer no cuentan. **Tiene en cuenta Deshacer:** si borras la colección «Recortes», recortas otra vez (se crea una nueva) y luego **Deshaces** el borrado, la nueva se vuelca en la restaurada (sin duplicados) y se elimina, y un aviso dice cuántos recortes se han pasado.
 
-**API de Python** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 5**; comprueba `>= 1` si solo usas colecciones, `>= 2` para vídeos, `>= 3` para `add_image`, `>= 4` para `list_images` / etiquetas y `>= 5` para el historial de generaciones, más abajo):
+**API de Python** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 6**; comprueba `>= 1` si solo usas colecciones, `>= 2` para vídeos, `>= 3` para `add_image`, `>= 4` para `list_images` / etiquetas, `>= 5` para el historial de generaciones y `>= 6` para las máscaras, más abajo):
 
 | Función | Devuelve |
 |---|---|
-| `API_VERSION` | `5` (las funciones de la v1 a la v4 no cambian) |
+| `API_VERSION` | `6` (las funciones de la v1 a la v5 no cambian) |
 | `list_collections()` | `[{id, name, count, cover_path o None, updated}]`, ordenadas por nombre |
 | `get_collection(cid)` | `{id, name, count, cover_path, updated, created, images: [rutas absolutas]}` o `None` |
 | `image_paths(cid)` | rutas absolutas de las imágenes en el orden de la colección; `[]` si no existe |
@@ -285,6 +297,14 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `list_tags()` / `image_tags(sha256)` | (v4) `[{tag, count}]` / `["tag", …]` |
 | `image_crop_policy()` / `crop_policy()` | `"auto"`, `"ask"` o `"off"` (imágenes / vídeos) |
 | `add_video(path, name=None, source="cropper", meta=None)` | id del vídeo o `None`; nunca lanza excepciones. `source="cropper"` sigue el ajuste de recortes; cualquier otro origen siempre guarda. `name` por defecto es el nombre del archivo. `meta` es un diccionario pequeño serializable a JSON (≤ 4 KB) que se guarda con la entrada. |
+
+**API de máscaras (API v6, Reference Library 1.7.0).** Solo lectura, nunca lanza excepciones y devuelve copias.
+
+| Función | Devuelve |
+|---|---|
+| `list_masks(video_path) -> list[dict]` | las máscaras guardadas para ese vídeo (cualquier copia del mismo archivo), de la más nueva a la más antigua: `[{id, label, path, video, video_name, w, h, dur, created, source}]`; `[]` si no se conoce |
+| `get_mask(mask_id) -> dict \| None` | una máscara (misma forma), o `None` |
+| `mask_path(mask_id) -> str \| None` | ruta absoluta del archivo de la máscara (solo lectura), o `None` |
 
 **API del historial de generaciones (API v5, Reference Library 1.6.3).** Acceso de solo lectura al historial de generaciones y un aviso tras cada generación guardada. Ninguna función **lanza excepciones** (los errores se imprimen y el resultado es `None` / `False` / `[]`) y todas devuelven **copias**: cambiarlas no cambia nada en la librería. Todas las rutas son **absolutas**; una ruta es `None` si ese archivo ya no existe.
 
@@ -381,6 +401,7 @@ plugins/wan2gp-reference-library/
     index.json           # watched folders + file index (files stay where they are) (1.4)
   saved_audio/           # «Audios guardados» (1.6.4): audios guardados desde las entradas de WanGP, carpeta vigilada gestionada
   virtuals/              # copias virtuales (1.6.6): virtuals.json (parámetros) + .cache/ (renders, se puede borrar)
+  masks/                 # librería de máscaras (1.7.0): masks.json (máscara -> clave del vídeo, nombre, datos) + <id>/<archivo>, .trash/
   videos/
     videos.json          # índice (orden, nombres, datos, origen, meta)
     <id>/
@@ -389,7 +410,7 @@ plugins/wan2gp-reference-library/
     .trash/              # vídeos borrados: se pueden recuperar 5 min, se eliminan a los 15 min
 ```
 
-`settings.json`, `collections/`, `videos/` y `saved_audio/` están en .gitignore y no van en los zips. Los ajustes nuevos se añaden desde los valores por defecto; los datos existentes nunca se migran.
+`settings.json`, `collections/`, `videos/`, `saved_audio/`, `virtuals/` y `masks/` están en .gitignore y no van en los zips. Los ajustes nuevos se añaden desde los valores por defecto; los datos existentes nunca se migran.
 
 ## Uso independiente (reflib_core)
 

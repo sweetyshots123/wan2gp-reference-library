@@ -705,7 +705,7 @@
             set_key_set: "set", set_fallback: "Local fallback", set_jev_url: "Jev server URL (empty = in process)", set_latest: "Jev: use latest instead of pinned 1.13", set_save: "Save",
             browse: "Media browser", browse_tip: "Browse all images, videos and audio (collections, unassigned pool, folders)", close: "Close (Esc)",
             search_ph: "Search by name…", import: "Import", import_tip: "Upload or drop images, videos or audio here: they go to the unassigned pool",
-            k_all: "All", k_image: "Photos", k_video: "Videos", k_audio: "Audio", k_tip: "Media type", chip_kind: "Type: {k}",
+            k_all: "All", k_image: "Photos", k_video: "Videos", k_audio: "Audio", k_mask: "Masks", k_tip: "Media type", chip_kind: "Type: {k}",
             k_tree: "{i} photos · {v} videos · {a} audio", dur_none: "duration pending…", play: "Play", pause: "Pause",
             to_vctl: "Use as control video", to_vctl_tip: "Put this video in WanGP's control video input", to_vlib: "Add to Video Library", to_vlib_tip: "Copy the selected videos into the Video Library",
             to_audio: "→ {label}", to_audio_tip: "Put this audio in WanGP's \"{label}\" input (shown by the current model)",
@@ -800,7 +800,7 @@
             set_key_set: "guardada", set_fallback: "Respaldo local", set_jev_url: "URL del servidor Jev (vacío = en proceso)", set_latest: "Jev: usar la última en vez de la 1.13 fijada", set_save: "Guardar",
             browse: "Explorador de medios", browse_tip: "Examinar imágenes, vídeos y audios (colecciones, sin colección, carpetas)", close: "Cerrar (Esc)",
             search_ph: "Buscar por nombre…", import: "Importar", import_tip: "Sube o suelta aquí imágenes, vídeos o audios: van a la bolsa sin colección",
-            k_all: "Todo", k_image: "Fotos", k_video: "Vídeos", k_audio: "Audios", k_tip: "Tipo de medio", chip_kind: "Tipo: {k}",
+            k_all: "Todo", k_image: "Fotos", k_video: "Vídeos", k_audio: "Audios", k_mask: "Máscaras", k_tip: "Tipo de medio", chip_kind: "Tipo: {k}",
             k_tree: "{i} fotos · {v} vídeos · {a} audios", dur_none: "duración pendiente…", play: "Reproducir", pause: "Pausa",
             to_vctl: "Usar como vídeo de control", to_vctl_tip: "Pone este vídeo en la entrada de vídeo de control de WanGP", to_vlib: "Añadir a la Librería de vídeos", to_vlib_tip: "Copia los vídeos seleccionados en la Librería de vídeos",
             to_audio: "→ {label}", to_audio_tip: "Pone este audio en la entrada «{label}» de WanGP (la muestra el modelo actual)",
@@ -870,7 +870,7 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "" },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
                    expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
@@ -879,7 +879,7 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
+    const FAST_ACTIONS = new Set(["mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
@@ -901,7 +901,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "" };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -1029,7 +1029,7 @@
         const on = ilib.sel.has(img.hash);
         const when = img.added ? it(img.folders.length && !nc && !img.pool ? "seen_on" : "added_on", { when: whenText(img.added) }) : "";
         const mk = img.kind || "image";   // 1.6.0 media cards: type icon, duration, audio ▶, video hover preview
-        const media = mk !== "image" ? `<span class="reflib-ib-kbadge k-${mk}" aria-hidden="true">${mk === "video" ? "🎬" : "🎵"}</span>
+        const media = mk !== "image" ? `<span class="reflib-ib-kbadge k-${mk}" aria-hidden="true">${mk === "video" ? "🎬" : mk === "mask" ? "🎭" : "🎵"}</span>
                 <span class="reflib-ib-dur" title="${esc(img.dur ? it("pv_dur") : it("dur_none"))}">${img.dur ? esc(fmtDur(img.dur)) : "…"}</span>
                 ${mk === "audio" ? `<button type="button" class="reflib-ib-aplay ${ilib.audioHash === img.hash ? "on" : ""}" data-act="aplay" data-hash="${img.hash}" title="${esc(it(ilib.audioHash === img.hash ? "pause" : "play"))}" aria-label="${esc(it("play"))}">${ilib.audioHash === img.hash ? "❚❚" : "▶"}</button>` : ""}` : "";
         return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${img.virtual ? "virtual" + (img.virtual.broken ? " broken" : "") : ""} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
@@ -1038,6 +1038,8 @@
                 ${img.virtual ? `<span class="reflib-ib-vbadge ${img.virtual.broken ? "broken" : ""}" title="${esc(vct(img.virtual.broken ? "broken_tip" : "badge_tip"))}">${img.virtual.broken ? "⚠ " + esc(vct("broken")) : VICO + esc(vct("badge"))}</span>`
                   : `<span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : img.vl ? pkt("vl_badge") : it("folder_badge"))}</span>`}
                 ${img.vcopies ? `<span class="reflib-ib-vcount" title="${esc(vct("copies_tip", { n: img.vcopies }))}">${VICO}${img.vcopies}</span>` : ""}
+                ${img.masks ? `<span class="reflib-mk-count" title="${esc(mkt("count_tip", { n: img.masks }))}">🎭${img.masks}</span>` : ""}
+                ${img.mask ? `<span class="reflib-mk-of" title="${esc(mkt("of_tip", { video: (img.mask.video_name || "") }))}">${esc(mkt("badge"))}</span>` : ""}
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
                 ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
               <div class="reflib-ib-name" title="${esc(img.names.join(" · "))}">${esc(img.name)}</div>
@@ -1306,7 +1308,7 @@
         };
         for (const f of d.folders) {
             node(f.id, "");
-            for (const [rel, [dc, ac, ki, kv, ka]] of Object.entries((d.tree || {})[f.id] || {})) { const n = node(f.id, rel); n.direct = dc; n.all = ac; n.k = { image: ki || 0, video: kv || 0, audio: ka || 0 }; }
+            for (const [rel, [dc, ac, ki, kv, ka, km]] of Object.entries((d.tree || {})[f.id] || {})) { const n = node(f.id, rel); n.direct = dc; n.all = ac; n.k = { image: ki || 0, video: kv || 0, audio: ka || 0, mask: km || 0 }; }
         }
         ilib.tree = { nodes };
         ilib.treeFor = d.tree;
@@ -1323,12 +1325,12 @@
             const kids = [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
             const open = ilib.expanded.has(n.key);
             const active = cur && cur.fid === n.fid && cur.rel === n.rel;
-            const kc = n.k || { image: n.all, video: 0, audio: 0 };
+            const kc = n.k || { image: n.all, video: 0, audio: 0, mask: 0 };
             const count = ilib.f.kind ? kc[ilib.f.kind] : (ilib.f.sub ? n.all : n.direct);   // 1.6.0: per media type
             const ktip = it("k_tree", { i: kc.image, v: kc.video, a: kc.audio });
-            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.managed === "video_library" ? pkt("vlib_tip") : root.path) : n.rel) + " — " + ktip)}">
+            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.managed === "video_library" ? pkt("vlib_tip") : root.managed === "masks" ? mkt("folder_tip") : root.path) : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
-                <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : root && root.managed === "video_library" ? `<span class="reflib-pk-ticon">${FILM_SVG}</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
+                <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : root && root.managed === "video_library" ? `<span class="reflib-pk-ticon">${FILM_SVG}</span>` : root && root.managed === "masks" ? `<span class="reflib-mk-ticon">🎭</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
                 ${root && !root.virtual && !root.pseudo ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
@@ -1414,13 +1416,14 @@
         if (f.q.trim()) groups.push(chip("q", "", esc(it("chip_search", { q: f.q.trim() })), "q"));
         if (f.jst) groups.push(chip("jst", f.jst, esc(it("jsf_title") + ": " + it("jsf_" + f.jst)), "jst"));
         if (f.kind) groups.push(chip("kind", f.kind, esc(it("chip_kind", { k: it("k_" + f.kind) })), "kind"));
+        if (f.hasmask) groups.push(chip("hasmask", "", esc("🎭 " + mkt("hasmask")), "hasmask"));   // 1.7.0
         if (!groups.length) return "";
         return `<div class="reflib-ib-fchips" title="${esc(it("chips_tip"))}">${join(groups, "chip_and")}<button type="button" class="reflib-ib-fclear" data-act="chipclear">${esc(it("chips_clear"))}</button></div>`;
     }
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = "";
+            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false;
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
         }
@@ -1434,6 +1437,7 @@
             else if (kind === "range") delete f.ranges[k];
             else if (kind === "jst") f.jst = "";
             else if (kind === "kind") f.kind = "";
+            else if (kind === "hasmask") f.hasmask = false;
             else if (kind === "q") { f.q = ""; const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
             newQuery(); return true;
         }
@@ -2028,7 +2032,7 @@
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
               <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}</div>
-              ${vBox}
+              ${vBox}${mkSection(h, pmk, lite, full)}
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
               <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
                   full && full.codec ? full.codec : "", full && full.rate ? (full.rate / 1000) + " kHz" : "", full && full.size ? (full.size > 1048576 ? (full.size / 1048576).toFixed(1) + " MB" : Math.round(full.size / 1024) + " KB") : ""].filter(Boolean).join(" · "))
@@ -2071,7 +2075,9 @@
         const k = inf.kinds || { image: n, video: 0, audio: 0 };
         let html = "";
         const pk = ilib.pick;   // 1.6.8: opened from an input's library button -> "Cargar en «input»" comes first
-        if (pk) { const ok = n === 1 && (k[pk.kind] || 0) === 1;
+        if (pk && pk.mode === "assign") { const ok = n === 1 && (k.video || 0) === 1 && ![...ilib.sel].includes(pk.src);   // 1.7.0
+            html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? mkt("assign_here_tip", { label: pk.label }) : pkt("want_v"))}">🎭 ${esc(mkt("assign_here"))}</button>`; }
+        else if (pk) { const ok = n === 1 && ((k[pk.kind] || 0) + (pk.kind === "mask" ? (k.video || 0) : 0)) === 1;
             html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? pkt("load_tip", { label: pk.label }) : pkt(pk.kind === "audio" ? "want_a" : "want_v"))}">${GRID_SVG}${esc(pkt("load", { label: pk.label }))}</button>`; }
         if (k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
         if (k.video) {
@@ -2258,7 +2264,7 @@
             const card = e.target.closest(".reflib-ib-card");
             if (!card || e.target.closest(".reflib-ib-cb") || !card.dataset.hash) return;
             e.preventDefault();
-            if (ilib.pick) { const x = ilib.q.items[+card.dataset.idx]; if (x && x.kind === ilib.pick.kind) { pickLoad(card.dataset.hash); return; } }   // 1.6.8
+            if (ilib.pick) { const x = ilib.q.items[+card.dataset.idx]; if (x && (x.kind === ilib.pick.kind || (x.kind === "video" && ilib.pick.kind === "mask"))) { pickLoad(card.dataset.hash); return; } }   // 1.6.8
             openLightbox(+card.dataset.idx);
         });
         bg.addEventListener("mousedown", startDrag);
@@ -2462,7 +2468,7 @@
     }
     function locCrumbs(l) {
         const parts = l.rel ? l.rel.split("/") : [];
-        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${l.managed === "virtual" ? VICO : l.managed === "video_library" ? FILM_SVG : ""}${esc(l.managed ? folderLabel(l) : l.root_name)}</button>`;
+        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${l.managed === "virtual" ? VICO : l.managed === "video_library" ? FILM_SVG : l.managed === "masks" ? "🎭 " : ""}${esc(l.managed ? folderLabel(l) : l.root_name)}</button>`;
         parts.forEach((p, k) => { html += `<span>›</span><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="${esc(parts.slice(0, k + 1).join("/"))}">${esc(p)}</button>`; });
         return html + `</div>`;
     }
@@ -2522,7 +2528,7 @@
         m.className = "reflib-ib-ctx";
         const cv = (ilib.q.items[idx] || {}).virtual;   // 1.6.6
         m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + (cv ? vBtn("vedit", h, "reflib-ib-ctxitem", "✎ " + vct("edit"), vct("edit_tip"), cv.broken) + vBtn("vorig", cv.orig, "reflib-ib-ctxitem", vct("show_orig"), vct("show_orig"), cv.broken, true) : cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image"))
-            + (cv && cv.broken ? "" : vBtn("vnew", h, "reflib-ib-ctxitem", vct("new"), vct("new_tip"), false, true)) + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
+            + (cv && cv.broken ? "" : vBtn("vnew", h, "reflib-ib-ctxitem", vct("new"), vct("new_tip"), false, true)) + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + mkCtx(ilib.q.items[idx] || {}) + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2612,7 +2618,7 @@
     }
 
     // ---- 1.6.0 media browser: type filter, durations, audio playback, video hover preview, WanGP audio/video targets
-    const KINDS = ["image", "video", "audio"];
+    const KINDS = ["image", "video", "audio", "mask"];   // 1.7.0 masks are their own type
     const closeAfter = () => localStorage.getItem("reflib_ib_close_after") === "1";
     function fmtDur(sec) {
         const t = Math.max(0, +sec || 0);
@@ -2626,7 +2632,8 @@
         const tot = KINDS.reduce((a, x) => a + (k[x] || 0), 0);
         host.setAttribute("aria-label", it("k_tip"));
         host.innerHTML = [["", it("k_all"), tot]].concat(KINDS.map(x => [x, it("k_" + x), k[x] || 0])).map(([v, l, n]) =>
-            `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${esc(l)} <i>${n}</i></button>`).join("");
+            `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""} ${v === "mask" ? "k-mask" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${v === "mask" ? "🎭 " : ""}${esc(l)} <i>${n}</i></button>`).join("")
+            + `<button type="button" class="reflib-ib-kbtn reflib-mk-hasmask ${ilib.f.hasmask ? "on" : ""}" data-act="hasmask" aria-pressed="${!!ilib.f.hasmask}" title="${esc(mkt("hasmask_tip"))}">🎭 ${esc(mkt("hasmask"))}</button>`;
     }
     const murl = new Map();
     function mediaUrl(h, tries = 0) {
@@ -2657,7 +2664,7 @@
         let timer = null, cur = null;
         const clear = () => { clearTimeout(timer); timer = null; if (cur) { const v = cur.querySelector(".reflib-ib-hvid"); if (v) { try { v.pause(); } catch (e) {} v.remove(); } cur = null; } };
         bg.addEventListener("mouseover", (e) => {
-            const card = e.target.closest(".reflib-ib-card[data-kind='video']");
+            const card = e.target.closest(".reflib-ib-card[data-kind='video'], .reflib-ib-card[data-kind='mask']");
             if (card === cur) return;
             clear();
             if (!card || ilib.drag) return;
@@ -2780,9 +2787,11 @@
         if (act === "pvclose") { setView({ details: false }); }   // 1.5.9: × hides the details panel (same as the header toggle)
         if (act === "vsize") { setView({ thumb: el.dataset.v }); return; }
         if (act === "kind") { ilib.f.kind = el.dataset.v || ""; newQuery(); renderKindBar(); render(); return; }
+        if (act === "hasmask") { ilib.f.hasmask = !ilib.f.hasmask; newQuery(); renderKindBar(); render(); return; }   // 1.7.0
+        if (mkClick(act, el, e)) return;
         if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
         if (act === "topick") { pickLoad([...ilib.sel][0]); return; }   // 1.6.8
-        if (act === "pkcancel") { closeBrowser(); return; }
+        if (act === "pkcancel") { if (ilib.pick && ilib.pick.mode === "assign") mkAssignEnd(); else closeBrowser(); return; }
         if (act === "tovctl") { sendMediaTo("video_guide"); return; }
         if (act === "toaudio") { sendMediaTo(el.dataset.to); return; }
         if (act === "tovlib") { sendIlib(Object.assign({ action: "to_vlib" }, ilib.sel.payload())).then(r => { toast((r && r.message) || "error", r && r.ok ? "ok" : "error"); }).catch(() => {}); return; }
@@ -2895,6 +2904,7 @@
         if (ilib.picker) { ilib.picker = null; renderPicker(); return; }
         if (ilib.faddOpen) { ilib.faddOpen = false; render(); return; }
         if (ilib.sel.size) { ilib.sel.clear(); selChanged(); return; }   // 1st Esc clears, 2nd closes
+        if (ilib.pick && ilib.pick.mode === "assign") { mkAssignEnd(); return; }   // 1.7.0: Esc cancels the assignment only
         closeBrowser();
     }
     // ---- multi-select: Shift ranges (by position in the filtered list, fetched from the server when not loaded)
@@ -3747,6 +3757,7 @@
             const l = b.querySelector(".reflib-sv-lbl"); if (l.textContent !== lbl) l.textContent = lbl;
             if (b.title !== tip) { b.title = tip; b.setAttribute("aria-label", tip); }
             b.classList.toggle("narrow", block.getBoundingClientRect().width < 440);
+            if (f.field === "video_mask") mkMountButton(block, f, b, st);   // 1.7.0 "🎭 Guardar máscara"
         }
     }
     setInterval(mountSaveButtons, 700);
@@ -3799,7 +3810,7 @@
     setInterval(mountPickButtons, 700);
     function pickOpen(block) {
         const f = svField(block); if (!f) return;
-        const kind = SV_AUDIO.test(f.field) ? "audio" : "video";
+        const kind = SV_AUDIO.test(f.field) ? "audio" : f.field === "video_mask" ? "mask" : "video";   // 1.7.0 Video Mask: the masks first
         // the whole library, filtered to that kind (not the folder / tags the browser was last left on); restored on close
         const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
         ilib.pick = { tab: f.tab, field: f.field, kind, label: pkLabel(block, f.field), prevF: prev };
@@ -3822,14 +3833,15 @@
         const pk = ilib.pick;
         el.hidden = !pk;
         if (!pk) { el.innerHTML = ""; return; }
-        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pkt(pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt("hint"))}</small>
+        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pk.mode === "assign" ? mkt("assign_banner", { label: pk.label }) : pkt(pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt("hint"))}</small>
             <button type="button" class="reflib-ib-btn" data-act="pkcancel">${esc(pkt("cancel"))}</button>`;
         if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
     }
     function pickLoad(h) {
         const pk = ilib.pick; if (!pk || !h) return;
         const x = ilib.q.items.find(i => i && i.hash === h) || {};
-        if (x.kind && x.kind !== pk.kind) { toast(pkt(pk.kind === "audio" ? "want_a" : "want_v"), "info"); return; }
+        if (pk.mode === "assign") return mkAssignTo(h, x);   // 1.7.0 "Asignar como máscara de…"
+        if (x.kind && x.kind !== pk.kind && !(pk.kind === "mask" && x.kind === "video")) { toast(pkt(pk.kind === "audio" ? "want_a" : "want_v"), "info"); return; }
         if (x.virtual && x.virtual.broken) { toast(vct("broken_tip"), "error"); return; }
         const name = x.name || "";
         if (x.virtual) toast(pkt("preparing", { name }), "info", [], 3000);   // a virtual copy is rendered first
@@ -3968,6 +3980,243 @@
         }, 1200);
     }
     function vRefresh(h) { ilib.thumbs.delete(h); murl.delete(h); }
+    // ================================================================ 1.7.0 mask library per video
+    // Masks made in WanGP's Video Mask input (mask creator / Matanyone, an upload) are kept with the Control Video they
+    // were made for (its library key: content hash, or the virtual copy). The browser shows them as their own type
+    // ("Máscaras"), counts them on the video cards, lists them in the video's details, and "Usar con máscara" loads the
+    // video into Control Video and the mask into Video Mask together (1.6.9 settle -> send -> verify -> retry).
+    const MFOLDER = "__masks";
+    const MKT = {
+        en: { hasmask: "with mask", hasmask_tip: "Only videos that have at least one mask in the library", count_tip: "{n} mask(s) of this video in the library",
+              badge: "mask", of_tip: "Mask of “{video}”", is_mask: "Mask", mask_of: "Mask of “{video}”", masks: "Masks ({n})", none: "No masks yet.",
+              none_hint: "Put this video in Control Video, make the mask in WanGP's Video Mask (mask creator / Matanyone) and it is kept here.",
+              use: "Use with mask", use_tip: "Load this video into Control Video and this mask into Video Mask", use_video: "Use with its video",
+              use_video_tip: "Load the mask's video into Control Video and the mask into Video Mask", show_video: "Show video", show: "Show in library",
+              preview: "Preview", rename_tip: "Mask name (Enter saves)", del: "Delete", del_tip: "Delete this mask (the video is kept)",
+              assign: "Assign as mask of…", assign_tip: "Keep this video as a mask of another library video", assign_banner: "Choose the video that “{label}” is a mask of",
+              assign_here: "Assign to this video", assign_here_tip: "Keep “{label}” as a mask of the selected video", loading: "Loading masks…",
+              w_dur: "Duration differs: mask {m}, video {v}", w_size: "Size differs: mask {m}, video {v}", w_tip: "WanGP may stretch or cut the mask",
+              using: "Loading “{video}” + “{label}”…", used: "“{video}” in Control Video + “{label}” in Video Mask", use_fail: "Couldn't load the video and its mask",
+              no_vg: "The current model has no Control Video", vm_hidden: "Video Mask is loaded, but the current model hides it: pick a Control Video option that uses a mask",
+              save: "Save mask", save_tip: "Keep this Video Mask in the library as a mask of the current Control Video", undo: "Undo", busy: "Wait: still loading the previous one",
+              src_input: "Video Mask", src_manual: "saved with 🎭", src_history: "generation", src_assign: "assigned", choose: "Choose a mask", folder: "Masks", folder_tip: "Every mask in the library (each one is linked to its video)" },
+        es: { hasmask: "con máscara", hasmask_tip: "Solo los vídeos que tienen al menos una máscara en la librería", count_tip: "{n} máscara(s) de este vídeo en la librería",
+              badge: "máscara", of_tip: "Máscara de «{video}»", is_mask: "Máscara", mask_of: "Máscara de «{video}»", masks: "Máscaras ({n})", none: "Aún no hay máscaras.",
+              none_hint: "Pon este vídeo en Control Video, crea la máscara en Video Mask de WanGP (creador de máscaras / Matanyone) y se guarda aquí.",
+              use: "Usar con máscara", use_tip: "Cargar este vídeo en Control Video y esta máscara en Video Mask", use_video: "Usar con su vídeo",
+              use_video_tip: "Cargar el vídeo de la máscara en Control Video y la máscara en Video Mask", show_video: "Mostrar vídeo", show: "Mostrar en la librería",
+              preview: "Vista previa", rename_tip: "Nombre de la máscara (Intro guarda)", del: "Borrar", del_tip: "Borrar esta máscara (el vídeo se conserva)",
+              assign: "Asignar como máscara de…", assign_tip: "Guardar este vídeo como máscara de otro vídeo de la librería", assign_banner: "Elige el vídeo del que «{label}» es máscara",
+              assign_here: "Asignar a este vídeo", assign_here_tip: "Guardar «{label}» como máscara del vídeo seleccionado", loading: "Cargando máscaras…",
+              w_dur: "Duración distinta: máscara {m}, vídeo {v}", w_size: "Tamaño distinto: máscara {m}, vídeo {v}", w_tip: "WanGP puede estirar o cortar la máscara",
+              using: "Cargando «{video}» + «{label}»…", used: "«{video}» en Control Video + «{label}» en Video Mask", use_fail: "No se pudo cargar el vídeo con su máscara",
+              no_vg: "El modelo actual no tiene Control Video", vm_hidden: "Video Mask está cargado, pero el modelo actual lo oculta: elige en Control Video una opción que use máscara",
+              save: "Guardar máscara", save_tip: "Guardar esta Video Mask en la librería como máscara del Control Video actual", undo: "Deshacer", busy: "Espera: aún se está cargando la anterior",
+              src_input: "Video Mask", src_manual: "guardada con 🎭", src_history: "generación", src_assign: "asignada", choose: "Elige una máscara", folder: "Máscaras", folder_tip: "Todas las máscaras de la librería (cada una unida a su vídeo)" }
+    };
+    const mkt = (k, p = {}) => String((MKT[lang()] || MKT.en)[k] || MKT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    const mk = { list: new Map(), info: new Map(), loading: new Set(), asked: new Set(), busy: false, play: null, last: null };
+    const mkStem = (n) => String(n || "").replace(/\.[A-Za-z0-9]{1,5}$/, "");
+    function mkChanged() { mk.list.clear(); mk.info.clear(); if (ilib.open) { refreshData(); renderPreview(); } }
+    function mkLoad(kind, h) {
+        const key = kind + h; if (mk.loading.has(key)) return;
+        mk.loading.add(key);
+        sendIlib(kind === "l" ? { action: "mask_list", video: h } : { action: "mask_info", hash: h }).then(r => {
+            mk.loading.delete(key);
+            if (!r || !r.ok) return;
+            (kind === "l" ? mk.list : mk.info).set(h, r);
+            mkThumbs((r.masks || []).map(m => m.hash));
+            if (ilib.preview === h) renderPreview();
+        }).catch(() => mk.loading.delete(key));
+    }
+    function mkThumbs(hs) {
+        const want = hs.filter(x => x && !ilib.thumbs.has(x) && !mk.asked.has(x)); if (!want.length) return;
+        want.forEach(x => mk.asked.add(x));
+        sendIlib({ action: "thumbs", hashes: want }).then(r => {
+            let n = 0; for (const x of want) if (r && r.thumbs && r.thumbs[x]) { rememberThumb(x, r.thumbs[x]); n++; }
+            if (r && r.pending && r.pending.length) setTimeout(() => { r.pending.forEach(x => mk.asked.delete(x)); mkThumbs(r.pending); }, 600);
+            if (n) renderPreview();
+        }).catch(() => {});
+    }
+    const mkFacts = (m) => [m.created ? whenText(m.created) : "", m.w ? `${m.w}×${m.h}` : "", m.dur ? fmtDur(m.dur) : "", mkt("src_" + (m.source || "input"))].filter(Boolean).join(" · ");
+    function mkWarn(m) {
+        return (m.mismatch || []).map(x => `<div class="reflib-mk-warn" title="${esc(mkt("w_tip"))}">⚠ ${esc(x.what === "duration"
+            ? mkt("w_dur", { m: (+x.mask).toFixed(1) + " s", v: (+x.video).toFixed(1) + " s" })
+            : mkt("w_size", { m: Array.isArray(x.mask) ? x.mask.join("×") : x.mask, v: Array.isArray(x.video) ? x.video.join("×") : x.video }))}</div>`).join("");
+    }
+    function mkRow(m, vh, vname) {
+        const th = ilib.thumbs.get(m.hash), playing = mk.play === m.id;
+        return `<div class="reflib-mk-row" data-mid="${esc(m.id)}">
+            <button type="button" class="reflib-mk-th ${playing ? "on" : ""}" data-act="mkplay" data-mid="${esc(m.id)}" data-hash="${esc(m.hash || "")}" title="${esc(mkt("preview"))}">${th ? `<img src="${th}" alt="">` : "🎭"}<span class="reflib-mk-pl">${playing ? "❚❚" : "▶"}</span></button>
+            <div class="reflib-mk-meta"><input type="text" class="reflib-mk-label" data-mid="${esc(m.id)}" value="${esc(m.label)}" maxlength="80" title="${esc(mkt("rename_tip"))}" aria-label="${esc(mkt("rename_tip"))}">
+              <div class="reflib-ib-muted">${esc(mkFacts(m))}</div>${mkWarn(m)}</div>
+            <div class="reflib-mk-acts"><button type="button" class="reflib-ib-btn reflib-ib-primary reflib-mk-use" data-act="mkuse" data-mid="${esc(m.id)}" data-video="${esc(vh)}" data-vname="${esc(vname)}" data-label="${esc(m.label)}" title="${esc(mkt("use_tip"))}">🎭 ${esc(mkt("use"))}</button>
+              <button type="button" class="reflib-ib-btn reflib-mk-del" data-act="mkdel" data-mid="${esc(m.id)}" title="${esc(mkt("del_tip"))}" aria-label="${esc(mkt("del_tip"))}">🗑</button></div>
+            ${playing ? `<video class="reflib-mk-vid" autoplay loop muted playsinline controls></video>` : ""}</div>`;
+    }
+    function mkSection(h, pmk, lite, full) {
+        const pure = !!((full && full.mask) || (lite && lite.kind === "mask"));   // only a mask
+        const isMask = pure || !!(lite && lite.mask);   // or a library video that is also a mask of another video
+        let html = "";
+        if (isMask) {
+            const inf = mk.info.get(h);
+            if (!inf) { mkLoad("i", h); html = `<div class="reflib-mk-box"><div class="reflib-mk-head">🎭 ${esc(mkt("is_mask"))}</div><div class="reflib-ib-muted">${esc(mkt("loading"))}</div></div>`; }
+            else html = (inf.masks || []).map(m => `<div class="reflib-mk-box is-mask" data-mid="${esc(m.id)}"><div class="reflib-mk-head">🎭 ${esc(mkt("mask_of", { video: mkStem(m.video_name) || "?" }))}</div>
+                <input type="text" class="reflib-mk-label" data-mid="${esc(m.id)}" value="${esc(m.label)}" maxlength="80" title="${esc(mkt("rename_tip"))}" aria-label="${esc(mkt("rename_tip"))}">
+                <div class="reflib-ib-muted">${esc(mkFacts(m))}</div>${mkWarn(m)}
+                <div class="reflib-ib-pvbtns"><button type="button" class="reflib-ib-btn reflib-ib-primary reflib-mk-use" data-act="mkuse" data-mid="${esc(m.id)}" data-video="${esc(m.video || "")}" data-vname="${esc(m.video_name)}" data-label="${esc(m.label)}" title="${esc(mkt("use_video_tip"))}">🎭 ${esc(mkt("use_video"))}</button>
+                  <button type="button" class="reflib-ib-btn" data-act="mkvideo" data-hash="${esc(m.video || "")}" data-virtual="${m.virtual ? 1 : ""}">${esc(mkt("show_video"))}</button>
+                  <button type="button" class="reflib-ib-btn" data-act="mkassign" data-hash="${esc(h)}" title="${esc(mkt("assign_tip"))}">${esc(mkt("assign"))}</button>
+                  <button type="button" class="reflib-ib-btn reflib-mk-del" data-act="mkdel" data-mid="${esc(m.id)}" title="${esc(mkt("del_tip"))}">🗑 ${esc(mkt("del"))}</button></div></div>`).join("");
+        }
+        if (pmk !== "video" || pure) return html;
+        const L = mk.list.get(h);
+        if (!L) { mkLoad("l", h); return html + `<div class="reflib-mk-box"><div class="reflib-mk-head">🎭 ${esc(mkt("masks", { n: "…" }))}</div></div>`; }
+        const ms = L.masks || [], vname = (L.video_facts && L.video_facts.name) || (lite && lite.name) || "";
+        return html + `<div class="reflib-mk-box"><div class="reflib-mk-head">🎭 ${esc(mkt("masks", { n: ms.length }))}</div>
+            ${ms.length ? `<div class="reflib-mk-list">${ms.map(m => mkRow(m, h, vname)).join("")}</div>` : `<div class="reflib-ib-muted">${esc(mkt("none"))} ${esc(mkt("none_hint"))}</div>`}</div>`;
+    }
+    function mkCtx(x) {
+        if (!x || !x.hash) return "";
+        let s = "";
+        if (x.mask) s += `<button type="button" class="reflib-ib-ctxitem" data-act="mkuse" data-mid="${esc(x.mask.id)}" data-video="${esc(x.mask.video || "")}" data-vname="${esc(x.mask.video_name || "")}" data-label="${esc(x.mask.label || "")}">🎭 ${esc(mkt("use_video"))}</button>`;
+        if (x.kind === "video" && x.masks) s += `<button type="button" class="reflib-ib-ctxitem" data-act="mkpick" data-hash="${esc(x.hash)}">🎭 ${esc(mkt("use"))}…</button>`;
+        if ((x.kind === "video" || x.kind === "mask") && !(x.virtual && x.virtual.broken)) s += `<button type="button" class="reflib-ib-ctxitem" data-act="mkassign" data-hash="${esc(x.hash)}">🎭 ${esc(mkt("assign"))}</button>`;
+        return s;
+    }
+    async function mkPlay(btn) {
+        const id = btn.dataset.mid;
+        if (mk.play === id) { mk.play = null; renderPreview(); return; }
+        mk.play = id; renderPreview();
+        const u = await mediaUrl(btn.dataset.hash);
+        const v = ilib.root && ilib.root.querySelector(`.reflib-mk-row[data-mid="${id}"] .reflib-mk-vid`);
+        if (v && u && mk.play === id) { v.src = u; v.play().catch(() => {}); }
+    }
+    function mkDelete(ids) {
+        sendIlib({ action: "mask_delete", ids }).then(r => {
+            if (!r || !r.ok) return;
+            mk.play = null; mkChanged();
+            toast(r.message, "ok", [{ label: mkt("undo"), onClick: () => sendIlib({ action: "mask_undo", token: r.token }).then(u => { if (u && u.ok) { toast(u.message, "ok"); mkChanged(); } }) }], 12000);
+        }).catch(() => {});
+    }
+    function mkRename(inp) {
+        const v = inp.value.trim(); if (!v || v === inp.defaultValue) { inp.value = inp.defaultValue; return; }
+        sendIlib({ action: "mask_rename", mid: inp.dataset.mid, label: v }).then(r => {
+            if (r && r.ok) { inp.defaultValue = r.mask.label; toast(r.message, "ok", [], 2500); mkChanged(); } else if (r && r.error) toast(r.error, "error");
+        }).catch(() => {});
+    }
+    document.addEventListener("change", (e) => { const t = e.target; if (t && t.classList && t.classList.contains("reflib-mk-label")) mkRename(t); }, true);
+    document.addEventListener("keydown", (e) => {
+        const t = e.target; if (!(t && t.classList && t.classList.contains("reflib-mk-label"))) return;
+        e.stopPropagation();   // typing a name never triggers the browser's shortcuts (Delete, arrows…)
+        if (e.key === "Enter") { e.preventDefault(); t.blur(); } else if (e.key === "Escape") { e.preventDefault(); t.value = t.defaultValue; t.blur(); }
+    }, true);
+    function mkAssignStart(h) {
+        const x = ilib.q.items.find(i => i && i.hash === h) || {};
+        const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
+        ilib.pick = { mode: "assign", src: h, kind: "video", label: (x.mask && x.mask.label) || mkStem(x.name) || "", prevF: prev };
+        Object.assign(ilib.f, { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false,
+                                atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind: "video", hasmask: false });
+        const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
+        ilib.sel.clear(); ilib.anchorIdx = -1;
+        newQuery(); renderKindBar(); render(); pkBanner();
+    }
+    function mkAssignEnd() { pickEnd(); newQuery(); renderKindBar(); render(); }
+    function mkAssignTo(h, x) {
+        const pk = ilib.pick;
+        if ((x.kind && x.kind !== "video") || h === pk.src) { toast(pkt("want_v"), "info"); return; }
+        return sendIlib({ action: "mask_assign", src: pk.src, video: h }).then(r => {
+            if (r && r.ok) {
+                mkAssignEnd(); mk.list.clear(); mk.info.clear();
+                toast(r.message, "ok", [{ label: mkt("undo"), onClick: () => mkDelete([r.mask.id]) }], 10000);
+                focusImage && focusImage(h);
+            } else toast((r && r.error) || mkt("use_fail"), "error");
+            return r;
+        }).catch(() => {});
+    }
+    async function mkUse(mid, vh, vname, label) {   // the video -> Control Video + the mask -> Video Mask, verified
+        if (mk.busy) { toast(mkt("busy"), "info"); return false; }
+        if (!hmBlock("video_guide")) { toast(mkt("no_vg"), "error"); return false; }
+        mk.busy = true;
+        const names = { video: mkStem(vname) || "?", label: label || "?" };
+        const mark = { t: Date.now() - 1200, w: settleWatch(), blk: settingsBlock() };
+        mk.last = { mid, vh, phase: "send", round: 0, ok: null };
+        toast(mkt("using", names), "info", [], 3000);
+        try {
+            for (let k = 1; k <= HM_TRIES; k++) {
+                mk.last.round = k;
+                await waitSettled(mark, k === 1 ? 400 : 1500, 30000);
+                const r = await sendBridge({ pair: { video: vh, mask: mid }, target: "generate:history" }).catch(() => null);
+                if (!r || !r.ok) { if (!(r && r.error)) toast(mkt("use_fail"), "error"); mk.last.ok = false; return false; }   // r.error: shown by handleToast
+                const shown = ["video_guide", "video_mask"].filter(f => (r.restored || []).includes(f) && hmBlock(f) && hmBlock(f).getClientRects().length);
+                mk.last.phase = "watch";
+                const lost = await watchStuck(shown.length ? shown : ["video_guide"], mark);
+                if (!lost.length) {
+                    mk.last.ok = true;
+                    toast(mkt("used", names), "ok");
+                    const vm = hmBlock("video_mask");
+                    if (!vm || !vm.getClientRects().length) toast(mkt("vm_hidden"), "info", [], 9000);
+                    if (ilib.open) closeBrowser();
+                    return true;
+                }
+                console.info("[Reference Library] WanGP emptied", lost.join(", "), "while loading the video + mask; sending again (" + k + ")");
+                if (k < HM_TRIES) toast(ht("restore_again"), "info");
+            }
+            mk.last.ok = false; toast(mkt("use_fail"), "error"); return false;
+        } finally { mark.w.obs && mark.w.obs.disconnect(); mk.busy = false; if (mk.last) mk.last.phase = "idle"; }
+    }
+    async function mkPick(h) {   // context menu "Usar con máscara…": one mask -> use it; several -> the details list
+        const r = await sendIlib({ action: "mask_list", video: h }).catch(() => null);
+        const ms = (r && r.masks) || [];
+        if (ms.length === 1) { const x = ilib.q.items.find(i => i && i.hash === h) || {}; return mkUse(ms[0].id, h, x.name, ms[0].label); }
+        if (r) mk.list.set(h, r);
+        if (!viewPref().details) setView({ details: true }); else renderPreview();
+        toast(mkt("choose"), "info", [], 2500);
+    }
+    function mkClick(act, el, e) {
+        if (!act || act.slice(0, 2) !== "mk") return false;
+        if (e) e.stopPropagation();
+        closeCtx();
+        if (act === "mkuse") mkUse(el.dataset.mid, el.dataset.video, el.dataset.vname, el.dataset.label);
+        else if (act === "mkdel") mkDelete([el.dataset.mid]);
+        else if (act === "mkplay") mkPlay(el);
+        else if (act === "mkassign") mkAssignStart(el.dataset.hash);
+        else if (act === "mkpick") mkPick(el.dataset.hash);
+        else if (act === "mkvideo") { if (el.dataset.virtual) vShowCopy(el.dataset.hash); else vShowOriginal(el.dataset.hash); }
+        else if (act === "mkshow") locateTo(MFOLDER, "", el.dataset.hash);
+        else return false;
+        return true;
+    }
+    function maskEvent(raw) {   // Video Mask changed and the mask was kept (setting "mask_autosave") / "🎭 Guardar máscara"
+        let r = raw; if (typeof raw === "string") { if (!raw) return; try { r = JSON.parse(raw); } catch (e) { return; } }
+        if (!r) return;
+        if (!r.ok) { if (r.error) toast(r.error, r.code === "no_video" || r.code === "no_mask" ? "info" : "error"); return; }
+        mkChanged();
+        if (r.video_added) reloadVideos();
+        const btns = r.created ? [{ label: mkt("undo"), onClick: () => mkDelete([r.mask.id]) }] : [];
+        toast(r.message, r.created ? "ok" : "info", btns, r.created ? 10000 : 4000);
+    }
+    function mkMountButton(block, f, svb, st) {
+        const bar = svb && svb.parentElement;
+        let b = block.querySelector(".reflib-mk-btn");
+        if (!bar) { if (b) b.hidden = true; return; }
+        if (!b || b.parentElement !== bar) {
+            if (b) b.remove();
+            b = document.createElement("button"); b.type = "button"; b.className = "reflib-sv-btn reflib-mk-btn";
+            b.innerHTML = '<span class="reflib-sv-ico" aria-hidden="true">🎭</span><span class="reflib-sv-lbl"></span>';
+            b.addEventListener("click", (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if (b.disabled) return; b.disabled = true;
+                sendBridge({ action: "mask_save", target: `${f.tab}:mask` }).then(r => { if (r && r.ok) maskEvent(r); })   // errors: handleToast already shows them.catch(() => {}).finally(() => { b.disabled = false; });
+            });
+            svb.after(b);
+        }
+        b.hidden = !st.url;
+        const lbl = mkt("save"), tip = mkt("save_tip");
+        const l = b.querySelector(".reflib-sv-lbl"); if (l.textContent !== lbl) l.textContent = lbl;
+        if (b.title !== tip) { b.title = tip; b.setAttribute("aria-label", tip); }
+        b.classList.toggle("narrow", block.getBoundingClientRect().width < 440);
+    }
     async function vOpen(h, mode) {
         if (!h) return null;
         const src = await sendIlib({ action: "virt_src", hash: h }).catch(() => null);
@@ -4293,12 +4542,12 @@
             [{ label: t("undo"), onClick: () => sendBridge({ action: "save_input_undo", target: tgt, kind: "virtual", ref: r.virtual_id }).then(u => { if (u && u.ok) toast(vct("sv_undone"), "info"); }) }], 9000);
         return r;
     }
-    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f && f.managed === "video_library") ? pkt("vlib") : (f ? f.name : "");
+    const folderLabel = (f) => (f && f.managed === "masks") ? mkt("folder") : (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f && f.managed === "video_library") ? pkt("vlib") : (f ? f.name : "");
     window.referenceLibrary = {
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

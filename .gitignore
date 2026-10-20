@@ -39,3 +39,4 @@ __pycache__/
 .resize_tmp/
 saved_audio/
 virtuals/
+/masks/

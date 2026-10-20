@@ -144,6 +144,7 @@ def list_images() -> List[Dict[str, Any]]:
             by_hash[h].setdefault("added", 0.0)
         _vlib_entries(by_hash, order, tags)
         _virtual_entries(by_hash, order, tags)
+        _mask_entries(by_hash, order, tags)
         for h in order:
             by_hash[h].setdefault("in_pool", False)
             by_hash[h].setdefault("folders", [])
@@ -194,6 +195,38 @@ def _vlib_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Di
         if [VLFOLDER, ""] not in e["locs"]:
             e["locs"].append([VLFOLDER, ""])
         e["vlib"] = v.get("id")
+
+
+def _mask_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
+    """1.7.0: masks (masks/<id>/<file>) as library items of kind "mask" in the pseudo folder "🎭 Máscaras". A mask file
+    that is also in a watched folder is the same item: it just becomes a mask (and gains the pseudo folder)."""
+    try:
+        from . import masks as _mk
+        ms = _mk.entries()
+    except Exception as e:
+        print(f"[Reference Library] mask library unavailable: {e}")
+        return
+    for m in ms:
+        p = _mk.path_of(m)
+        if not os.path.isfile(p):
+            continue
+        h = m.get("fhash") or ""
+        if not _HASH_RE.match(h):
+            continue
+        e = by_hash.get(h)
+        if e is None:
+            e = by_hash[h] = {"hash": h, "name": m.get("label") or m["file"], "names": [m.get("label") or m["file"]], "file": m["file"],
+                              "path": p, "collections": [], "tags": list(tags.get(h, [])), "in_pool": False, "folders": [], "files": [],
+                              "locs": [], "added": float(m.get("created") or 0)}
+            order.append(h)
+        elif e.get("virtual"):
+            continue
+        if not os.path.isfile(e.get("path") or ""):
+            e["path"] = p
+        e.setdefault("locs", [])
+        if [_mk.MFOLDER, ""] not in e["locs"]:
+            e["locs"].append([_mk.MFOLDER, ""])
+        e.setdefault("mask", []).append({"id": m["id"], "video": m.get("video"), "label": m.get("label") or "", "video_name": m.get("video_name") or ""})
 
 
 def _virtual_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
@@ -585,6 +618,9 @@ def _preview(img: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
             out["locations"] = (locate(img["hash"]) or {}).get("folders", [])
             out.pop("path", None)
             src = next((c for c in [img["path"]] + list(img.get("files") or []) if os.path.isfile(c)), img["path"])
+            if img["kind"] == "mask":   # 1.7.0: a mask is a video for preview / playback
+                out["mask"] = True
+                img = dict(img, kind="video")
             img = dict(img, path=src)
             out["kind"] = img["kind"]
             if img["kind"] != "image":   # 1.6.0: poster / waveform + a playable URL for this one file
@@ -1551,7 +1587,8 @@ def _index_key() -> tuple:
     out = [("auto", _auto_map()[0])]
     from . import virtuals as _vc
     from . import videostore as _vs
-    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path(), _vc.index_path(), _vs._index_path()):
+    from . import masks as _mk
+    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path(), _vc.index_path(), _vs._index_path(), _mk.index_path()):
         try:
             st = os.stat(p)
             out.append((p, st.st_mtime_ns, st.st_size))
@@ -1581,8 +1618,8 @@ def catalog() -> Dict[str, Any]:
                       "locs": tuple((intern(a), intern(b)) for a, b in i["locs"]), "tags": tuple(i["tags"]),
                       "tagf": frozenset(_fold(t) for t in i["tags"]), "fold": fold, "added": i["added"],
                       "auto": amap.get(i["hash"], frozenset()), "body": bmap.get(i["hash"]),
-                      "kind": (i["virtual"]["kind"] if i.get("virtual") else (kind_of(i["path"]) or kind_of(i["name"]) or "image")),
-                      "virtual": i.get("virtual")})
+                      "kind": ("mask" if i.get("mask") and all(fid == "__masks" for fid, _ in (i.get("locs") or [])) else i["virtual"]["kind"] if i.get("virtual") else (kind_of(i["path"]) or kind_of(i["name"]) or "image")),
+                      "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ())})
     folders = list_folders()
     nvirt = sum(1 for i in items if i["virtual"])
     if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
@@ -1593,6 +1630,15 @@ def catalog() -> Dict[str, Any]:
     if nvl:   # 1.6.8 pseudo folder "🎬 Librería de vídeos" (no rescan / remove / reveal)
         folders.insert(0, {"id": VLFOLDER, "path": "", "recursive": False, "count": nvl, "missing": False, "name": "video_library",
                            "managed": "video_library", "pseudo": True})
+    nmask = sum(1 for i in items if i["mask"])
+    if nmask:   # 1.7.0 pseudo folder "🎭 Máscaras" (no rescan / remove / reveal)
+        from . import masks as _mk
+        folders.append({"id": _mk.MFOLDER, "path": "", "recursive": False, "count": nmask, "missing": False, "name": "masks",
+                        "managed": "masks", "pseudo": True})
+    mcount: Dict[str, int] = {}
+    for i in items:
+        for m in i["mask"]:
+            mcount[m["video"]] = mcount.get(m["video"], 0) + 1
     vcount: Dict[str, int] = {}
     for i in items:
         if i["virtual"]:
@@ -1610,11 +1656,16 @@ def catalog() -> Dict[str, Any]:
             for k in range(len(parts), -1, -1):
                 subtree[fid].setdefault("/".join(parts[:k]), set()).add(i["hash"])
 
-    def _cnt(s):   # 1.6.0: [direct, subtree, subtree images, videos, audios]
-        c = {"image": 0, "video": 0, "audio": 0}
+    mask_by = {i["hash"] for i in items if i["mask"]}
+
+    def _cnt(s):   # 1.6.0: [direct, subtree, subtree images, videos, audios] + 1.7.0 masks (pure masks are not videos)
+        c = {"image": 0, "video": 0, "audio": 0, "mask": 0}
         for h in s:
-            c[kind_by.get(h, "image")] += 1
-        return [c["image"], c["video"], c["audio"]]
+            k = kind_by.get(h, "image")
+            c[k] += 1
+            if k != "mask" and h in mask_by:
+                c["mask"] += 1
+        return [c["image"], c["video"], c["audio"], c["mask"]]
     tree = {fid: {rel: [len(direct[fid].get(rel, ())), len(s)] + _cnt(s) for rel, s in subtree[fid].items()} for fid in subtree}
     # 1.5.5: folder-name search. One folded "path" string per tree node (hundreds, not 11k), matched once per query.
     fpath = {f["id"]: f["path"].replace("\\", "/").rstrip("/") for f in folders}
@@ -1628,10 +1679,10 @@ def catalog() -> Dict[str, Any]:
     data = {"rev": _cat["rev"], "items": items, "by_hash": {i["hash"]: i for i in items}, "tree": tree, "nodefold": nodefold,
             "tags": sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"]))),
             "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"]),
-            "kinds": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, "vcount": vcount}
+            "kinds": dict({k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, mask=nmask), "vcount": vcount, "mcount": mcount}
     try:   # 1.6.0: durations of every video/audio, probed in the background (throttled), never on this path
         from . import mediainfo
-        mediainfo.want((i["hash"], i["path"], i["kind"]) for i in items if i["kind"] != "image" and not i["virtual"])
+        mediainfo.want((i["hash"], i["path"], "video" if i["kind"] == "mask" else i["kind"]) for i in items if i["kind"] != "image" and not i["virtual"])
     except Exception:
         pass
     with _cat_lock:
@@ -1652,7 +1703,8 @@ def _clean_filter(f) -> Dict[str, Any]:
             "node": {"fid": str(node.get("fid") or ""), "rel": str(node.get("rel") or "")} if node and not f.get("recent") and not f.get("used") else None,
             "sub": f.get("sub", True) is not False, "recent": bool(f.get("recent")) and not f.get("used"), "used": bool(f.get("used")),
             "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1))),
-            "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS else ""}
+            "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS + ("mask",) else "",
+            "hasmask": bool(f.get("hasmask"))}
 
 
 def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
@@ -1707,9 +1759,15 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
         qnodes = {k for k, fs in (cat.get("nodefold") or {}).items() if q in fs}
 
     kind = f["kind"]
+    mcount = cat.get("mcount") or {} if f.get("hasmask") else None
 
     def ok(i):
-        if kind and i["kind"] != kind:
+        if kind == "mask":   # 1.7.0: every item kept as a mask (a pure mask, or a library video that is also one)
+            if not i["mask"]:
+                return False
+        elif kind and i["kind"] != kind:
+            return False
+        if mcount is not None and not mcount.get(i["hash"]):   # 1.7.0 "solo vídeos con máscara"
             return False
         if cols or none:
             if not (cols & i["colids"]) and not (none and i["in_pool"] and not i["colids"]):
@@ -1774,6 +1832,13 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
             out["dur"] = mi.get("duration") or 0
     if not i["folders"] and not i["colids"] and not i["in_pool"] and any(l[0] == VLFOLDER for l in i.get("locs") or ()):
         out["vl"] = True   # 1.6.8: only in the Video Library
+    if i.get("mask"):   # 1.7.0
+        m = i["mask"][0]
+        out["mask"] = {"id": m["id"], "video": m["video"], "label": m["label"], "video_name": m.get("video_name") or "", "n": len(i["mask"])}
+    else:
+        mn = (catalog().get("mcount") or {}).get(i["hash"])
+        if mn:
+            out["masks"] = mn
     v = i.get("virtual")
     if v:   # 1.6.6
         out["virtual"] = {"orig": v["orig"], "broken": v["broken"]}
@@ -1789,9 +1854,11 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
 def kind_counts(f) -> Dict[str, int]:
     """1.6.0: images / videos / audio over the current filter without its type (the Todo/Fotos/Vídeos/Audios chips)."""
     base = dict(f if isinstance(f, dict) else {}, kind="")
-    c = {k: 0 for k in KINDS}
+    c = {k: 0 for k in KINDS + ("mask",)}
     for i in filtered(base)["items"]:
         c[i["kind"]] += 1
+        if i["mask"] and i["kind"] != "mask":   # 1.7.0: a library video that is also a mask counts in both
+            c["mask"] += 1
     return c
 
 
@@ -1902,7 +1969,7 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
     by = catalog()["by_hash"]
     n = deletable = folder_only = on_disk = in_one = nvirt = 0
     cols, tags = set(), {}
-    kinds = {k: 0 for k in KINDS}
+    kinds = {k: 0 for k in KINDS + ("mask",)}
     for h in hashes:
         i = by.get(h)
         if not i:

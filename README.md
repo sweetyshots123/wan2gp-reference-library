@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.9 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.7.0 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -50,6 +50,18 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Folder tree** (left sidebar, 1.4.1): every watched root, expandable into its subfolders as on disk, with image counts. Click a folder to filter the grid; *Include subfolders* switches between the whole subtree and that folder only. A breadcrumb above the grid shows the path; click a segment or ↑ to go up. The folder filter combines with the collection and tag filters. Each root has ⟳ (re-scan) and × (remove, two clicks) on hover. Images are **read in place**: never copied, moved, modified or deleted, so they use no extra space. They're re-scanned whenever the modal opens and with **Re-scan** (unchanged files are not re-hashed). Moved or deleted files just drop out or reappear at their new path; a missing folder is flagged. Adding a folder image to a collection **copies** it, so collections stay self-contained. *Remove* (two clicks) only removes the folder from the index. Index: `folders/index.json`; thumbnails cached in `collections/.thumbs/`.
 - **Add to references** (selection footer) appends only the selected images to WanGP's Reference Images through the same gallery path as a collection apply. Images already in the gallery are skipped and nothing is replaced. Folder images are read from where they are; they aren't copied into a collection. *Close after adding* closes the modal afterwards (remembered). If the current model has no Reference Images, you get an error.
 - Click an image for a larger preview, its collections, files and tags. **Esc** or **×** closes; the bars and manager refresh.
+
+## Mask library per video (1.7.0)
+
+Masks you make in WanGP's **Video Mask** (mask creator / Matanyone, or an upload) are kept in the library **with the Control Video they were made for**. They are linked by the video's content (the same file loaded from anywhere is the same video). A virtual copy with a trim or crop has **its own** masks.
+
+- **Saving:** with **Keep the masks I make in Video Mask in the mask library** on (Settings, default on), a new Video Mask value is kept as a mask of the current Control Video. If that video isn't in the library yet, it is added to the Video Library. Generations that used a Control Video and a Video Mask also keep their mask, when the video is already in the library. Next to 📚 in the Video Mask toolbar, **🎭 Guardar máscara** saves it by hand. The same mask is never stored twice for one video.
+- **Explorer:** the type bar has **🎭 Máscaras** and a **🎭 con máscara** filter (only videos with masks). Masks kept only in the mask library aren't listed under Vídeos; a library video assigned as a mask is listed in both. Video cards show **🎭n**, and mask cards a **máscara** tag. Masks also have a **🎭 Máscaras** folder.
+- **Details of a video:** **Máscaras (n)**, newest first, each with a thumbnail and ▶ preview, its date, size, length and source, an editable name (Enter saves), **Usar con máscara** and 🗑 (with Undo). A ⚠ warning appears when the mask's **length or size differs** from the video's (a virtual copy is checked against its trimmed / cropped size). Deleting a mask **never deletes the video**.
+- **Details of a mask:** «Máscara de «vídeo»», **Usar con su vídeo**, **Mostrar vídeo**, **Asignar como máscara de…** and **Borrar**.
+- **Usar con máscara** puts the video into **Control Video** and the mask into **Video Mask** in one action. It uses the 1.6.9 settle → send → check → resend logic, so it works while WanGP is busy. If the current model hides Video Mask, a notice tells you to pick a Control Video option that uses a mask.
+- **Asignar como máscara de…** (right-click a video or mask, or the mask's details): pick the video it belongs to (double-click, or **Asignar a este vídeo**; Esc cancels). The file stays where it is.
+- The Video Mask library button opens on **Máscaras** (plain videos can still be picked).
 
 ## Virtual copies (1.6.6)
 
@@ -267,11 +279,11 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 - It follows its **own** setting **Image crops made with Cropper** (*Save to the “Crops” collection automatically* / *Ask each time* / *Don't save*), separate from the video one. The toast (with the **Save to the collection** button in *Ask* mode) appears when the cropped image lands in one of the image inputs. The Control Image is a PIL image without a file name, so there the newest crop notice (< 20 s) is used.
 - **Duplicates:** never twice in the same collection: same bytes (sha256) or same `meta["dedupe_key"]`. Collections in the undo trash don't count. **Restore-aware:** if you delete the “Crops” collection, crop again (a new one is created) and then **Undo** the delete, the newer collection is merged back into the restored one (duplicates skipped) and removed, and a message says how many crops were moved.
 
-**Python API** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 5**; check `>= 1` for collections only, `>= 2` for videos, `>= 3` for `add_image`, `>= 4` for `list_images` / tags, `>= 5` for the generation history, below):
+**Python API** (`sys.modules["wan2gp_reference_library_api"]`, **`API_VERSION` 6**; check `>= 1` for collections only, `>= 2` for videos, `>= 3` for `add_image`, `>= 4` for `list_images` / tags, `>= 5` for the generation history, `>= 6` for masks, below):
 
 | Function | Returns |
 |---|---|
-| `API_VERSION` | `5` (v1–v4 functions unchanged) |
+| `API_VERSION` | `6` (v1–v5 functions unchanged) |
 | `list_collections()` | `[{id, name, count, cover_path or None, updated}]`, sorted by name |
 | `get_collection(cid)` | `{id, name, count, cover_path, updated, created, images: [absolute paths]}` or `None` |
 | `image_paths(cid)` | absolute image paths in collection order, `[]` if not found |
@@ -283,6 +295,14 @@ def _offer_image_to_reference_library(out, src, spec, name, target):
 | `list_tags()` / `image_tags(sha256)` | (v4) `[{tag, count}]` / `["tag", …]` |
 | `image_crop_policy()` / `crop_policy()` | `"auto"`, `"ask"` or `"off"` (images / videos) |
 | `add_video(path, name=None, source="cropper", meta=None)` | video id or `None`; never raises. `source="cropper"` follows the crop setting; any other source always saves. `name` defaults to the file name. `meta` is a small JSON-able dict (≤ 4 KB) stored with the entry. |
+
+**Mask API (API v6, Reference Library 1.7.0).** Read-only, never raises, returns copies.
+
+| Function | Returns |
+|---|---|
+| `list_masks(video_path) -> list[dict]` | the masks kept for that video (any copy of the same file), newest first: `[{id, label, path, video, video_name, w, h, dur, created, source}]`; `[]` when unknown |
+| `get_mask(mask_id) -> dict \| None` | one mask (same shape), or `None` |
+| `mask_path(mask_id) -> str \| None` | absolute path of the mask file (read-only), or `None` |
 
 **Generation history API (API v5, Reference Library 1.6.3).** Read-only access to the generation history plus a hook called after every saved generation. All functions **never raise** (errors are printed, the result is `None` / `False` / `[]`) and return **copies**: changing them changes nothing in the library. All paths are **absolute**; a path is `None` when that file is gone.
 
@@ -385,6 +405,7 @@ plugins/wan2gp-reference-library/
     index.json           # watched folders + file index (files stay where they are) (1.4)
   saved_audio/           # "Saved audio" (1.6.4): audio saved from WanGP inputs, managed + auto-indexed watched folder
   virtuals/              # virtual copies (1.6.6): virtuals.json (params) + .cache/ (renders, safe to delete)
+  masks/                 # mask library (1.7.0): masks.json (mask -> video key, label, facts) + <id>/<file>, .trash/
   videos/
     videos.json          # index (order, names, facts, source, meta)
     <id>/
@@ -393,7 +414,7 @@ plugins/wan2gp-reference-library/
     .trash/              # deleted videos, restorable for 5 min, purged after 15 min
 ```
 
-`settings.json`, `autotags.json`, `autotag_settings.json`, `models/`, `collections/`, `videos/`, `saved_audio/`, `pool/` and `folders/` are gitignored and excluded from release zips. New settings are added from the defaults; existing data is never migrated.
+`settings.json`, `autotags.json`, `autotag_settings.json`, `models/`, `collections/`, `videos/`, `saved_audio/`, `virtuals/`, `masks/`, `pool/` and `folders/` are gitignored and excluded from release zips. New settings are added from the defaults; existing data is never migrated.
 
 ## Standalone use (reflib_core)
 

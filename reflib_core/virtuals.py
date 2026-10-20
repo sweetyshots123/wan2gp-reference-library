@@ -217,6 +217,7 @@ def create(orig_hash: str, params: Any = None, name: Optional[str] = None, lang:
         kind, path, base_params = parent["kind"], source_path(parent), parent.get("params") or {}
     else:
         kind = src_entry.get("kind") or "image"
+        kind = "video" if kind == "mask" else kind   # 1.7.0
         path = next((p for p in [src_entry.get("path")] + list(src_entry.get("files") or []) if p and os.path.isfile(p)), None)
         if not path:
             raise VirtualError("original missing")

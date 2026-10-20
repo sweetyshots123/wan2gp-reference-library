@@ -857,3 +857,31 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-pk-ticon svg, .reflib-ib-loc .reflib-pk-film { width: 14px; height: 14px; vertical-align: -2px; }
 .reflib-ib-loc .reflib-pk-film { margin-right: 4px; }
 .reflib-pk-load { white-space: nowrap; }
+
+/* 1.7.0 mask library per video */
+.reflib-mk-box { margin: 8px 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(13,148,136,.45); background: rgba(13,148,136,.08); font-size: 12.5px; }
+.reflib-mk-head { font-weight: 600; margin-bottom: 6px; }
+.reflib-mk-box .reflib-ib-pvbtns { margin-top: 6px; flex-wrap: wrap; }
+.reflib-mk-list { display: flex; flex-direction: column; gap: 6px; }
+.reflib-mk-row { display: grid; grid-template-columns: 64px 1fr; grid-template-areas: "th meta" "acts acts" "vid vid"; gap: 4px 8px; padding: 6px; border-radius: 6px; background: rgba(0,0,0,.04); }
+.dark .reflib-mk-row { background: rgba(255,255,255,.05); }
+.reflib-mk-th { grid-area: th; position: relative; width: 64px; height: 40px; padding: 0; border: 1px solid var(--border-color-primary, #d1d5db); border-radius: 4px; overflow: hidden; background: #111; color: #e5e7eb; cursor: pointer; font-size: 18px; }
+.reflib-mk-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reflib-mk-th .reflib-mk-pl { position: absolute; right: 2px; bottom: 1px; font-size: 10px; background: rgba(0,0,0,.6); color: #fff; border-radius: 3px; padding: 0 3px; }
+.reflib-mk-th.on { outline: 2px solid #14b8a6; }
+.reflib-mk-meta { grid-area: meta; min-width: 0; }
+.reflib-mk-label { width: 100%; box-sizing: border-box; font: inherit; font-weight: 600; padding: 2px 5px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: inherit; }
+.reflib-mk-label:hover, .reflib-mk-label:focus { border-color: var(--border-color-primary, #9ca3af); background: var(--input-background-fill, #fff); outline: none; }
+.dark .reflib-mk-label:hover, .dark .reflib-mk-label:focus { background: var(--input-background-fill, #1f2937); }
+.reflib-mk-acts { grid-area: acts; display: flex; gap: 6px; justify-content: flex-end; }
+.reflib-mk-vid { grid-area: vid; width: 100%; max-height: 180px; background: #000; border-radius: 4px; }
+.reflib-mk-warn { color: #b45309; font-size: 11.5px; margin-top: 2px; }
+.dark .reflib-mk-warn { color: #fbbf24; }
+.reflib-mk-del:hover { color: #dc2626; }
+.dark .reflib-mk-del:hover { color: #f87171; }
+.reflib-mk-count { position: absolute; right: 5px; bottom: 24px; z-index: 2; font-weight: 700; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 9px; background: rgba(13,148,136,.92); color: #fff; pointer-events: auto; }
+.reflib-mk-of { position: absolute; left: 5px; top: 31px; z-index: 2; font-weight: 700; font-size: 10.5px; padding: 1px 6px; border-radius: 9px; background: rgba(13,148,136,.92); color: #fff; }
+.reflib-ib-kbtn.k-mask.on, .reflib-mk-hasmask.on { background: rgba(13,148,136,.85) !important; color: #fff !important; border-color: transparent !important; }
+.reflib-mk-hasmask { margin-left: 6px; }
+.reflib-mk-btn .reflib-sv-ico { filter: none; }
+.reflib-mk-ticon { font-size: 12px; line-height: 1; }

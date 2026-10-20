@@ -23,6 +23,10 @@ API_VERSION 4 (Reference Library 1.4.0) adds read-only access to the image brows
 API_VERSION 5 (Reference Library 1.6.3) adds read-only access to the generation history and a change hook:
 get_history_entry, find_history_by_output, latest_history_entry, history_settings_file, on_history_entry /
 off_history_entry, media_fields. Entries are plain dicts with absolute paths (see get_history_entry).
+
+API_VERSION 6 (Reference Library 1.7.0) adds read-only access to the mask library: list_masks(video_path) (masks of the
+video at that path: a library video, a staged copy of one, or a virtual copy's render), get_mask(mask_id) and
+mask_path(mask_id). Everything from v1-v5 is unchanged.
 """
 from __future__ import annotations
 
@@ -42,7 +46,7 @@ except ImportError:  # imported as a top-level module (unit tests)
     import imagestore  # type: ignore
     import imagelib  # type: ignore
 
-API_VERSION = 5
+API_VERSION = 6
 MODULE_NAME = "wan2gp_reference_library_api"
 CROP_POLICIES = ("auto", "ask", "off")
 
@@ -538,3 +542,46 @@ def media_fields() -> List[str]:
 
 def register() -> None:
     sys.modules[MODULE_NAME] = sys.modules[__name__]
+
+
+# ---------------------------------------------------------------------------------------------------- 1.7.0 masks (v6)
+def _masks():
+    try:
+        from . import masks as _mk
+    except ImportError:
+        import masks as _mk  # type: ignore
+    return _mk
+
+
+def _mask_summary(m: Dict[str, Any]) -> Dict[str, Any]:
+    p = _masks().public(m, with_check=False)
+    return {k: p.get(k) for k in ("id", "label", "path", "video", "video_name", "w", "h", "dur", "created", "source")}
+
+
+def list_masks(video_path) -> List[Dict[str, Any]]:
+    """Masks kept for the video at ``video_path``, newest first: [{id, label, path, video, video_name, w, h, dur,
+    created, source}]. [] when the file is unknown or has no masks. Read-only."""
+    try:
+        src = _clean_src(video_path)
+        if not src:
+            return []
+        mk = _masks()
+        key = mk.key_for_path(src)
+        return [_mask_summary(m) for m in mk.for_video(key)] if key else []
+    except Exception as e:
+        print(f"[Reference Library] list_masks failed: {e}")
+        return []
+
+
+def get_mask(mask_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        m = _masks().get(str(mask_id or ""))
+        return _mask_summary(m) if m else None
+    except Exception as e:
+        print(f"[Reference Library] get_mask failed: {e}")
+        return None
+
+
+def mask_path(mask_id: str) -> Optional[str]:
+    m = get_mask(mask_id)
+    return m["path"] if m and os.path.isfile(m["path"]) else None

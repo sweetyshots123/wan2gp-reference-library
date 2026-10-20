@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.9"
+PLUGIN_VERSION = "1.7.0"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -209,6 +209,14 @@ TEXT = {
         "err_generic": "Something went wrong: {e}",
         "sec_videos": "### Video library",
         "video_bar": "Show the video bar under Control Video",
+        "mask_autosave": "Keep the masks I make in Video Mask in the mask library (linked to the Control Video)",
+        "mask_saved": "Mask “{label}” saved for “{video}”", "mask_exists": "This mask is already in the library for “{video}”",
+        "mask_no_video": "Load the Control Video first: a mask is kept with its video", "mask_no_mask": "Video Mask is empty",
+        "mask_video_added": "“{video}” was added to the Video Library so its masks can be found",
+        "mask_renamed": "Mask renamed to “{label}”", "mask_deleted": "{n} mask(s) deleted (the video is kept)", "mask_restored": "{n} mask(s) restored",
+        "mask_assigned": "“{label}” is now a mask of “{video}”", "mask_bad_target": "Pick a video (not a mask) as the mask's owner",
+        "mask_used": "Control Video “{video}” + mask “{label}” loaded", "mask_missing": "That mask is gone",
+        "mask_label": "Mask {n}",
         "crop_save": "Crops made with Cropper (videos)",
         "crop_save_info": "Save every crop into the video library automatically, ask with a Save button, or don't save. The same crop is never stored twice.",
         "cs_auto": "Save to the video library automatically",
@@ -450,6 +458,14 @@ TEXT = {
         "err_generic": "Algo ha fallado: {e}",
         "sec_videos": "### Librería de vídeos",
         "video_bar": "Mostrar la barra de vídeos bajo Vídeo de control",
+        "mask_autosave": "Guardar en la librería de máscaras las máscaras que creo en Video Mask (unidas al Vídeo de control)",
+        "mask_saved": "Máscara «{label}» guardada para «{video}»", "mask_exists": "Esta máscara ya está en la librería para «{video}»",
+        "mask_no_video": "Carga antes el Vídeo de control: cada máscara se guarda con su vídeo", "mask_no_mask": "Video Mask está vacío",
+        "mask_video_added": "«{video}» se añadió a la Librería de vídeos para poder encontrar sus máscaras",
+        "mask_renamed": "Máscara renombrada a «{label}»", "mask_deleted": "{n} máscara(s) borrada(s) (el vídeo se conserva)", "mask_restored": "{n} máscara(s) restaurada(s)",
+        "mask_assigned": "«{label}» es ahora una máscara de «{video}»", "mask_bad_target": "Elige un vídeo (no una máscara) como dueño de la máscara",
+        "mask_used": "Vídeo de control «{video}» + máscara «{label}» cargados", "mask_missing": "Esa máscara ya no existe",
+        "mask_label": "Máscara {n}",
         "crop_save": "Recortes hechos con Cropper (vídeos)",
         "crop_save_info": "Guardar cada recorte en la librería de vídeos automáticamente, preguntar con un botón Guardar, o no guardarlos. El mismo recorte nunca se guarda dos veces.",
         "cs_auto": "Guardar en la librería de vídeos automáticamente",
@@ -661,6 +677,7 @@ DEFAULT_SETTINGS = {
     "browser_fullscreen": False,  # 1.5.5: always open the image browser full screen (also kept in localStorage)
     "browser_details": False,     # 1.5.9: right details panel in the image browser (off: a click only selects)
     "browser_thumb": "m",         # 1.5.9: thumbnail size l / m / s
+    "mask_autosave": True,        # 1.7.0: masks made in Video Mask (and generations with a mask) go to the mask library
 }
 _CHOICES = {"browser_thumb": ("l", "m", "s"), "replace_mode": ("replace", "append"), "language": ("auto",) + LANGS,
             "on_apply_prompts": ("offer", "apply_first", "off"), "crop_save": ("auto", "ask", "off"),
@@ -1224,6 +1241,131 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             found[name] = comp
         self.save_targets[tab] = found
 
+    # ------------------------------------------------------------ 1.7.0 mask library
+    def _mask_capture(self, lang, vg, vm, source, add_video):
+        """Video Mask value + Control Video value -> a mask of that video in the library."""
+        from .reflib_core import masks as _mk, savein
+        try:
+            mpath = savein._src(vm)
+        except Exception:
+            return {"ok": False, "code": "no_mask", "error": tr(lang, "mask_no_mask")}
+        try:
+            vpath = savein._src(vg)
+        except Exception:
+            return {"ok": False, "code": "no_video", "error": tr(lang, "mask_no_video")}
+        key = _mk.key_for_path(vpath)
+        ent = imagelib.entry_for(key)
+        added = None
+        if not ent and add_video:   # the Control Video isn't a library item yet: keep it in the Video Library
+            r = savein.save_video(vpath, lang=lang, field="video_guide")
+            imagelib.invalidate()
+            added = r.get("name")
+            ent = imagelib.entry_for(key)
+        if not ent and not add_video:
+            return {"ok": False, "code": "not_in_library"}
+        vname = (ent or {}).get("name") or savein.stem_of(vpath)
+        r = _mk.add(mpath, key, label=tr(lang, "mask_label", n=len(_mk.for_video(key)) + 1), source=source,
+                    video_name=vname, video_path=vpath)
+        m = r["mask"]
+        out = {"ok": True, "created": r["created"], "mask": _mk.public(m), "video": key, "video_name": vname, "video_added": added,
+               "message": tr(lang, "mask_saved" if r["created"] else "mask_exists", label=m["label"], video=vname)}
+        if added:
+            out["message"] += " · " + tr(lang, "mask_video_added", video=added)
+            out["changed"] = {"reason": "video-added", "id": None, "kind": "video"}
+        return out
+
+    def mask_bridge(self, tab, raw, vg, vm):
+        """Bridge "<tab>:mask": {action: "mask_save"} keeps the CURRENT Video Mask as a mask of the CURRENT Control Video."""
+        try:
+            req = json.loads(raw or "{}")
+            if not isinstance(req, dict):
+                raise ValueError
+        except Exception:
+            return json.dumps({"ok": False, "error": tr("en", "bad_request")})
+        lang = req.get("lang") if req.get("lang") in LANGS else resolve_lang(load_settings()["language"])
+        out = {"id": req.get("id"), "quiet": True}
+        try:
+            out.update(self._mask_capture(lang, vg, vm, "manual", True))
+        except Exception as e:
+            traceback.print_exc()
+            out.update({"ok": False, "error": str(e)})
+        return json.dumps(out)
+
+    def mask_auto(self, tab, vg, vm, request=None):
+        """Video Mask changed (mask creator / Matanyone, an upload...): keep it with the Control Video (setting
+        "mask_autosave"). Quiet unless a new mask was stored."""
+        try:
+            if not load_settings().get("mask_autosave", True) or not vm or not vg:
+                return ""
+            lang = self._bg_lang(request)
+            r = self._mask_capture(lang, vg, vm, "input", True)
+            if r.get("ok") and r.get("created"):
+                return json.dumps(dict(r, auto=True, quiet=True, maskevt=True))
+        except Exception as e:
+            print(f"[Reference Library] mask auto-save skipped: {e}")
+        return ""
+
+    def _mask_from_history(self, entry):
+        """A generation that used a Control Video + Video Mask: keep the mask with that video when the video is in the
+        library (never adds videos to the library by itself)."""
+        try:
+            if not load_settings().get("mask_autosave", True):
+                return
+            from .reflib_core import history as _h, masks as _mk
+            media = entry.get("media") or {}
+            if not media.get("video_mask") or not media.get("video_guide"):
+                return
+            mp, vp = _h.item_path(media["video_mask"][0]), _h.item_path(media["video_guide"][0])
+            if not (mp and vp and os.path.isfile(mp) and os.path.isfile(vp)):
+                return
+            key = _mk.key_for_path(vp)
+            ent = imagelib.entry_for(key)
+            if not ent or ent.get("kind") == "mask":
+                return
+            lang = self._bg_lang()
+            _mk.add(mp, key, label=tr(lang, "mask_label", n=len(_mk.for_video(key)) + 1), source="history",
+                    video_name=ent.get("name") or "", video_path=vp)
+        except Exception as e:
+            print(f"[Reference Library] mask from history skipped: {e}")
+
+    def _mask_action(self, action, req, lang):
+        """Explorer actions on masks (ilib channel)."""
+        from .reflib_core import masks as _mk
+        if action == "mask_list":   # masks of one video (library key), newest first, with duration / size checks
+            key = str(req.get("video") or "")
+            vf = _mk.video_facts(key)
+            return {"ok": True, "video": key, "video_facts": {k: vf.get(k) for k in ("w", "h", "dur", "name")},
+                    "masks": [dict(_mk.public(m, with_check=False), mismatch=_mk.mismatch(m, vf)) for m in _mk.for_video(key)]}
+        if action == "mask_info":   # a mask item of the browser (its file hash) -> the mask entries + their videos
+            return {"ok": True, "masks": [_mk.public(m) for m in _mk.by_file_hash(str(req.get("hash") or ""))]}
+        if action == "mask_rename":
+            m = _mk.rename(str(req.get("mid") or ""), str(req.get("label") or ""))
+            return {"ok": True, "mask": _mk.public(m, with_check=False), "message": tr(lang, "mask_renamed", label=m["label"])}
+        if action == "mask_delete":
+            r = _mk.soft_delete([str(x) for x in (req.get("ids") or [])][:500])
+            return {"ok": r["n"] > 0, "n": r["n"], "token": r["token"], "message": tr(lang, "mask_deleted", n=r["n"])}
+        if action == "mask_undo":
+            n = _mk.restore(str(req.get("token") or ""))
+            return {"ok": n > 0, "n": n, "message": tr(lang, "mask_restored", n=n)}
+        if action == "mask_assign":   # "Asignar como máscara de…": item src (a video or a mask) -> mask of item video
+            src_h, vkey = str(req.get("src") or ""), str(req.get("video") or "")
+            tgt = imagelib.entry_for(vkey)
+            if not tgt or tgt.get("kind") not in ("video",) or src_h == vkey:
+                return {"ok": False, "error": tr(lang, "mask_bad_target")}
+            vname = tgt.get("name") or ""
+            existing = _mk.by_file_hash(src_h)
+            if existing:
+                m = next((x for x in existing if x.get("video") == vkey), None) or _mk.reassign(existing[0]["id"], vkey)
+            else:
+                src = imagelib.media_path(src_h)
+                ent = imagelib.entry_for(src_h) or {}
+                if not src or ent.get("kind") not in ("video", "mask"):
+                    return {"ok": False, "error": tr(lang, "mask_bad_target")}
+                m = _mk.add(src, vkey, label=ent.get("name") or tr(lang, "mask_label", n=len(_mk.for_video(vkey)) + 1),
+                            source="assign", video_name=vname)["mask"]
+            return {"ok": True, "mask": _mk.public(m), "message": tr(lang, "mask_assigned", label=m["label"], video=vname)}
+        return None
+
     def save_input(self, tab, field, raw, value):
         """Bridge for one input: {action: "save_input", name, trimmed} saves the CURRENT value (after a Gradio trim it is
         the trimmed upload); {action: "save_input_undo", kind, ref} removes the copy that save created."""
@@ -1343,7 +1485,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     time.sleep(0.1)
                 time.sleep(0.2)
                 try:
-                    _h.capture(raw, dict(cfg_ref), out, model_type or "", cap_mb=history_config().get("cap_mb"), extra=extra)
+                    ent = _h.capture(raw, dict(cfg_ref), out, model_type or "", cap_mb=history_config().get("cap_mb"), extra=extra)
+                    if ent:
+                        self._mask_from_history(ent)   # 1.7.0
                 except Exception:
                     traceback.print_exc()
             threading.Thread(target=work, daemon=True, name="reflib-history").start()
@@ -1500,11 +1644,21 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         e = _h.get(eid) or {}
         ups, done = [], []
         direct = {}
-        if req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library video/audio -> one WanGP input
+        if req.get("pair"):   # 1.7.0 "Usar con máscara": a video -> Control Video and one of its masks -> Video Mask, together
+            from .reflib_core import masks as _mk
+            pr = req["pair"] if isinstance(req["pair"], dict) else {}
+            m = _mk.get(str(pr.get("mask") or ""))
+            vsrc = imagelib.media_path(str(pr.get("video") or (m or {}).get("video") or ""))
+            names = {n for n, _ in comps}
+            if not m or not os.path.isfile(_mk.path_of(m)) or not vsrc or not {"video_guide", "video_mask"} <= names:
+                return (json.dumps({"ok": False, "id": req.get("id"), "error": tr(req.get("lang", "en"), "mask_missing" if not m else "err_target_missing"),
+                                    "target": f"{tab}:history"}), *[gr.skip() for _ in comps])
+            direct = {"video_guide": [vsrc], "video_mask": [_mk.path_of(m)]}
+        elif req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library video/audio -> one WanGP input
             to, src = str(req["to"]), imagelib.media_path(str(req["hash"]))
             ent = imagelib.entry_for(str(req["hash"])) or {}
             want = "audio" if to in SAVE_AUDIO_INPUTS else "video"   # 1.6.8: every audio input, not just "Voice to follow"
-            if src and ent.get("kind") == want and any(n == to for n, _ in comps):
+            if src and (ent.get("kind") == want or (want == "video" and ent.get("kind") == "mask")) and any(n == to for n, _ in comps):   # 1.7.0 masks are videos
                 direct[to] = [src]
             else:
                 return (json.dumps({"ok": False, "id": req.get("id"), "error": tr(req.get("lang", "en"), "err_target_missing"), "target": f"{tab}:history"}),
@@ -1533,6 +1687,21 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         return self._amg
 
     # ---------------------------------------------------------------- helpers
+    def _bg_lang(self, request=None):
+        """1.7.0: language for quiet server-side events (no lang in the request): the UI language last seen, else the
+        browser's Accept-Language / last navigator.language."""
+        st = load_settings()["language"]
+        if st in LANGS:
+            return st
+        if getattr(self, "_ui_lang", None) in LANGS:
+            return self._ui_lang
+        acc = ""
+        try:
+            acc = (request.headers.get("accept-language") or "") if request is not None else ""
+        except Exception:
+            acc = ""
+        return resolve_lang(st, acc or _LAST_BROWSER.get("lang"))
+
     def _lang(self, browser_lang=None):
         if browser_lang:
             _LAST_BROWSER["lang"] = str(browser_lang)[:16]
@@ -2084,7 +2253,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         "sec_messages", "toasts", "toast_s", "sec_prompts", "on_apply_prompts", "save", "sec_manager",
         "mgr_dd", "mgr_refresh", "mgr_name", "mgr_new", "mgr_rename", "mgr_dup", "mgr_delete", "mgr_apply",
         "mgr_prompts_title", "mgr_prompts_save", "mgr_gallery", "mgr_gallery_title", "mgr_add", "mgr_remove", "mgr_left", "mgr_right", "mgr_cover", "mgr_export", "mgr_import",
-        "video_bar", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "browser_fullscreen", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
+        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "browser_fullscreen", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
         "vmgr_import", "vmgr_left", "vmgr_right", "vmgr_download", "vmgr_export",
     )
 
@@ -2128,6 +2297,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "mgr_export": {"value": t("mgr_export")},
             "mgr_import": {"label": t("mgr_import")},
             "video_bar": {"label": t("video_bar")},
+            "mask_autosave": {"label": t("mask_autosave")},
             "sec_videos": {"value": t("sec_videos")},
             "crop_save": {"label": t("crop_save"), "info": t("crop_save_info"), "choices": crop_save_choices(lang)},
             "sec_img_crops": {"value": t("sec_img_crops")},
@@ -2173,6 +2343,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 with gr.Row():
                     ui["show_edit"] = gr.Checkbox(value=current("show_edit_bar"), elem_id="reflib_show_edit", **tx["show_edit"])
                     ui["video_bar"] = gr.Checkbox(value=current("video_bar"), elem_id="reflib_video_bar", **tx["video_bar"])
+                    ui["mask_autosave"] = gr.Checkbox(value=current("mask_autosave"), elem_id="reflib_mask_autosave", **tx["mask_autosave"])
             with gr.Group():
                 ui["sec_videos"] = gr.Markdown(tx["sec_videos"]["value"])
                 ui["crop_save"] = gr.Dropdown(value=current("crop_save"), elem_id="reflib_crop_save", **tx["crop_save"])
@@ -2342,6 +2513,23 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                                outputs=[bridge_resp], show_progress="hidden", trigger_mode="multiple", queue=True).then(
                         fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
                         js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
+            # 1.7.0 mask library: "<tab>:mask" bridge (Guardar máscara) + auto-save when Video Mask changes
+            for tab, vt in list(self.vtargets.items()):
+                vm = (self._extra_comps.get(tab) or {}).get("video_mask")
+                if not isinstance(vm, gr.Video):
+                    continue
+                mbtn = gr.Button("mbridge", elem_id=f"reflib_bridge_{tab}_mask")
+                mbtn.click(fn=lambda raw, vg, m, t=tab: self.mask_bridge(t, raw, vg, m), inputs=[bridge_req, vt["video"], vm],
+                           outputs=[bridge_resp], show_progress="hidden", trigger_mode="multiple", queue=True).then(
+                    fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
+                    js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
+                mevt = gr.Textbox(value="", elem_id=f"reflib_mask_evt_{tab}", show_label=False)
+                def _mask_auto(vg, m, request: gr.Request = None, t=tab):
+                    return self.mask_auto(t, vg, m, request)
+                vm.change(fn=_mask_auto, inputs=[vt["video"], vm], outputs=[mevt],
+                          show_progress="hidden", trigger_mode="always_last", queue=True).then(
+                    fn=None, inputs=[mevt], outputs=None, show_progress="hidden",
+                    js="(r) => { if (r && window.referenceLibrary && window.referenceLibrary.maskEvent) window.referenceLibrary.maskEvent(r); }")
             vreload_btn = gr.Button("vreload", elem_id="reflib_vreload")
             # Inline rename (pencil, 1.3.0) and a refresh of every collection/video list after changes made elsewhere.
             rename_req = gr.Textbox(value="", elem_id="reflib_rename_req", show_label=False)
@@ -2392,9 +2580,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         ui["save"].click(
             fn=self._save_from_ui,
             inputs=[ui["replace_mode"], ui["auto_apply"], ui["show_edit"], ui["toasts"], ui["toast_s"], ui["language"],
-                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"]],
+                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"]],
             outputs=[status, settings_json] + tab_outputs + bar_outputs + prompt_outputs, show_progress="hidden",
-            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs]",
+            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma]",
         ).then(fn=None, inputs=[settings_json], outputs=None,
                js="(s) => { if (window.referenceLibrary) window.referenceLibrary.applySettings(s, 'saved'); }")
 
@@ -3184,7 +3372,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 gr.update(choices=choices, label=tr(lang, "mgr_prompts"), interactive=promptlink.can_write()))
 
     def _save_from_ui(self, replace_mode, auto_apply, show_edit, toasts, toast_s, language="auto", on_apply_prompts="offer",
-                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None):
+                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings.update({
             "replace_mode": _coerce("replace_mode", "replace", replace_mode),
@@ -3198,6 +3386,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "crop_save": _coerce("crop_save", "auto", crop_save),
             "crop_save_images": _coerce("crop_save_images", "auto", crop_save_images),
             "index_paused": bool(index_paused),
+            "mask_autosave": bool(mask_autosave),
             "browser_fullscreen": bool(load_settings().get("browser_fullscreen", False)) if browser_fullscreen is None else bool(browser_fullscreen),
         })
         _cur = load_settings()
@@ -3333,6 +3522,32 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
         return out
 
+    @staticmethod
+    def _mask_hashes(hashes):   # 1.7.0
+        by = imagelib.catalog()["by_hash"]
+        return [h for h in hashes or [] if (by.get(h) or {}).get("kind") == "mask"]   # pure masks (a folder video that is also a mask deletes normally)
+
+    def _mask_delete_items(self, hashes, lang, action):
+        """1.7.0: deleting mask items in the browser deletes those masks (never their videos); the rest of the selection
+        goes through the normal delete. One undo token ("m:<masks>|<files>")."""
+        from .reflib_core import masks as _mk
+        mh = set(self._mask_hashes(hashes))
+        by = imagelib.catalog()["by_hash"]
+        ids = [m["id"] for h in mh for m in (by[h].get("mask") or [])]
+        r = _mk.soft_delete(ids)
+        rest = [h for h in hashes if h not in mh]
+        msg = tr(lang, "mask_deleted", n=r["n"])
+        token = "m:" + (r["token"] or "")
+        if rest:
+            res = imagelib.delete_everywhere(rest) if action == "delete_all" else None
+            if res and res["deleted"]:
+                msg += " · " + tr(lang, "ilib_deleted_all", n=res["deleted"], c=res["collections"])
+                token += "|" + res["token"]
+        imagelib.invalidate()
+        out = {"ok": True, "kind": "ok", "message": msg, "toast": msg, "undo_remove": token, "reload": True, "mask_deleted": r["n"]}
+        out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+        return out
+
     def _virtual(self, action, req, lang):
         from .reflib_core import virtuals as _vc
         h = str(req.get("hash") or "")
@@ -3351,7 +3566,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     src = next((q for q in [ent.get("path")] + list(ent.get("files") or []) if q and os.path.isfile(q)), None) if ent else None
                     if not src:
                         return self._err(lang, "err_image_missing")
-                    kind, name, params, ohash = ent.get("kind") or "image", ent.get("name") or os.path.basename(src), {}, h
+                    kind, name, params, ohash = ("video" if ent.get("kind") == "mask" else ent.get("kind") or "image"), ent.get("name") or os.path.basename(src), {}, h   # 1.7.0 a mask is a video
                 facts = _vc.original_facts(src, kind)
                 if c and _vc.refresh_facts(c["id"], facts):   # 1.6.7: heal a duration stored as 0 by 1.6.6
                     imagelib.invalidate()
@@ -3397,6 +3612,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         except Exception:
             req = {}
         lang = req.get("lang") if req.get("lang") in LANGS else self._lang(req.get("browser"))
+        if req.get("lang") in LANGS:
+            self._ui_lang = req["lang"]   # 1.7.0: quiet server-side events (mask auto-save) speak the UI language
         action = req.get("action")
         if action == "reveal":   # 1.5.2 "Show in folder": same-PC requests only, library-known files only
             from .reflib_core import reveal as _rv
@@ -3564,6 +3781,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out["added"], out["skipped"], out["collection_id"] = res["added"], res["skipped"], res["collection"]["id"]
                 out["reload"] = True
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action in ("delete", "delete_all") and self._mask_hashes(hashes):   # 1.7.0
+                out = self._mask_delete_items(hashes, lang, action)
             elif action in ("delete", "delete_all") and self._virtual_hashes(hashes):   # 1.6.6
                 out = self._virtual_delete(hashes, lang, action)
             elif action == "delete":
@@ -3593,6 +3812,16 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 else:
                     msg = tr(lang, "ilib_folder_only", k=res["folder_only"])
                     out = {"ok": True, "kind": "info", "message": msg, "toast": msg}
+                out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action == "undo_remove" and str(req.get("token") or "").startswith("m:"):   # 1.7.0 masks (+ maybe files)
+                from .reflib_core import masks as _mk
+                tok = str(req.get("token"))[2:]
+                n = _mk.restore(tok.split("|")[0])
+                if "|" in tok:
+                    n += imagelib.undo_remove(tok.split("|", 1)[1])["restored"]
+                imagelib.invalidate()
+                out = self._ok(lang, "mask_restored", n=n)
+                out["reload"] = True
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
             elif action == "undo_remove" and str(req.get("token") or "").startswith("v:"):   # 1.6.6 virtual copies (+ maybe files)
                 from .reflib_core import virtuals as _vc
@@ -3640,6 +3869,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     out = {"ok": True, "browse": imagelib.browse_dir(path)}
             elif action.startswith("at_") if isinstance(action, str) else False:
                 out = self._autotag(action, req, hashes, lang)
+            elif action.startswith("mask_") if isinstance(action, str) else False:   # 1.7.0 mask library
+                try:
+                    out = self._mask_action(action, req, lang) or self._err(lang, "bad_request")
+                except KeyError:
+                    out = {"ok": False, "error": tr(lang, "mask_missing")}
             elif action == "scan_status":
                 st = imagelib.scan_status()
                 out = {"ok": True, "scan": st, "scan_message": self._scan_message(lang, st)}
@@ -3657,7 +3891,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -3803,7 +4037,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

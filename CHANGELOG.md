@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.7.0 — 2026-10-20
+
+- **Mask library per video.** The masks you make in WanGP's **Video Mask** (mask creator / Matanyone, or an upload) are kept in the library, **linked to the Control Video they were made for**. The link is the video's content: the same file loaded from a folder, the Video Library or a staged copy is the same video. A **virtual copy** with a trim or crop has its own masks.
+  - **Saved automatically** when Video Mask gets a new value (setting "Keep the masks I make in Video Mask…", on by default). If the Control Video isn't in the library yet, it's added to the Video Library first. Generations that used a Control Video + Video Mask keep their mask too, when the video is already in the library. **🎭 Guardar máscara**, next to 📚 in the Video Mask toolbar, saves it by hand. The same mask is never stored twice for one video. Each save shows a toast with **Deshacer**.
+  - **Explorer:**
+    - a new type **🎭 Máscaras** and a **🎭 con máscara** filter (only videos that have masks). Masks kept only in the mask library aren't listed under "Vídeos"; a library video assigned as a mask stays in "Vídeos" and also appears under "Máscaras";
+    - video cards show a **🎭n** badge, mask cards a **máscara** tag ("Máscara de «vídeo»"), and there's a **🎭 Máscaras** pseudo folder;
+    - hovering a mask previews it.
+  - **Details of a video** list its masks, newest first:
+    - each with a thumbnail, inline ▶ preview, date, size, length, source and an editable name;
+    - **Usar con máscara**, and 🗑 with Undo;
+    - a ⚠ warning when the mask's **length or size** doesn't match the video. A virtual copy is checked against its trimmed / cropped size, with a tolerance of max(0.25 s, 3 %) and 2 px.
+    - Deleting a mask (here or in the browser) **never deletes its video**.
+  - **Details of a mask:** «Máscara de «vídeo»», **Usar con su vídeo**, **Mostrar vídeo**, **Asignar como máscara de…** and **Borrar**.
+  - **Usar con máscara / Usar con su vídeo** puts the video into **Control Video** and the mask into **Video Mask** in one action, with the 1.6.9 logic: wait for WanGP to settle, send both, check they stayed, and send again if WanGP emptied them. A notice appears if the current model hides Video Mask.
+  - **Asignar como máscara de…** (right-click a video or mask, or the mask's details) keeps any library video as a mask of another video. Pick it by double-clicking or with **Asignar a este vídeo**; Esc cancels. Files are never moved.
+  - The **Video Mask** library button (1.6.8) now opens on **Máscaras**; plain videos can still be picked.
+- **API v6** (v1–v5 unchanged): read-only `list_masks(video_path)`, `get_mask(mask_id)`, `mask_path(mask_id)`.
+- Data: `masks/masks.json` + `masks/<id>/<file>` (gitignored, never in the zip). Deleted masks stay in `masks/.trash/` for 15 min (Undo).
+- Unchanged: Vidosser, Media Editor (not modified), the 1.6.2 Resize button, 📚 Guardar en librería, the 1.6.8 library buttons, the 1.6.5 seed rule and the 1.6.9 restore. Plugin only, no WanGP core changes.
+
 ## 1.6.9 — 2026-10-20
 
 - **Fix: "Reutilizar ajustes" lost the start image, the reference images and the voice on a busy PC.** The settings came back (prompt, model, "Use Reference Images" / start-image / audio options, seed −1), but "Images as starting points", "Reference Images" and the reference audio stayed empty.
