@@ -836,3 +836,24 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-vc-nodur { margin-top: 6px; padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.4;
   color: #8a5a00; background: rgba(255, 176, 32, .14); border: 1px solid rgba(255, 176, 32, .45); }
 .dark .reflib-vc-nodur, body.dark .reflib-vc-nodur { color: #ffcf7a; background: rgba(255, 176, 32, .10); }
+/* 1.6.8 library button on WanGP's video / audio inputs (same grid icon as the Reference Images bar) */
+.reflib-pk-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 26px;
+  margin: 0 2px; border-radius: var(--radius-sm, 4px); cursor: pointer; color: var(--body-text-color-subdued, #9ca3af);
+  background: var(--background-fill-primary); border: 1px solid var(--border-color-primary); }
+.reflib-pk-btn svg { width: 15px; height: 15px; }
+.reflib-pk-btn:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--background-fill-secondary); }
+.reflib-pk-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.reflib-pk-btn.float { position: absolute; top: 6px; right: 6px; z-index: 6; width: 30px; height: 30px; min-width: 30px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.reflib-pk-btn.float svg { width: 17px; height: 17px; }
+.reflib-savein { position: relative; }
+.reflib-pk-banner { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; padding: 7px 10px; border-radius: 6px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent); }
+.reflib-pk-banner[hidden] { display: none; }
+.reflib-pk-banner b { font-weight: 600; }
+.reflib-pk-banner small { opacity: .75; flex: 1 1 auto; }
+.reflib-pk-bico svg { width: 18px; height: 18px; vertical-align: middle; color: var(--color-accent); }
+.reflib-pk-load svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+.reflib-pk-ticon svg, .reflib-ib-loc .reflib-pk-film { width: 14px; height: 14px; vertical-align: -2px; }
+.reflib-ib-loc .reflib-pk-film { margin-right: 4px; }
+.reflib-pk-load { white-space: nowrap; }

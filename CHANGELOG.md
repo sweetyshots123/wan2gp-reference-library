@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.8 — 2026-10-20
+
+- **Library button on WanGP's video and audio inputs.** Control Video 1/2/3, Video to Continue (Source Video), Video Mask, Voice to follow 1/2/3, Soundtrack and the Voice Samples get the same grid icon as the Reference Images bar. When the input is empty it sits in the top-right corner. When the input has a value it sits in Gradio's toolbar, just before **📚 Guardar en librería**.
+  - It opens the media browser in **pick mode** over the whole library, filtered to **Vídeos** (or **Audios** for audio inputs). A banner reads «Elige un vídeo para «Control Video 2»» with **Cancelar**.
+  - **Double-click** a video, or select it and press **Cargar en «input»**, and it loads into **that** input. A toast confirms it and the browser closes. Esc or Cancelar leaves without changes, and the browser's previous filters, search and selection come back.
+  - Virtual copies load their **render** (with the in/out and crop applied), never the original. The stored file is never handed to WanGP: a staged copy is.
+- **Video Library in the media browser.** A read-only **🎬 Librería de vídeos** folder lists the Video Library's own videos (saved with 📚, Media Editor crops, imports). Videos with the same bytes as a watched-folder file are listed once, with both locations. Video-Library-only cards show a **lib. vídeos** badge. They are renamed and deleted in the Video Library, as before.
+- The history bridge now reaches every input that has the button (adds Control Video 2/3, Soundtrack and the Voice Samples).
+- Unchanged: 📚 Guardar en librería, the 1.6.2 Resize button, Media Editor (not modified; 1.7.0 / fileApi 2 works as before, trim mode with fileApi 3), Vidosser, the 1.6.5 "Reutilizar ajustes" seed rule. Plugin only, no WanGP core changes.
+
 ## 1.6.7 — 2026-10-19
 
 - **Fix: the in/out trimmer of a virtual copy was dead on browser / webcam recordings.** Files recorded with a browser's MediaRecorder (Chrome "webcam capture" WebM, also live-written Matroska and audio WebM) store **no duration** in the container: ffprobe reports `N/A` and the browser `Infinity`. 1.6.6 measured 0 s, so the timeline showed a single handle, Entrada / Salida stayed empty, and dragging or Marcar entrada / salida did nothing. Now:

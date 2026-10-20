@@ -142,6 +142,7 @@ def list_images() -> List[Dict[str, Any]]:
             by_hash[h].setdefault("files", [])
             by_hash[h].setdefault("locs", [])
             by_hash[h].setdefault("added", 0.0)
+        _vlib_entries(by_hash, order, tags)
         _virtual_entries(by_hash, order, tags)
         for h in order:
             by_hash[h].setdefault("in_pool", False)
@@ -150,6 +151,49 @@ def list_images() -> List[Dict[str, Any]]:
             by_hash[h].setdefault("locs", [])
             by_hash[h].setdefault("added", 0.0)
         return [by_hash[h] for h in order]
+
+
+VLFOLDER = "__vlib"   # 1.6.8 pseudo folder "🎬 Librería de vídeos": the Video Library's own videos (videos/<id>/<file>)
+_vl_hash: Dict[tuple, str] = {}
+
+
+def _vlib_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
+    """1.6.8: Video Library videos as library items, so the media browser (and the inputs' library button) can pick them.
+    Same bytes already in a folder / collection -> that item just gains the "Librería de vídeos" location. Read-only from
+    the browser's side: such an item is never "deletable" there (it is deleted in the Video Library)."""
+    try:
+        from . import videostore as _vs
+        vids = _vs.list_videos()
+    except Exception as e:
+        print(f"[Reference Library] video library unavailable: {e}")
+        return
+    for v in vids:
+        try:
+            p = _vs.video_file(v)
+            st = os.stat(p)
+        except Exception:
+            continue
+        k = (p, st.st_size, st.st_mtime_ns)
+        h = _vl_hash.get(k)
+        if not h:
+            h = _vl_hash[k] = storage._file_hash(p)   # the library's (sampled for big media) hash, not videostore's sha256
+        name = str(v.get("name") or "") or os.path.splitext(os.path.basename(p))[0]
+        e = by_hash.get(h)
+        if e is None:
+            e = by_hash[h] = {"hash": h, "name": name, "names": [name], "file": os.path.basename(p), "path": p,
+                              "collections": [], "tags": list(tags.get(h, [])), "in_pool": False, "folders": [], "files": [],
+                              "locs": [], "added": float(v.get("added") or v.get("created") or st.st_mtime)}
+            order.append(h)
+        elif e.get("virtual"):
+            continue
+        elif name not in e.setdefault("names", []):
+            e["names"].append(name)
+        if not os.path.isfile(e.get("path") or ""):
+            e["path"] = p
+        e.setdefault("locs", [])
+        if [VLFOLDER, ""] not in e["locs"]:
+            e["locs"].append([VLFOLDER, ""])
+        e["vlib"] = v.get("id")
 
 
 def _virtual_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
@@ -1506,7 +1550,8 @@ def _auto_map():
 def _index_key() -> tuple:
     out = [("auto", _auto_map()[0])]
     from . import virtuals as _vc
-    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path(), _vc.index_path()):
+    from . import videostore as _vs
+    for p in (storage.INDEX_PATH, _pool_index_path(), _folders_index(), _tags_path(), _vc.index_path(), _vs._index_path()):
         try:
             st = os.stat(p)
             out.append((p, st.st_mtime_ns, st.st_size))
@@ -1543,7 +1588,11 @@ def catalog() -> Dict[str, Any]:
     if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
         from . import virtuals as _vc
         folders.append({"id": _vc.VFOLDER, "path": "", "recursive": False, "count": nvirt, "missing": False, "name": "virtual",
-                        "managed": "virtual", "virtual": True})
+                        "managed": "virtual", "virtual": True, "pseudo": True})
+    nvl = sum(1 for i in items if any(fid == VLFOLDER for fid, _ in i["locs"]))
+    if nvl:   # 1.6.8 pseudo folder "🎬 Librería de vídeos" (no rescan / remove / reveal)
+        folders.insert(0, {"id": VLFOLDER, "path": "", "recursive": False, "count": nvl, "missing": False, "name": "video_library",
+                           "managed": "video_library", "pseudo": True})
     vcount: Dict[str, int] = {}
     for i in items:
         if i["virtual"]:
@@ -1723,6 +1772,8 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
         mi = mediainfo.get(i["hash"]) if not i.get("virtual") else None
         if mi:
             out["dur"] = mi.get("duration") or 0
+    if not i["folders"] and not i["colids"] and not i["in_pool"] and any(l[0] == VLFOLDER for l in i.get("locs") or ()):
+        out["vl"] = True   # 1.6.8: only in the Video Library
     v = i.get("virtual")
     if v:   # 1.6.6
         out["virtual"] = {"orig": v["orig"], "broken": v["broken"]}

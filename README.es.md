@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.7 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.8 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -56,6 +56,10 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 Una copia virtual es un recorte y/o una entrada/salida **que apunta a un archivo de la librería**, como las copias virtuales de Lightroom: no se duplica nada y el original nunca se modifica. Imágenes: un rectángulo. Vídeo: rectángulo y/o entrada/salida. Audio: entrada/salida. Se crea con **Nueva copia virtual** (clic derecho, Detalles, visor) y se cambia luego con **Editar recorte**. Se renderiza bajo demanda en `virtuals/.cache/` cuando algo necesita el archivo real (vista previa, referencias, librería de vídeos, redimensionar).
 
 Las copias llevan la insignia **virtual** y aparecen en **Copias virtuales**. Detalles muestra **Original: …** con **Mostrar original**, y el original lista sus copias. Borrar una copia nunca borra el original. Si el original desaparece, la copia se marca como **rota** hasta que el archivo vuelva. Con **Media Editor 1.7.0+** (`fileApi >= 2`), el rectángulo de las imágenes se elige en el modo solo-rectángulo de Media Editor (`cropFile({mode:"rect", initialRect})`, sin generar archivos), y las copias de vídeo tienen un botón **✂ Recortar en Media Editor** para el encuadre. Los rectángulos van en píxeles con la orientación EXIF ya aplicada. Con un Media Editor anterior, sin él o si rechaza el archivo, se usa una herramienta de recorte propia. **1.6.7:** con Media Editor `fileApi >= 3`, las copias de vídeo y audio se recortan en su **modo trim** (entrada/salida y, en vídeo, el encuadre) en lugar de la línea de tiempo propia. Las grabaciones del navegador o la webcam (WebM de MediaRecorder) no guardan la duración en el archivo: se mide a partir de los paquetes y, si aun así no se puede leer, la entrada y la salida se pueden escribir en segundos. Tras recortar una entrada con Gradio, **Guardar en librería** ofrece **Copia virtual de «original»** cuando el archivo sin recortar está en la librería.
+
+## Cargar medios de la librería en las entradas (1.6.8)
+
+Cada entrada de vídeo y audio de WanGP (Control Video 1/2/3, Video to Continue, Video Mask, Voice to follow 1/2/3, Soundtrack, Voice Samples) tiene el icono de cuadrícula de la librería. Está arriba a la derecha si la entrada está vacía, o en su barra junto a 📚 si tiene un valor. El icono abre el explorador de medios filtrado a **Vídeos** (o **Audios**), con la carpeta **Librería de vídeos** y las copias virtuales. **Doble clic** sobre un elemento, o seleccionarlo y pulsar **Cargar en «entrada»**, lo carga en esa entrada. Una copia virtual carga su versión generada. Esc / Cancelar deja el explorador como estaba.
 
 ## Guardar entradas en la librería (1.6.4)
 

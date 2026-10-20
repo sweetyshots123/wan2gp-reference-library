@@ -1,7 +1,7 @@
 {
   "name": "Reference Library",
   "author": "sweetyshots123",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "Save WanGP Reference Images as named collections and Control Videos in a video library, load them back with one click, and manage both (rename, reorder, delete with undo, import/export) from a dedicated tab. Compact bars sit under the Reference Images gallery and under Control Video; names are renamed in place with a pencil; crops made with Cropper (videos and images) can be saved automatically. An image browser shows every image (all collections, an unassigned pool and watched folders on disk) with filters and tags, and adds them to any collection. Optional two-way links with Prompt Library. English and Spanish with live language switching. Data lives in the plugin folder and survives updates.",
   "type": [
     "extension"

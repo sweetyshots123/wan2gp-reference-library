@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.7"
+PLUGIN_VERSION = "1.6.8"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -1470,6 +1470,12 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             c = vt.get("watch_images", {}).get(n)
             if isinstance(c, (gr.Image, gr.Gallery)):
                 hcomps.append((n, c))
+        # 1.6.8: every input that has the library button (Control Video 2/3, Soundtrack, Voice Samples...) can receive a
+        # library item. Appended after the 1.5.5 ones, so history restores keep their outputs.
+        have = {n for n, _ in hcomps}
+        for n, c in (self.save_targets.get(tab) or {}).items():
+            if n not in have and isinstance(c, (gr.Video, gr.Audio)):
+                hcomps.append((n, c)); have.add(n)
         self._hist_comps[tab] = hcomps
         return hcomps
 
@@ -1489,7 +1495,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         if req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library video/audio -> one WanGP input
             to, src = str(req["to"]), imagelib.media_path(str(req["hash"]))
             ent = imagelib.entry_for(str(req["hash"])) or {}
-            want = "audio" if to in AUDIO_TARGETS else "video"
+            want = "audio" if to in SAVE_AUDIO_INPUTS else "video"   # 1.6.8: every audio input, not just "Voice to follow"
             if src and ent.get("kind") == want and any(n == to for n, _ in comps):
                 direct[to] = [src]
             else:

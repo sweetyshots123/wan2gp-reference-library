@@ -1036,7 +1036,7 @@
               <div class="reflib-ib-thumb ${th === "" ? "nothumb" : ""}">${th ? `<img src="${th}" alt="" decoding="async">` : ""}${media}
                 <label class="reflib-ib-cb" title="${esc(it("sel_visible"))}"><input type="checkbox" ${on ? "checked" : ""}></label>
                 ${img.virtual ? `<span class="reflib-ib-vbadge ${img.virtual.broken ? "broken" : ""}" title="${esc(vct(img.virtual.broken ? "broken_tip" : "badge_tip"))}">${img.virtual.broken ? "⚠ " + esc(vct("broken")) : VICO + esc(vct("badge"))}</span>`
-                  : `<span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : it("folder_badge"))}</span>`}
+                  : `<span class="reflib-ib-badge ${nc ? "" : "zero"}" title="${esc(tip)}">${nc ? "×" + nc : esc(img.pool ? it("pool_badge") : img.vl ? pkt("vl_badge") : it("folder_badge"))}</span>`}
                 ${img.vcopies ? `<span class="reflib-ib-vcount" title="${esc(vct("copies_tip", { n: img.vcopies }))}">${VICO}${img.vcopies}</span>` : ""}
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
                 ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
@@ -1061,6 +1061,7 @@
         const fsb = root.querySelector(".reflib-ib-fs"); const fsOn = root.classList.contains("reflib-ib-full");
         fsb.textContent = fsOn ? "🗗" : "⛶"; fsb.title = it(fsOn ? "fs_restore" : "fs_max"); fsb.setAttribute("aria-pressed", fsOn ? "true" : "false");
         renderKindBar();
+        pkBanner();   // 1.6.8
         const vp = viewPref();   // 1.5.9 view selector
         root.querySelector(".reflib-ib-view").setAttribute("aria-label", it("v_size"));
         root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
@@ -1325,11 +1326,11 @@
             const kc = n.k || { image: n.all, video: 0, audio: 0 };
             const count = ilib.f.kind ? kc[ilib.f.kind] : (ilib.f.sub ? n.all : n.direct);   // 1.6.0: per media type
             const ktip = it("k_tree", { i: kc.image, v: kc.video, a: kc.audio });
-            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.path) : n.rel) + " — " + ktip)}">
+            let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.managed === "video_library" ? pkt("vlib_tip") : root.path) : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
-                <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
+                <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : root && root.managed === "video_library" ? `<span class="reflib-pk-ticon">${FILM_SVG}</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
-                ${root && !root.virtual ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
+                ${root && !root.virtual && !root.pseudo ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
             return html;
         };
@@ -2069,6 +2070,9 @@
     function mediaActions(inf, n) {   // 1.6.0: only what the selection and the current WanGP model can take
         const k = inf.kinds || { image: n, video: 0, audio: 0 };
         let html = "";
+        const pk = ilib.pick;   // 1.6.8: opened from an input's library button -> "Cargar en «input»" comes first
+        if (pk) { const ok = n === 1 && (k[pk.kind] || 0) === 1;
+            html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? pkt("load_tip", { label: pk.label }) : pkt(pk.kind === "audio" ? "want_a" : "want_v"))}">${GRID_SVG}${esc(pkt("load", { label: pk.label }))}</button>`; }
         if (k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
         if (k.video) {
             if (wanInput("reflib-vt-generate")) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="tovctl" ${n === 1 && k.video === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_vctl_tip") : it("to_one"))}">🎬 ${esc(it("to_vctl"))}</button>`;
@@ -2202,6 +2206,7 @@
               <span class="reflib-ib-view" role="group"><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="l">▣</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="m">▦</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="s">▩</button><button type="button" class="reflib-ib-vdet" data-act="vdetails"></button></span>
               <button type="button" class="reflib-ib-fs" data-act="fullscreen" aria-label="fullscreen">⛶</button>
               <button type="button" class="reflib-ib-x" aria-label="close">×</button></div>
+            <div class="reflib-pk-banner" hidden></div>
             <div class="reflib-ib-faddrow" hidden><input type="text" class="reflib-ib-fpath-in" spellcheck="false" autocomplete="off">
               <label class="reflib-ib-check"><input type="checkbox" class="reflib-ib-frec-in" checked> <span class="reflib-ib-frec-label"></span></label>
               <button type="button" class="reflib-ib-btn" data-act="fbrowse"></button>
@@ -2253,6 +2258,7 @@
             const card = e.target.closest(".reflib-ib-card");
             if (!card || e.target.closest(".reflib-ib-cb") || !card.dataset.hash) return;
             e.preventDefault();
+            if (ilib.pick) { const x = ilib.q.items[+card.dataset.idx]; if (x && x.kind === ilib.pick.kind) { pickLoad(card.dataset.hash); return; } }   // 1.6.8
             openLightbox(+card.dataset.idx);
         });
         bg.addEventListener("mousedown", startDrag);
@@ -2456,7 +2462,7 @@
     }
     function locCrumbs(l) {
         const parts = l.rel ? l.rel.split("/") : [];
-        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${l.managed === "virtual" ? VICO : ""}${esc(l.managed ? folderLabel(l) : l.root_name)}</button>`;
+        let html = `<div class="reflib-ib-loc" title="${esc(l.root)}"><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="">${l.managed === "virtual" ? VICO : l.managed === "video_library" ? FILM_SVG : ""}${esc(l.managed ? folderLabel(l) : l.root_name)}</button>`;
         parts.forEach((p, k) => { html += `<span>›</span><button type="button" data-act="loccrumb" data-fid="${esc(l.fid)}" data-rel="${esc(parts.slice(0, k + 1).join("/"))}">${esc(p)}</button>`; });
         return html + `</div>`;
     }
@@ -2775,6 +2781,8 @@
         if (act === "vsize") { setView({ thumb: el.dataset.v }); return; }
         if (act === "kind") { ilib.f.kind = el.dataset.v || ""; newQuery(); renderKindBar(); render(); return; }
         if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
+        if (act === "topick") { pickLoad([...ilib.sel][0]); return; }   // 1.6.8
+        if (act === "pkcancel") { closeBrowser(); return; }
         if (act === "tovctl") { sendMediaTo("video_guide"); return; }
         if (act === "toaudio") { sendMediaTo(el.dataset.to); return; }
         if (act === "tovlib") { sendIlib(Object.assign({ action: "to_vlib" }, ilib.sel.payload())).then(r => { toast((r && r.message) || "error", r && r.ok ? "ok" : "error"); }).catch(() => {}); return; }
@@ -3045,6 +3053,7 @@
     }
     function closeBrowser() {
         if (!ilib.root) return;
+        pickEnd();   // 1.6.8: back to the filter the user had
         closeLightbox(); stopAudio();
         ilib.open = false;
         ilib.root.classList.remove("open");
@@ -3638,6 +3647,98 @@
         }
     }
     setInterval(mountSaveButtons, 700);
+    // ================================================================ 1.6.8 library button on WanGP's video / audio inputs
+    // The Reference Images bar has a grid icon that opens the library; every WanGP video input (Control Video 1/2/3,
+    // Video to Continue, Video Mask) and audio input (Voice to follow 1/2/3, Soundtrack, Voice Samples) gets the same icon.
+    // It opens the media browser in "pick" mode: filtered to Videos (or Audios), with the Video Library and the virtual
+    // copies included; double-click (or select + "Cargar en «input»") loads that item into THAT input, through the same
+    // bridge as the browser's "Control Video" button. Empty input: the button floats top-right; filled: it sits in Gradio's
+    // toolbar before "📚 Guardar en librería". Nothing else in the toolbar moves.
+    var FILM_SVG = '<svg class="reflib-pk-film" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="13" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 2.5v11M11.5 2.5v11M1.5 5.5h3M1.5 8h3M1.5 10.5h3M11.5 5.5h3M11.5 8h3M11.5 10.5h3" stroke="currentColor" stroke-width="1.2"/></svg>';
+    const PKT = {
+        en: { tip_v: "Choose a video from the library for “{label}” (folders, Video Library, virtual copies)", tip_a: "Choose an audio from the library for “{label}”",
+              banner_v: "Choose a video for “{label}”", banner_a: "Choose an audio for “{label}”", hint: "Double-click it, or select it and press “Load into…”. Esc cancels.",
+              load: "Load into “{label}”", load_tip: "Load the selected item into “{label}”", want_v: "Select one video", want_a: "Select one audio", cancel: "Cancel",
+              loaded: "“{name}” loaded into “{label}”", gone: "“{label}” is not shown by the current model", vlib: "Video Library", vl_badge: "video lib.", vlib_tip: "The Video Library's own videos (saved with 📚, Media Editor crops, imports)",
+              preparing: "Preparing “{name}”…" },
+        es: { tip_v: "Elegir un vídeo de la librería para «{label}» (carpetas, Librería de vídeos, copias virtuales)", tip_a: "Elegir un audio de la librería para «{label}»",
+              banner_v: "Elige un vídeo para «{label}»", banner_a: "Elige un audio para «{label}»", hint: "Doble clic sobre él, o selecciónalo y pulsa «Cargar en…». Esc cancela.",
+              load: "Cargar en «{label}»", load_tip: "Cargar el elemento seleccionado en «{label}»", want_v: "Selecciona un vídeo", want_a: "Selecciona un audio", cancel: "Cancelar",
+              loaded: "«{name}» cargado en «{label}»", gone: "«{label}» no aparece con el modelo actual", vlib: "Librería de vídeos", vl_badge: "lib. vídeos", vlib_tip: "Los vídeos propios de la Librería de vídeos (guardados con 📚, recortes de Media Editor, importados)",
+              preparing: "Preparando «{name}»…" },
+    };
+    const pkt = (k, p = {}) => String((PKT[lang()] || PKT.en)[k] || PKT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    function pkLabel(block, field) {
+        const l = block.querySelector('[data-testid="block-label"], label span, .label-wrap span');
+        const t = ((l && l.textContent) || "").replace(/\s+/g, " ").trim().replace(/\s*\(\d+\s*[x×]\s*\d+[^)]*\)$/, "");   // WanGP appends "(640x360, 24 fps, 144 frames)"
+        return !t ? field : t.length > 48 ? t.slice(0, 46).replace(/[\s,;:(]+$/, "") + "…" : t;
+    }
+    function mountPickButtons() {
+        for (const block of document.querySelectorAll(".reflib-savein")) {
+            const f = svField(block); if (!f) continue;
+            if (!bridgeButton(`${f.tab}:history`)) continue;   // no loading bridge on this tab -> no button
+            const bar = block.querySelector(".icon-button-wrapper");
+            const host = bar || block;
+            let b = block.querySelector(".reflib-pk-btn");
+            if (!b || b.parentElement !== host) {
+                if (b) b.remove();
+                b = document.createElement("button"); b.type = "button"; b.className = "reflib-pk-btn"; b.innerHTML = GRID_SVG;
+                b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); pickOpen(block); });
+                b.addEventListener("pointerdown", (e) => e.stopPropagation());   // never starts Gradio's upload / drag
+                if (bar) { const sv = bar.querySelector(".reflib-sv-btn"), crp = [...bar.querySelectorAll(".crp-tool")].pop(); if (sv) sv.before(b); else if (crp) crp.after(b); else bar.prepend(b); }
+                else block.appendChild(b);
+            }
+            b.classList.toggle("float", !bar);
+            const tip = pkt(SV_AUDIO.test(f.field) ? "tip_a" : "tip_v", { label: pkLabel(block, f.field) });
+            if (b.title !== tip) { b.title = tip; b.setAttribute("aria-label", tip); }
+        }
+    }
+    setInterval(mountPickButtons, 700);
+    function pickOpen(block) {
+        const f = svField(block); if (!f) return;
+        const kind = SV_AUDIO.test(f.field) ? "audio" : "video";
+        // the whole library, filtered to that kind (not the folder / tags the browser was last left on); restored on close
+        const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
+        ilib.pick = { tab: f.tab, field: f.field, kind, label: pkLabel(block, f.field), prevF: prev };
+        Object.assign(ilib.f, { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false,
+                                atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind });
+        const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
+        ilib.sel.clear(); ilib.anchorIdx = -1;   // never a stale selection behind "Cargar en"
+        if (ilib.open) { newQuery(); renderKindBar(); render(); return; }
+        return openBrowser();
+    }
+    const pkSnap = (f) => { const o = {}; for (const [k, v] of Object.entries(f || {})) o[k] = v instanceof Set ? new Set(v) : (v && typeof v === "object") ? JSON.parse(JSON.stringify(v)) : v; return o; };
+    function pickEnd() {
+        const pk = ilib.pick; if (!pk) return;
+        ilib.pick = null; Object.assign(ilib.f, pkSnap(pk.prevF));
+        const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ilib.f.q || "";
+        pkBanner();
+    }
+    function pkBanner() {
+        const el = ilib.root && ilib.root.querySelector(".reflib-pk-banner"); if (!el) return;
+        const pk = ilib.pick;
+        el.hidden = !pk;
+        if (!pk) { el.innerHTML = ""; return; }
+        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pkt(pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt("hint"))}</small>
+            <button type="button" class="reflib-ib-btn" data-act="pkcancel">${esc(pkt("cancel"))}</button>`;
+        if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
+    }
+    function pickLoad(h) {
+        const pk = ilib.pick; if (!pk || !h) return;
+        const x = ilib.q.items.find(i => i && i.hash === h) || {};
+        if (x.kind && x.kind !== pk.kind) { toast(pkt(pk.kind === "audio" ? "want_a" : "want_v"), "info"); return; }
+        if (x.virtual && x.virtual.broken) { toast(vct("broken_tip"), "error"); return; }
+        const name = x.name || "";
+        if (x.virtual) toast(pkt("preparing", { name }), "info", [], 3000);   // a virtual copy is rendered first
+        const req = { hash: h, to: pk.field, target: `${pk.tab}:history` };
+        return sendBridge(req).then(r => {
+            if (r && r.ok && (r.restored || []).includes(pk.field)) {
+                toast(pkt("loaded", { name: name.replace(/\.[A-Za-z0-9]{1,5}$/, ""), label: pk.label }), "ok");
+                closeBrowser();
+            } else toast((r && r.error) || pkt("gone", { label: pk.label }), "error");
+            return r;
+        }).catch(() => {});
+    }
     // ================================================================ 1.6.6 virtual copies (Lightroom-like)
     // A virtual copy stores only params over ONE library original: image {rect}, video {rect?, start?, end?}, audio
     // {start, end}. The server renders it on demand (cache) whenever a real file is needed; the original is never touched.
@@ -4089,12 +4190,12 @@
             [{ label: t("undo"), onClick: () => sendBridge({ action: "save_input_undo", target: tgt, kind: "virtual", ref: r.virtual_id }).then(u => { if (u && u.ok) toast(vct("sv_undone"), "info"); }) }], 9000);
         return r;
     }
-    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f ? f.name : "");
+    const folderLabel = (f) => (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f && f.managed === "video_library") ? pkt("vlib") : (f ? f.name : "");
     window.referenceLibrary = {
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,
