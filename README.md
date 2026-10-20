@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.6.8 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.6.9 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -100,6 +100,8 @@ The **Used as reference** view (left column, under Recientes) lists every image 
 The ⛶ button next to the browser's X switches to full screen (more columns); to make it the default, turn on "Always open the image browser full screen" in the Reference Library settings.
 
 Under WanGP's output player there is a small bar with **Reuse settings** and **References only** for the video shown in the player (history entry if any, otherwise the metadata embedded in the file). It sits below the player and has no shortcuts, so it does not interfere with Vidosser.
+
+When settings come from a history entry, its start image, reference images, voice and control media are put back once WanGP has finished loading the settings and refreshing the form, even while it is generating. They are then checked and sent again if WanGP emptied them (1.6.9). The seed is never copied: it stays random (-1).
 
 **The seed is never reused (1.6.5).** Every way of reusing settings (output-player bar, history, outputs list, `history_settings_file()` in the API) leaves the seed random (`-1`). The seed is reset in the settings handed to WanGP's loader, and the Generate form's Seed field is kept at -1 for a few seconds after the load (a generated video handed over as a file still carries its seed in its metadata). Touching the Seed field yourself stops this. The history still records the seed that was used.
 

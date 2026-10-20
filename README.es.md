@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.6.8 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.6.9 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -100,6 +100,8 @@ La vista **Usadas como referencia** (columna izquierda, bajo Recientes) lista to
 El botón ⛶ junto a la X del explorador pasa a pantalla completa (más columnas); para que sea lo predeterminado, activa "Abrir siempre a pantalla completa" en los ajustes de Reference Library.
 
 Bajo el reproductor de vídeos generados de WanGP hay una pequeña barra con **Reutilizar ajustes** y **Solo referencias** para el vídeo mostrado (entrada del historial si existe; si no, los metadatos incrustados en el archivo). Va debajo del reproductor y no tiene atajos, así que no interfiere con Vidosser.
+
+Cuando los ajustes vienen de una entrada del historial, su imagen de inicio, imágenes de referencia, voz y medios de control se vuelven a poner cuando WanGP termina de cargar los ajustes y refrescar el formulario, incluso mientras genera. Después se comprueban y se reenvían si WanGP los vació (1.6.9). La semilla nunca se copia: queda aleatoria (-1).
 
 **La semilla nunca se reutiliza (1.6.5).** Todas las formas de reutilizar ajustes (barra del reproductor, historial, lista de salidas, `history_settings_file()` de la API) dejan la semilla aleatoria (`-1`). La semilla se pone a -1 en los ajustes que se pasan al cargador de WanGP, y el campo Seed del formulario de generación se mantiene en -1 unos segundos tras la carga (un vídeo generado que se pasa como archivo lleva su semilla en los metadatos). Si tocas tú el campo Seed, se deja de forzar. El historial sigue guardando la semilla que se usó.
 

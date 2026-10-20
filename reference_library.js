@@ -879,7 +879,7 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
+    const FAST_ACTIONS = new Set(["form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
@@ -3130,14 +3130,14 @@
               reuse_refs: "Reuse references only", replace: "Replace current refs (default: append)", savecol: "Save refs as collection", del: "Delete", undo: "Undo",
               outputs: "Generated videos without history", outputs_tip: "From WanGP's output folder: settings come from the metadata embedded in the file",
               more: "Load more", missing: "output file missing", size: "{mb} MB stored", cap: "Size cap (MB, 0 = no cap)", enabled: "Record generations",
-              no_loader: "WanGP's settings loader was not found on the page", loading: "Loading settings in WanGP…", restored: "Restored: {what}",
+              no_loader: "WanGP's settings loader was not found on the page", loading: "Loading settings in WanGP…", restored: "Restored: {what}", restore_again: "WanGP refreshed the form after loading the settings: putting the images / audio back…", restore_fail: "WanGP kept emptying {what} after loading the settings: add them again by hand",
               refs: "Refs", start: "Start", end: "End", control: "Control", vmask: "Video mask", imask: "Image mask", guide: "Guide", source: "Source", aud1: "Audio 1", aud2: "Audio 2", aud3: "Audio 3", find: "History", nohist: "no history entry", noembed: "no embedded settings" },
         es: { title: "Historial", tip: "Historial de generaciones", search: "Buscar prompt, modelo o archivo…", empty: "Aún no hay generaciones. Genera un vídeo en WanGP y aparecerá aquí.",
               reuse_all: "Reutilizar todos los ajustes", seed_note: "semilla aleatoria (-1)", reuse_all_tip: "Modelo, prompt, resolución, pasos… (la semilla queda aleatoria, -1) con el cargador de ajustes de WanGP, más refs, vídeo de control y máscaras",
               reuse_refs: "Reutilizar solo referencias", replace: "Reemplazar las refs actuales (por defecto: añadir)", savecol: "Guardar refs como colección", del: "Borrar", undo: "Deshacer",
               outputs: "Vídeos generados sin historial", outputs_tip: "De la carpeta de salida de WanGP: los ajustes salen de los metadatos incrustados en el archivo",
               more: "Cargar más", missing: "falta el archivo de salida", size: "{mb} MB guardados", cap: "Tamaño máximo (MB, 0 = sin límite)", enabled: "Registrar generaciones",
-              no_loader: "No se encontró el cargador de ajustes de WanGP en la página", loading: "Cargando ajustes en WanGP…", restored: "Restaurado: {what}",
+              no_loader: "No se encontró el cargador de ajustes de WanGP en la página", loading: "Cargando ajustes en WanGP…", restored: "Restaurado: {what}", restore_again: "WanGP refrescó el formulario tras cargar los ajustes: volviendo a poner las imágenes / el audio…", restore_fail: "WanGP siguió vaciando {what} tras cargar los ajustes: añádelos de nuevo a mano",
               refs: "Refs", start: "Inicio", end: "Final", control: "Control", vmask: "Máscara vídeo", imask: "Máscara imagen", guide: "Guía", source: "Origen", aud1: "Audio 1", aud2: "Audio 2", aud3: "Audio 3", find: "Historial", nohist: "sin entrada en el historial", noembed: "sin ajustes incrustados" },
     };
     const ht = (k, p = {}) => String((HT[lang()] || HT.en)[k] || HT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
@@ -3286,13 +3286,15 @@
         return general || found[0] || null;
     }
     let seedGuard = 0;
+    const seedRun = { run: 0, touched: false };   // 1.6.9: re-armed after a late media restore unless you touched the Seed
     function forceRandomSeed(ms = 20000) {
         const run = ++seedGuard, t0 = Date.now(); let touched = false, hooked = null;
+        seedRun.run = run; seedRun.touched = false;
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
         const tick = () => {
             if (run !== seedGuard || touched) return;
             const inp = seedInput();
-            if (inp && inp !== hooked) { hooked = inp; inp.addEventListener("focus", () => { if (run === seedGuard) touched = true; }, { once: true }); }
+            if (inp && inp !== hooked) { hooked = inp; inp.addEventListener("focus", () => { if (run === seedGuard) { touched = true; seedRun.touched = true; } }, { once: true }); }
             if (inp && document.activeElement !== inp && String(inp.value).trim() !== "-1") {
                 setter.call(inp, "-1");
                 inp.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3314,22 +3316,123 @@
             if (!r || !r.ok) { toast((r && r.error) || ht("noembed"), "error"); return; }
             file = new File([r.json], r.name || "settings.json", { type: "application/json" });
         }
-        if (!(await nativeLoad(file))) return;
+        const loadMark = eid ? { t: Date.now(), w: settleWatch(), blk: settingsBlock() } : null;   // 1.6.9: watch WanGP's form from the load on
+        if (!(await nativeLoad(file))) { loadMark && loadMark.w.obs.disconnect(); return; }
         histClose(); if (ilib.open) closeBrowser();
         if (!eid) return;
         let e = hist.items.find(x => x.id === eid);
         if (!e) { const g = await sendIlib({ action: "hist_get", eid }).catch(() => null); e = g && g.entry; }   // 1.5.7: from the player
-        await new Promise(res => setTimeout(res, 3500));   // after WanGP's own form refresh / model switch
-        const done = [];
-        if (e && e.media && e.media.image_refs) {
+        if (!e || !Object.keys(e.media || {}).length) return;
+        await restoreMedia(eid, e, loadMark);
+    }
+    // 1.6.9: the media of a history entry (start / end image, reference images, voice, control video, masks...) are sent
+    // only once WanGP's own settings load has really finished, and then checked. WanGP's chain is: settings file ->
+    // validate prompt -> save form -> load_settings_from_file -> (model switch) -> refresh_form_trigger -> fill_inputs, and
+    // fill_inputs rewrites EVERY input of the form, start image / refs / audio included. Up to 1.6.8 the media were sent
+    // after a fixed 3.5 s: on a PC that is generating (busy CPU / GPU, busy Gradio queue) the chain ends later, so
+    // fill_inputs emptied them again a few seconds after the "Restored" toast. Now: wait for WanGP's settings loader to
+    // hand the file back (its File box is emptied when load_settings_from_file returns), then for the media blocks to stay
+    // still, send, and keep watching; whatever WanGP clears again is sent again (up to 4 rounds, ~90 s at most).
+    const HM_TRIES = 4;
+    const hmRun = { phase: "idle", round: 0, lost: [], resent: 0 };   // diagnostics (window.referenceLibrary.hmState)
+    function hmBlock(f) {
+        if (f === "image_refs" || f === "image_start" || f === "image_end" || f === "image_guide" || f === "image_mask")
+            return document.querySelector(`.reflib-hm-${f}-generate`);
+        return document.querySelector(`.reflib-hm-${f}-generate, .reflib-si-${f}-generate, .reflib-at-${f}-generate`);
+    }
+    function hmHasValue(f) {   // null when the form has no such input (nothing to check)
+        const b = hmBlock(f); if (!b) return null;
+        if (b.querySelector(".thumbnail-item, .grid-wrap img, button.thumbnail-small")) return true;   // gallery
+        const a = b.querySelector("audio"); if (a && (a.currentSrc || a.getAttribute("src"))) return true;
+        const v = b.querySelector("video"); if (v && (v.currentSrc || v.getAttribute("src"))) return true;
+        if (b.querySelector('a.download-link[href], [data-testid="waveform-Audio"] audio')) return true;
+        const im = [...b.querySelectorAll("img[src]")].find(i => !/^data:image\/svg/.test(i.getAttribute("src") || "")); if (im) return true;
+        return false;
+    }
+    function settingsBlock() { const i = settingsInput(); return i && i.closest(".wangp-settings-upload"); }
+    const gPending = (el) => !!el && [...el.querySelectorAll(".wrap.default")].some(w => !w.classList.contains("hide") && w.getClientRects().length);
+    function loaderBusy(mark) {   // WanGP's "Load Settings From Media File" box still holds the file / is processing = its loader has not returned yet
+        // (while it holds a file the box has no <input type=file>, so the block is the one remembered when the load started)
+        const blk = (mark && mark.blk && mark.blk.isConnected) ? mark.blk : settingsBlock(); if (!blk) return false;
+        return !!blk.querySelector("table.file-preview, .file-preview-holder") || gPending(blk);
+    }
+    function mediaPending() {   // a Gradio event is still writing into one of the media inputs (its status overlay is shown)
+        return [...document.querySelectorAll('[class*="reflib-hm-"][class*="-generate"]')].some(b => gPending(b));
+    }
+    function settleWatch() {   // last time anything moved in the media blocks (or their show / hide)
+        const st = { last: Date.now(), obs: null };
+        const panel = (settingsInput() || document.body).closest('.tabitem, [role="tabpanel"]') || document.body;
+        st.obs = new MutationObserver(ms => {
+            const blocks = [...panel.querySelectorAll('[class*="reflib-hm-"], [class*="reflib-si-"], [class*="reflib-at-"]')].filter(b => !b.closest("#edit-tab-content"));
+            for (const m of ms) {
+                const t = m.target.nodeType === 1 ? m.target : m.target.parentElement; if (!t) continue;
+                if (blocks.some(b => b.contains(t)) || (m.type === "attributes" && blocks.some(b => t.contains(b)))) { st.last = Date.now(); return; }
+            }
+        });
+        st.obs.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style", "src", "hidden"] });
+        return st;
+    }
+    async function formBusy(mark) {   // server: one of WanGP's settings-load / form-refresh functions still queued or running for this tab
+        if (mark.fb && Date.now() - mark.fb.t < 350) return mark.fb.busy;
+        const r = await sendIlib({ action: "form_busy" }).catch(() => null);
+        const busy = !!(r && r.ok && r.busy);
+        if (busy) mark.w.last = Date.now();   // counts as movement: the quiet window starts when WanGP is done
+        mark.fb = { t: Date.now(), busy };
+        return busy;
+    }
+    async function waitSettled(mark, quietMs, maxMs) {
+        const t0 = Date.now(), slp = ms => new Promise(r => setTimeout(r, ms));
+        // 1) the loader took the file (it may already be done) and handed it back
+        while (Date.now() - t0 < maxMs && (loaderBusy(mark) || Date.now() - mark.t < 1200 || await formBusy(mark))) await slp(200);
+        // 2) WanGP's later form refresh: nothing moved in the media blocks for quietMs
+        while (Date.now() - t0 < maxMs && (await formBusy(mark) || Date.now() - mark.w.last < quietMs || mediaPending() || loaderBusy(mark))) await slp(200);
+    }
+    async function sendMedia(eid, e, want) {
+        const done = [], sent = [];
+        if (want.includes("image_refs")) {
             const r = await sendBridge({ action: "apply_history", eid, mode: "replace", target: "generate:image_refs" }).catch(() => null);
-            if (r && r.ok) done.push(ht("refs"));
+            if (r && r.ok) { done.push(ht("refs")); sent.push("image_refs"); }
         }
-        if (e && Object.keys(e.media || {}).some(f => f !== "image_refs")) {
+        if (want.some(f => f !== "image_refs")) {
             const r = await sendBridge({ eid, target: "generate:history" }).catch(() => null);
-            for (const f of (r && r.restored) || []) done.push(ht(HFIELD[f] || f));
+            for (const f of (r && r.restored) || []) { done.push(ht(HFIELD[f] || f)); sent.push(f); }
         }
-        if (done.length) toast(ht("restored", { what: done.join(", ") }));
+        return { done, sent };
+    }
+    async function watchStuck(fields, mark) {   // fields WanGP emptied again while we watched; [] = they stuck
+        const t0 = Date.now(), slp = ms => new Promise(r => setTimeout(r, ms)), seen = new Set(), lost = new Set();
+        while (Date.now() - t0 < 25000) {
+            await slp(250);
+            await formBusy(mark);
+            for (const f of fields) { const v = hmHasValue(f); if (v === null || v) seen.add(f); else if (seen.has(f)) lost.add(f); }
+            if (lost.size) break;
+            const allSeen = fields.every(f => seen.has(f));
+            if (Date.now() - t0 > 4000 && allSeen && Date.now() - mark.w.last > 2500 && !loaderBusy(mark) && !mediaPending()) break;
+            if (Date.now() - t0 > 8000 && !allSeen && Date.now() - mark.w.last > 2500) break;   // never showed up: send again
+        }
+        return fields.filter(f => lost.has(f) || !seen.has(f));
+    }
+    async function restoreMedia(eid, e, mark) {
+        mark = mark || { t: Date.now(), w: settleWatch(), blk: settingsBlock() };
+        let want = Object.keys(e.media || {}), all = [];
+        try {
+            Object.assign(hmRun, { phase: "settle", round: 0, lost: [], resent: 0 });
+            for (let k = 1; k <= HM_TRIES && want.length; k++) {
+                hmRun.phase = "settle"; hmRun.round = k;
+                await waitSettled(mark, k === 1 ? 1500 : 2000, 45000);
+                hmRun.phase = "send";
+                const { done, sent } = await sendMedia(eid, e, want);
+                hmRun.phase = "watch";
+                if (k === 1) all = done;
+                if (!sent.length) break;
+                const lost = await watchStuck(sent, mark);
+                if (!lost.length) { if (seedRun.run === seedGuard && !seedRun.touched) forceRandomSeed(6000); toast(ht("restored", { what: all.join(", ") })); return; }
+                console.info("[Reference Library] WanGP emptied", lost.join(", "), "after the settings load; sending them again (" + k + ")");
+                want = lost; hmRun.lost = lost; hmRun.resent++;
+                if (k < HM_TRIES) toast(ht("restore_again"), "info");
+                else toast(ht("restore_fail", { what: lost.map(f => ht(HFIELD[f] || f)).join(", ") }), "error");
+            }
+        } finally { mark.w.obs && mark.w.obs.disconnect(); hmRun.phase = "idle"; }
     }
     function histClick(ev) {
         if (delMenuClick(ev, "hist", () => hist.sel.size ? { ids: [...hist.sel] } : null, () => histLoad())) return;
@@ -4195,7 +4298,7 @@
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

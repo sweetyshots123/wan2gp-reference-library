@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.6.8"
+PLUGIN_VERSION = "1.6.9"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -1197,6 +1197,14 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 c.elem_classes = cl + ["reflib-atarget", f"reflib-at-{n}-{tab}"]
         watch_images = {name: components[name] for name in WATCH_IMAGES if isinstance(components.get(name), gr.components.Component)}
         self.vtargets[tab] = {"video": video, "watch": watch, "watch_images": watch_images}
+        # 1.6.9: tag every input a history restore can fill, so reference_library.js can check the media stuck after
+        # WanGP's own form refresh (and send them again if WanGP emptied them)
+        for n in tuple(WATCH_IMAGES) + ("video_mask", "image_mask") + AUDIO_TARGETS + tuple(WATCH_VIDEOS):
+            c = components.get(n)
+            if isinstance(c, gr.components.Component):
+                cl = c.elem_classes if isinstance(c.elem_classes, list) else ([c.elem_classes] if c.elem_classes else [])
+                if f"reflib-hm-{n}-{tab}" not in cl:
+                    c.elem_classes = cl + [f"reflib-hm-{n}-{tab}"]
         settings = load_settings()
         show = bool(settings.get("video_bar", True)) and (tab != "edit" or bool(settings.get("show_edit_bar", True)))
         # Always inserted (hidden when disabled) so the crop notices still reach the page.
@@ -3748,12 +3756,53 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             return {"ok": True, "at": svc.queue.status()}
         return self._err(lang, "bad_request")
 
-    def ilib_fast(self, raw):
+    # 1.6.9: WanGP functions of the settings-load -> model switch -> form refresh chain (wgp.py). While one of them is
+    # queued or running for this browser session, the media of a history entry must not be sent yet: fill_inputs, the
+    # last one, rewrites every input of the form (start image / refs / audio included).
+    FORM_CHAIN_FNS = frozenset(("validate_wizard_prompt", "save_inputs", "load_settings_from_file", "goto_model_type",
+                                "goto_model_type_with_filter", "change_model_from_target", "change_model", "fill_inputs",
+                                "refresh_model_dropdowns", "restore_recorded_form"))
+
+    def _form_busy(self, request):
+        """{"busy": bool, "fns": [...]} - read-only look at Gradio's queue for this session; busy False when it can't tell."""
+        try:
+            sess = getattr(request, "session_hash", None) if request is not None else None
+            app = getattr(getattr(request, "request", None), "app", None)
+            blocks = app.get_blocks() if app is not None and hasattr(app, "get_blocks") else None
+            q = getattr(blocks, "_queue", None)
+            if not sess or q is None:
+                return {"busy": False, "known": False}
+            media = set()
+            for comps in self._hist_comps.values():
+                media.update(getattr(c, "_id", None) for _, c in comps)
+            for vt in self.vtargets.values():
+                media.update(getattr(c, "_id", None) for c in (vt.get("watch_images") or {}).values())
+            media.discard(None)
+            events = [ev for eq in list(q.event_queue_per_concurrency_id.values()) for ev in list(eq.queue)]
+            events += [ev for job in list(q.active_jobs) if job for ev in list(job)]
+            fns = []
+            for ev in events:
+                if getattr(ev, "session_hash", None) != sess:
+                    continue
+                bf = getattr(ev, "fn", None); fn = getattr(bf, "fn", None)
+                if getattr(fn, "__self__", None) is self:      # our own bridges
+                    continue
+                name = getattr(bf, "name", "") or ""
+                outs = {getattr(o, "_id", None) for o in (getattr(bf, "outputs", None) or [])}
+                if name in self.FORM_CHAIN_FNS or (outs & media):
+                    fns.append(name)
+            return {"busy": bool(fns), "known": True, "fns": fns[:6]}
+        except Exception:
+            return {"busy": False, "known": False}
+
+    def ilib_fast(self, raw, request: gr.Request = None):
         """Only read-only, quick actions go through the unqueued channel."""
         try:
             req = json.loads(raw or "{}")
         except Exception:
             req = {}
+        if isinstance(req, dict) and req.get("action") == "form_busy":
+            return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
         if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)

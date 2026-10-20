@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.9 — 2026-10-20
+
+- **Fix: "Reutilizar ajustes" lost the start image, the reference images and the voice on a busy PC.** The settings came back (prompt, model, "Use Reference Images" / start-image / audio options, seed −1), but "Images as starting points", "Reference Images" and the reference audio stayed empty.
+  - **Cause:** WanGP loads settings in a chain: settings file → prompt check → form save → `load_settings_from_file` → (model switch) → `refresh_form_trigger` → `fill_inputs`, and `fill_inputs` rewrites **every** input of the form, the media included. Up to 1.6.8 the media of the history entry were sent after a **fixed 3.5 s**. While WanGP is generating (busy CPU / GPU, busy queue), that chain ends later, so `fill_inputs` emptied the media again right after the "Restaurado" toast. The history entries had stored them correctly, and the field names (`image_start`, `image_refs`, `audio_guide`…) were right.
+  - **Fix:** the media are sent only once WanGP's load has **really finished**. RL waits for WanGP's settings box to hand the file back, then asks the server whether any step of that chain is still queued or running for this browser tab (a read-only look at Gradio's queue; your running generation doesn't count), then waits for the media inputs to stay still. After sending, RL **checks the media stayed**. Anything WanGP empties again is sent again (up to 4 rounds, with a "volviendo a poner…" notice; if WanGP keeps emptying an input, a message names it).
+  - Applies to both ways in: **↺ Reutilizar ajustes** under WanGP's output player, and **Reutilizar todo** in the history panel. **Solo referencias** (player and panel) was checked too: it doesn't reload settings, so it was never affected, and it still adds the refs without touching the start image or the voice.
+  - The 1.6.5 seed rule is kept: the seed stays random (−1). If the restore ends late, the seed guard is re-armed unless you've touched the Seed field.
+- **Media Editor 1.8.0 checked** with the real build (trim mode, fileApi 3): video virtual copies (new and edit, in/out and crop round-trip, crop limited to the frame, back to full length), audio copies, browser WebM without a duration, cancel and busy, and rendered lengths and sizes. Nothing needed changing.
+- Unchanged: Vidosser, Media Editor (not modified), the 1.6.2 Resize button, 📚 Guardar en librería, the 1.6.8 library button. Plugin only, no WanGP core changes.
+
 ## 1.6.8 — 2026-10-20
 
 - **Library button on WanGP's video and audio inputs.** Control Video 1/2/3, Video to Continue (Source Video), Video Mask, Voice to follow 1/2/3, Soundtrack and the Voice Samples get the same grid icon as the Reference Images bar. When the input is empty it sits in the top-right corner. When the input has a value it sits in Gradio's toolbar, just before **📚 Guardar en librería**.
