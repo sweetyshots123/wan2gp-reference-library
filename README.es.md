@@ -2,7 +2,7 @@
 
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
-**Versión:** 1.7.1 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
+**Versión:** 1.7.2 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
 
 [English → README.md](README.md)
 
@@ -118,7 +118,7 @@ La vista **Usadas como referencia** (columna izquierda, bajo Recientes) lista to
 
 El botón ⛶ junto a la X del explorador pasa a pantalla completa (más columnas); para que sea lo predeterminado, activa "Abrir siempre a pantalla completa" en los ajustes de Reference Library.
 
-Bajo el reproductor de vídeos generados de WanGP hay una pequeña barra con **Reutilizar ajustes** y **Solo referencias** para el vídeo mostrado (entrada del historial si existe; si no, los metadatos incrustados en el archivo). Va debajo del reproductor y no tiene atajos, así que no interfiere con Vidosser.
+Bajo el reproductor de vídeos generados de WanGP hay una pequeña barra con **Reutilizar ajustes** y **Solo referencias** para el vídeo mostrado (entrada del historial si existe; si no, los metadatos incrustados en el archivo). **1.7.2:** el reproductor muestra la copia en caché de Gradio, cuyo nombre Gradio limpia (por ejemplo quita `[` y `]`); el vídeo se asocia a su entrada del historial por ruta, nombre, nombre limpiado por Gradio y una firma del contenido, o por tamaño y fecha más esa firma. Si no hay entrada pero el archivo tiene metadatos de WanGP, la entrada se reconstruye a partir de ellos (con sus imágenes de referencia incrustadas) y se guarda en el historial. Va debajo del reproductor y no tiene atajos, así que no interfiere con Vidosser.
 
 Cuando los ajustes vienen de una entrada del historial, su imagen de inicio, imágenes de referencia, voz y medios de control se vuelven a poner cuando WanGP termina de cargar los ajustes y refrescar el formulario, incluso mientras genera. Después se comprueban y se reenvían si WanGP los vació (1.6.9). La semilla nunca se copia: queda aleatoria (-1).
 

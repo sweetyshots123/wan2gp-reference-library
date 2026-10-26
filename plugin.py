@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.7.1"
+PLUGIN_VERSION = "1.7.2"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -1106,6 +1106,70 @@ def _video_from_url(v):
     return p
 
 
+def _output_dirs():
+    m = sys.modules.get("__main__")
+    ds = [_wgp_save_path()]
+    ip = getattr(m, "image_save_path", None) or getattr(sys.modules.get("wgp"), "image_save_path", None)
+    if ip:
+        ds.append(os.path.abspath(ip))
+    return list(dict.fromkeys(os.path.realpath(d) for d in ds))
+
+
+def _original_output(p):
+    """1.7.2: Gradio's cache copy shown in the player -> the generated file in WanGP's output folder (same size, and the
+    same name or the name Gradio sanitized). The path itself when it already is there, or when nothing matches."""
+    from .reflib_core import history as _h
+    if not p:
+        return p
+    rp = os.path.realpath(p)
+    dirs = _output_dirs()
+    if any(rp.startswith(d + os.sep) for d in dirs):
+        return rp
+    sig = _h.quick_sig(rp)
+    if not sig:
+        return p
+    size = int(sig.split(":", 1)[0])
+    g = _h.gradio_name(rp)
+    for d in dirs:
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in [os.path.basename(rp)] + [x for x in names if x != os.path.basename(rp)]:
+            q = os.path.join(d, n)
+            if (n == os.path.basename(rp) or _h.gradio_name(n) == g) and os.path.isfile(q) and os.path.getsize(q) == size and _h.quick_sig(q) == sig:
+                return q
+    return p
+
+
+def _resolve_generated(path, backfill=True):
+    """1.7.2: (history entry or None, original path, embedded settings or None) for a video shown in the player.
+    Entry by real path -> name -> Gradio's sanitized name -> size / date; else the settings WanGP embedded in the file,
+    and (history on) a backfilled history entry made from them, so the next reuse finds it."""
+    from .reflib_core import history as _h
+    orig = _original_output(path)
+    e = _h.find_by_output(path) or (_h.find_by_output(orig) if orig and orig != path else None)
+    if e:
+        return e, orig, None
+    src = orig if orig and os.path.isfile(orig) else path
+    md = _h.read_embedded(src) if src and os.path.isfile(src) else None
+    if md and backfill and history_config().get("enabled", True):
+        got = {}
+        try:
+            from shared.utils.video_metadata import extract_source_images
+            got = extract_source_images(src) or {}
+        except Exception:
+            got = {}
+        try:
+            e = _h.backfill(src, md, got if isinstance(got, dict) else {}, output=orig)
+            if e:
+                print(f"[Reference Library] history: added the missing entry of {os.path.basename(orig or src)} from its embedded settings")
+        except Exception as ex:
+            print(f"[Reference Library] history: could not backfill {os.path.basename(src)}: {ex!r}")
+            e = None
+    return e, orig, md
+
+
 def _embedded_refs(path):
     """Reference images WanGP embedded in a generated video (setting "embed source images"), staged as files."""
     if not path:
@@ -1573,17 +1637,21 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             path = _video_from_url(str(req.get("path") or req.get("url") or ""))
             if req.get("url") and not path:
                 return {"ok": False, "error": tr(lang, "pv_no_video")}
-            e = _h.find_by_output(path) if path else None
+            if not path:
+                return {"ok": True, "eid": None, "path": path, "embedded": False, "prompt": ""}
+            e, orig, md = _resolve_generated(path, backfill=bool(req.get("url")))   # 1.7.2
             if e:
-                return {"ok": True, "eid": e["id"], "path": path, "has_refs": bool((e.get("media") or {}).get("image_refs"))}
-            md = _h.read_embedded(path) if path and os.path.isfile(path) else None
-            return {"ok": True, "eid": None, "path": path, "embedded": bool(md), "prompt": (md or {}).get("prompt", "")}
+                return {"ok": True, "eid": e["id"], "path": path, "original": orig, "has_refs": bool((e.get("media") or {}).get("image_refs")),
+                        "backfilled": bool(e.get("backfilled"))}
+            return {"ok": True, "eid": None, "path": path, "original": orig, "embedded": bool(md), "prompt": (md or {}).get("prompt", "")}
         if action == "hist_settings":   # JSON for WanGP's native settings loader
             if req.get("eid"):
                 s = (_h.get(str(req["eid"])) or {}).get("settings")
             else:
                 path = str(req.get("path") or "")
                 e = _h.find_by_output(path)
+                if not e and path and os.path.isfile(path):   # 1.7.2: Gradio's cache copy of an output
+                    e = _h.find_by_output(_original_output(path))
                 s = e.get("settings") if e else _h.read_embedded(path)
             if not s:
                 return {"ok": False, "error": tr(lang, "hist_no_settings")}
@@ -3455,7 +3523,10 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out, out_gallery, out_state = self.apply_images(key.split(":", 1)[0], None, gallery, state, mode=req.get("mode"), lang=lang,
                                                                 paths_override=_h.paths(str(req.get("eid") or ""), "image_refs") or ["\0none"])
             elif req.get("action") == "apply_video_refs":   # 1.5.7: refs embedded in a generated video (no history entry)
-                pths = _embedded_refs(_video_from_url(str(req.get("path") or "")))
+                vp = _video_from_url(str(req.get("path") or ""))
+                he = _resolve_generated(vp, backfill=False)[0] if vp else None   # 1.7.2: an entry found late wins
+                from .reflib_core import history as _h
+                pths = (_h.paths(he["id"], "image_refs") if he else None) or _embedded_refs(vp)
                 if not pths:
                     out = self._err(lang, "pv_no_refs")
                 else:

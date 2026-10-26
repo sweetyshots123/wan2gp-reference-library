@@ -2,7 +2,7 @@
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
-**Version:** 1.7.1 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
+**Version:** 1.7.2 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)
 
 [Español → README.es.md](README.es.md)
 
@@ -118,7 +118,7 @@ The **Used as reference** view (left column, under Recientes) lists every image 
 
 The ⛶ button next to the browser's X switches to full screen (more columns); to make it the default, turn on "Always open the image browser full screen" in the Reference Library settings.
 
-Under WanGP's output player there is a small bar with **Reuse settings** and **References only** for the video shown in the player (history entry if any, otherwise the metadata embedded in the file). It sits below the player and has no shortcuts, so it does not interfere with Vidosser.
+Under WanGP's output player there is a small bar with **Reuse settings** and **References only** for the video shown in the player (history entry if any, otherwise the metadata embedded in the file). **1.7.2:** the player shows Gradio's cached copy of the output, whose name Gradio cleans up (for example `[` and `]` are dropped); the video is matched to its history entry by path, name, Gradio's cleaned-up name and a content signature, or by size and date plus that signature. If no entry exists but the file has WanGP metadata, the entry is rebuilt from it (with its embedded reference images) and saved in the history. It sits below the player and has no shortcuts, so it does not interfere with Vidosser.
 
 When settings come from a history entry, its start image, reference images, voice and control media are put back once WanGP has finished loading the settings and refreshing the form, even while it is generating. They are then checked and sent again if WanGP emptied them (1.6.9). The seed is never copied: it stays random (-1).
 

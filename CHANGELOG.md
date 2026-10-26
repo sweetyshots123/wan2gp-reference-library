@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.2 — 2026-10-26
+
+- **Fix: "Reutilizar ajustes" / "Solo referencias" under the output player sometimes said "Este vídeo no tiene entrada en el historial ni imágenes de referencia incrustadas"** for a video that does have a history entry. Cause: the player plays **Gradio's cached copy** of the output (`…/gradio/<hash>/<name>`), and Gradio cleans up that name (only letters, digits and `._-, ` are kept, so `[Shot 1]` becomes `Shot 1`). The lookup compared the exact path and the file name, so outputs whose name contains such characters were not found. It only happened for some videos, depending on their names.
+  - The video is now matched by: exact path → file name → Gradio's cleaned-up name, confirmed by a content signature (size + first/last 64 KB) → size and date (±10 min) plus that signature. A cached copy is mapped back to the original file in the output folder.
+  - If there is still no entry, the settings and reference images embedded in the file are used (as before). The entry is then **added to the history** from that metadata ("backfill": the original output path, the file date, its reference images and a poster), so the next time it is found directly. Only from the player bar and only when the history is enabled; if WanGP's own capture arrives later, it replaces the rebuilt entry, with no duplicates.
+  - The player bar now reads the big preview, not the first thumbnail of the strip, and tries the selected thumbnail too.
+  - Sliding window: a later window is merged into the previous entry only when the seeds don't differ (separate generations with the same prompt are no longer merged).
+- Unchanged: the 1.6.5 seed rule (reuse always sets seed -1), Vidosser, the 1.6.2 Resize button, Media Editor (not modified). Plugin only, no WanGP core changes.
+
 ## 1.7.1 — 2026-10-22
 
 - **Fix: "Borrar de la librería" was disabled for files from watched folders** (the "carpeta" badge), for videos and audios linked from disk, and for entries whose file no longer exists. It now works for all of them. **It removes only the library entry**: name and metadata, manual and auto tags, thumbnails and cached data, the collection copies of that file, its masks and its virtual copies. **The file on disk is not deleted or moved.** The confirmation lists everything that goes, says so in bold (EN/ES), and offers **Undo**.

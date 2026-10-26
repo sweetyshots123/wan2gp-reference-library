@@ -232,7 +232,15 @@ def capture(inputs: Dict[str, Any], configs: Optional[Dict[str, Any]], output, m
         data = _load()
         win = int(configs.get("window_no") or 1)
         updated = False
-        if win > 1 and data["entries"] and data["entries"][0].get("prompt") == entry["prompt"] and time.time() - data["entries"][0]["ts"] < 3600:
+        # 1.7.2: a backfilled entry of this very output is replaced by the real capture
+        on = {_norm(o) for o in entry["output"]}
+        data["entries"] = [x for x in data["entries"] if not (x.get("backfilled") and any(_norm(o) in on for o in x["output"]))]
+        prev = data["entries"][0] if data["entries"] else None
+        # sliding window = the same generation: same prompt and (1.7.2) the same seed, so separate generations with the
+        # same prompt are never merged into one entry
+        if (win > 1 and prev and prev.get("prompt") == entry["prompt"] and time.time() - prev["ts"] < 3600
+                and ((prev.get("settings") or {}).get("seed") is None or settings.get("seed") is None
+                     or (prev.get("settings") or {}).get("seed") == settings.get("seed"))):
             data["entries"][0].update(output=entry["output"], poster=entry.get("poster", data["entries"][0].get("poster")), ts=entry["ts"])   # sliding window: same generation
             entry = data["entries"][0]
             updated = True
@@ -358,13 +366,125 @@ def _norm(p: str) -> str:
     return os.path.normcase(os.path.abspath(p))
 
 
-def find_by_output(path: str) -> Optional[Dict]:
+def gradio_name(name: str) -> str:
+    """1.7.2: the file name Gradio gives its cache copy of a file it serves (gradio_client.utils.
+    strip_invalid_filename_characters: only alphanumerics and "._-, " are kept in the stem, at most 200 bytes), lower-cased.
+    WanGP's output names contain the prompt, so "[Shot 1]" becomes "Shot 1" in the copy the player shows."""
+    stem, ext = os.path.splitext(os.path.basename(name or ""))
+    stem = "".join(c for c in stem if c.isalnum() or c in "._-, ")
+    out = stem + ext
+    while len(out.encode()) > 200 and stem:
+        stem = stem[:-1]; out = stem + ext
+    return out.lower()
+
+
+def _fsize(p: str) -> Optional[int]:
+    try:
+        return os.path.getsize(p)
+    except OSError:
+        return None
+
+
+def quick_sig(p: str) -> Optional[str]:
+    """1.7.2: size + hash of the first and last 64 KB: tells a copy of a file from another file of the same size
+    without reading a whole video."""
+    try:
+        n = os.path.getsize(p)
+        with open(p, "rb") as f:
+            a = f.read(65536)
+            if n > 131072:
+                f.seek(n - 65536)
+            b = f.read(65536)
+        return f"{n}:" + hashlib.sha1(a + b).hexdigest()
+    except OSError:
+        return None
+
+
+def find_by_output(path: str, size: Optional[int] = None, mtime: Optional[float] = None) -> Optional[Dict]:
+    """The history entry of a generated file. 1.7.2: the player shows Gradio's cache copy (another folder, and a
+    sanitized name when the prompt-based name has brackets, quotes, accents...), so after the real path and the
+    base name it matches Gradio's sanitized name (same size when the file is known), then a unique entry whose
+    output has the same size and was written within 10 minutes of the file."""
+    if not path:
+        return None
+    ents = _load()["entries"]
     n = _norm(path)
-    for e in _load()["entries"]:
+    for e in ents:
         if any(_norm(o) == n for o in e["output"]):
             return e
     b = os.path.basename(path).lower()
-    return next((e for e in _load()["entries"] if any(os.path.basename(o).lower() == b for o in e["output"])), None)
+    hit = next((e for e in ents if any(os.path.basename(o).lower() == b for o in e["output"])), None)
+    if hit:
+        return hit
+    if size is None:
+        size = _fsize(path)
+    if mtime is None:
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = None
+    g = gradio_name(path)
+    cands = [e for e in ents if any(gradio_name(o) == g for o in e["output"])]
+    sig = quick_sig(path) if os.path.isfile(path) else None
+    # the output itself is gone (moved / deleted): a unique sanitized-name match is still the entry
+    if len(cands) == 1 and not any(os.path.isfile(o) for o in cands[0]["output"] if gradio_name(o) == g):
+        return cands[0]
+    same = [e for e in cands if any(gradio_name(o) == g and (sig is None or quick_sig(o) == sig) for o in e["output"])]
+    if same:
+        return same[0]
+    if sig is None or mtime is None:
+        return None
+    near = [e for e in ents if abs(float(e.get("ts") or 0) - mtime) < 600
+            and any(_fsize(o) == size and quick_sig(o) == sig for o in e["output"])]
+    return near[0] if len(near) == 1 else None
+
+
+def backfill(path: str, settings: Optional[Dict], inputs: Optional[Dict[str, Any]] = None,
+             output: Optional[str] = None) -> Optional[Dict]:
+    """1.7.2: record a generated video that has no history entry (made before the plugin loaded, or a capture that was
+    missed) from the settings WanGP embedded in the file (+ its embedded source images). The entry is marked
+    "backfilled", placed by the file's date, and replaced by the real capture if that arrives later. Never notifies the
+    capture listeners (it is not a new generation)."""
+    if not settings or not isinstance(settings, dict):
+        return None
+    out = os.path.abspath(output or path)
+    with _lock:
+        e = find_by_output(path)
+        if e:
+            return e
+        media: Dict[str, List[Dict]] = {}
+        for f in FIELDS:
+            items, seen = [], set()
+            for x in _flatten((inputs or {}).get(f)):
+                try:
+                    r = _store_item(x, f)
+                except Exception:
+                    r = None
+                if r and r["h"] not in seen:
+                    seen.add(r["h"]); items.append(r)
+            if items:
+                media[f] = items
+        st = {k: _jsonable(v) for k, v in settings.items() if _ok_json(v)}
+        try:
+            ts = os.path.getmtime(out if os.path.isfile(out) else path)
+        except OSError:
+            ts = time.time()
+        entry = {"id": uuid.uuid4().hex, "ts": ts, "output": [out], "model_type": str(st.get("model_type") or ""),
+                 "prompt": str(st.get("prompt") or ""), "key": {k: st.get(k) for k in KEY_SETTINGS if st.get(k) is not None},
+                 "settings": st, "media": media, "extra": _extra(inputs or {}, st, None), "backfilled": True}
+        try:
+            from . import media as _m
+            pth = _p("thumbs", "out_" + entry["id"] + ".jpg"); os.makedirs(os.path.dirname(pth), exist_ok=True)
+            _m.make_poster(out if os.path.isfile(out) else path, pth, max_side=320)
+            if os.path.exists(pth):
+                entry["poster"] = os.path.basename(pth)
+        except Exception:
+            pass
+        data = _load()
+        k = next((i for i, x in enumerate(data["entries"]) if float(x.get("ts") or 0) < ts), len(data["entries"]))
+        data["entries"].insert(k, entry)
+        _save(data)
+    return entry
 
 
 def read_embedded(path: str) -> Optional[Dict]:

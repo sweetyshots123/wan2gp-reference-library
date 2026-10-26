@@ -3635,18 +3635,25 @@
               refs: "Solo referencias", refs_tip: "Añade a Reference Images las imágenes de referencia del vídeo mostrado en el reproductor", none: "No hay ningún vídeo generado seleccionado en el reproductor", label: "Reference Library" },
     };
     const pvt = (k) => (PVT[lang()] || PVT.en)[k] || PVT.en[k];
-    function playerSrc() {
-        const g = document.getElementById("gallery"); if (!g) return "";
-        const pv = g.querySelector(".preview video, .preview img, [class*='preview'] video, [class*='preview'] img");
+    function playerSrcs() {   // 1.7.2: [big preview, selected thumbnail, first item] file URLs, in that order, without duplicates
+        const g = document.getElementById("gallery"); if (!g) return [];
+        const fileUrl = (el) => { const s = el && (el.currentSrc || el.src || el.getAttribute("src")); return s && /file=|\/file\//.test(s) ? s : ""; };
+        // the thumbnail strip lives INSIDE .preview in Gradio 5: the big media is the one that is not in .thumbnails
+        const pv = [...g.querySelectorAll(".preview video, .preview img, [class*='preview'] video, [class*='preview'] img")].find(el => !el.closest(".thumbnails, .thumbnail-item"));
         const sel = g.querySelector("button.selected video, button.selected img, .thumbnail-item.selected video, .thumbnail-item.selected img");
         const any = g.querySelector("video, img");
-        for (const el of [pv, sel, any]) { const s = el && (el.currentSrc || el.src); if (s && /file=|\/file\//.test(s)) return s; }
-        return "";
+        return [...new Set([pv, sel, any].map(fileUrl).filter(Boolean))];
     }
+    function playerSrc() { return playerSrcs()[0] || ""; }
     async function pvReuse(kind) {
-        const url = playerSrc();
-        if (!url) { toast(pvt("none"), "info"); return; }
-        const r = await sendIlib({ action: "hist_find", url }).catch(() => null);
+        const urls = playerSrcs();
+        if (!urls.length) { toast(pvt("none"), "info"); return; }
+        let r = null, url = urls[0];
+        for (const u of urls.slice(0, 2)) {   // the preview first; the selected thumbnail if the preview gives nothing better
+            const x = await sendIlib({ action: "hist_find", url: u }).catch(() => null);
+            if (x && x.ok && x.path && (!r || (!r.eid && (x.eid || (x.embedded && !r.embedded))))) { r = x; url = u; }
+            if (r && r.eid) break;
+        }
         if (!r || !r.ok || !r.path) { toast((r && r.error) || pvt("none"), "error"); return; }
         if (kind === "all") return reuseAll(r.eid || null, r.path, url);
         if (r.eid) return sendBridge({ action: "apply_history", eid: r.eid, mode: hist.replace ? "replace" : "append", target: "generate:image_refs" }).catch(() => {});
