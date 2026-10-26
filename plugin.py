@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.7.0"
+PLUGIN_VERSION = "1.7.1"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -275,6 +275,14 @@ TEXT = {
         "ilib_restore_dup": "Already back in the library, not restored twice",
         "folder_added": "Folder added: {path} ({n} images)",
         "ilib_removed_from": "{n} image(s) removed from \"{name}\"",
+        "forget_done": "{n} item(s) removed from the library. Files on disk were not touched",
+        "forget_done_owned": "{n} item(s) removed from the library ({k} library copy/copies deleted). Files in your folders were not touched",
+        "forget_recycled": "{k} file(s) sent to the Recycle Bin",
+        "forget_recycle_failed": "{k} file(s) could not be sent to the Recycle Bin and were kept: {names}",
+        "forget_none": "Nothing to remove from the library",
+        "forget_undone": "{n} item(s) back in the library",
+        "forget_undone_bin": "{k} file(s) are still in the Recycle Bin: restore them from there, then rescan the folder",
+        "folder_restored": "{n} item(s) restored to the library",
         "ilib_deleted_all": "{n} image(s) deleted from the library ({c} collection(s) affected)",
         "ilib_folder_kept": "{k} from watched folders stay on disk",
         "ilib_folder_only": "Watched-folder images are never deleted from disk ({k} skipped)",
@@ -524,6 +532,14 @@ TEXT = {
         "ilib_restore_dup": "Ya están otra vez en la librería; no se restauran dos veces",
         "folder_added": "Carpeta añadida: {path} ({n} imágenes)",
         "ilib_removed_from": "{n} imagen(es) quitadas de \"{name}\"",
+        "forget_done": "{n} elemento(s) quitados de la librería. Los archivos del disco no se han tocado",
+        "forget_done_owned": "{n} elemento(s) quitados de la librería ({k} copia(s) de la librería borradas). Los archivos de tus carpetas no se han tocado",
+        "forget_recycled": "{k} archivo(s) enviados a la Papelera de reciclaje",
+        "forget_recycle_failed": "{k} archivo(s) no se pudieron enviar a la Papelera y se han conservado: {names}",
+        "forget_none": "No hay nada que quitar de la librería",
+        "forget_undone": "{n} elemento(s) devueltos a la librería",
+        "forget_undone_bin": "{k} archivo(s) siguen en la Papelera de reciclaje: restáuralos desde allí y vuelve a escanear la carpeta",
+        "folder_restored": "{n} elemento(s) restaurados en la librería",
         "ilib_deleted_all": "{n} imagen(es) borradas de la librería ({c} colección(es) afectadas)",
         "ilib_folder_kept": "{k} de carpetas vigiladas se quedan en el disco",
         "ilib_folder_only": "Las imágenes de carpetas vigiladas nunca se borran del disco ({k} omitidas)",
@@ -3781,6 +3797,44 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out["added"], out["skipped"], out["collection_id"] = res["added"], res["skipped"], res["collection"]["id"]
                 out["reload"] = True
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action in ("forget_plan", "forget_missing_plan"):   # 1.7.1 "Borrar de la librería" for non-owned entries
+                from .reflib_core import forget as _fg
+                out = {"ok": True, "plan": _fg.plan(_fg.missing_hashes() if action == "forget_missing_plan" else hashes)}
+            elif action in ("forget", "forget_missing"):
+                from .reflib_core import forget as _fg
+                r = _fg.forget(_fg.missing_hashes() if action == "forget_missing" else hashes, delete_files=bool(req.get("delete_files")) and action == "forget")
+                if not r.get("ok"):
+                    out = {"ok": True, "kind": "info", "message": tr(lang, "forget_none"), "toast": tr(lang, "forget_none")}
+                else:
+                    msg = tr(lang, "forget_done_owned", n=r["n"], k=r["owned"]) if r["owned"] else tr(lang, "forget_done", n=r["n"])
+                    kind = "ok"
+                    if r["recycled"]:
+                        msg += " · " + tr(lang, "forget_recycled", k=r["recycled"])
+                    if r["recycle_errors"]:
+                        kind = "warn"
+                        msg += " · " + tr(lang, "forget_recycle_failed", k=len(r["recycle_errors"]),
+                                         names=", ".join(os.path.basename(p) for p in list(r["recycle_errors"])[:5]))
+                        print(f"[Reference Library] recycle failed (files kept): " + "; ".join(f"{os.path.basename(p)}: {e}" for p, e in r["recycle_errors"].items()))
+                    out = {"ok": True, "kind": kind, "message": msg, "toast": msg, "undo_forget": r["token"], "reload": True,
+                           "recycle_errors": [os.path.basename(p) for p in r["recycle_errors"]]}
+                out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action == "forget_undo":
+                from .reflib_core import forget as _fg
+                r = _fg.undo(str(req.get("token") or ""))
+                msg = tr(lang, "forget_undone", n=r.get("n", 0))
+                if r.get("recycled"):
+                    msg += " · " + tr(lang, "forget_undone_bin", k=r["recycled"])
+                out = {"ok": bool(r.get("ok")), "kind": "ok" if r.get("ok") else "err", "message": msg, "toast": msg, "reload": True}
+                out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action == "folder_excluded":
+                from .reflib_core import forget as _fg
+                out = {"ok": True, "fid": str(req.get("fid") or ""), "items": _fg.excluded_list(str(req.get("fid") or ""))}
+            elif action == "folder_restore":
+                from .reflib_core import forget as _fg
+                n = _fg.restore(str(req.get("fid") or ""), None if req.get("all") else [str(x) for x in (req.get("hashes") or [])][:5000])
+                out = self._ok(lang, "folder_restored", n=n)
+                out["reload"] = True
+                out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
             elif action in ("delete", "delete_all") and self._mask_hashes(hashes):   # 1.7.0
                 out = self._mask_delete_items(hashes, lang, action)
             elif action in ("delete", "delete_all") and self._virtual_hashes(hashes):   # 1.6.6
@@ -3891,7 +3945,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign")
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign",
+                     "forget_plan", "forget_missing_plan", "folder_excluded")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -4037,7 +4092,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

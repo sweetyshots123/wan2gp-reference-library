@@ -120,8 +120,11 @@ def list_images() -> List[Dict[str, Any]]:
             entry["in_pool"] = True
         fdata = load_folders()
         fpaths = {f["id"]: f["path"] for f in fdata["folders"]}
+        excl = {f["id"]: f["exclude"] for f in fdata["folders"] if f.get("exclude")}   # 1.7.1
         for p, v in fdata["files"].items():
             h = v["hash"]
+            if h in excl.get(v["folder"], ()):
+                continue
             entry = by_hash.get(h)
             if entry is None:
                 name = os.path.basename(p)
@@ -878,6 +881,13 @@ def load_folders() -> Dict[str, Any]:
                      "added": float(f.get("added") or 0) or time.time()}
             if isinstance(f.get("managed"), str) and re.match(r"^[a-z_]{1,40}$", f["managed"]):
                 entry["managed"] = f["managed"]   # 1.6.4: a folder the plugin owns (e.g. "saved_audio")
+            ex = f.get("exclude")
+            if isinstance(ex, dict):   # 1.7.1 items removed from the library ("Quitar de la librería"): hidden on rescans
+                clean = {h: {"name": str(m.get("name") or "")[:300], "rel": str(m.get("rel") or "")[:1000], "at": float(m.get("at") or 0),
+                             **({"recycled": True} if m.get("recycled") else {})}
+                         for h, m in ex.items() if _HASH_RE.match(str(h)) and isinstance(m, dict)}
+                if clean:
+                    entry["exclude"] = clean
             folders.append(entry)
     ids = {f["id"] for f in folders}
     files = {}
@@ -1245,7 +1255,8 @@ def list_folders() -> List[Dict[str, Any]]:
     counts: Dict[str, int] = {}
     for v in data["files"].values():
         counts[v["folder"]] = counts.get(v["folder"], 0) + 1
-    return [{**f, "count": counts.get(f["id"], 0), "missing": not os.path.isdir(f["path"]),
+    return [{**{k: v for k, v in f.items() if k != "exclude"}, "count": counts.get(f["id"], 0), "missing": not os.path.isdir(f["path"]),
+             "excluded": len(f.get("exclude") or {}),   # 1.7.1
              "name": os.path.basename(f["path"].rstrip("\\/")) or f["path"]} for f in data["folders"]]
 
 
@@ -1564,6 +1575,7 @@ _cat_lock = threading.Lock()
 
 # 1.5.0 auto-tags: the host sets AUTOTAGS = callable -> (key, {hash: frozenset(effective tag ids incl. ancestors)})
 AUTOTAGS = None
+AUTOTAG_STORE = None   # 1.7.1: the host's TagStore (pop / restore when an entry is removed from the library)
 # 1.5.4: the host sets JOBSTATUS = callable -> (rev, {hash: queued|processing|done|failed|local})
 JOBSTATUS = None
 JST_KEYS = ("queued", "processing", "done", "failed", "local", "never")
@@ -1597,6 +1609,9 @@ def _index_key() -> tuple:
     return tuple(out)
 
 
+from . import forget as _forget   # 1.7.1 (late import: forget imports imagelib lazily)
+
+
 def catalog() -> Dict[str, Any]:
     """{items, by_hash, tree, tags, collections, n_unassigned, folders} built from list_images(), cached."""
     key = _index_key()
@@ -1619,7 +1634,9 @@ def catalog() -> Dict[str, Any]:
                       "tagf": frozenset(_fold(t) for t in i["tags"]), "fold": fold, "added": i["added"],
                       "auto": amap.get(i["hash"], frozenset()), "body": bmap.get(i["hash"]),
                       "kind": ("mask" if i.get("mask") and all(fid == "__masks" for fid, _ in (i.get("locs") or [])) else i["virtual"]["kind"] if i.get("virtual") else (kind_of(i["path"]) or kind_of(i["name"]) or "image")),
-                      "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ())})
+                      "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ()), "vlib": i.get("vlib")})
+        it_ = items[-1]
+        it_["missing"] = _forget.is_missing(it_)   # 1.7.1 "archivo no encontrado"
     folders = list_folders()
     nvirt = sum(1 for i in items if i["virtual"])
     if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
@@ -1679,7 +1696,7 @@ def catalog() -> Dict[str, Any]:
     data = {"rev": _cat["rev"], "items": items, "by_hash": {i["hash"]: i for i in items}, "tree": tree, "nodefold": nodefold,
             "tags": sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"]))),
             "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"]),
-            "kinds": dict({k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, mask=nmask), "vcount": vcount, "mcount": mcount}
+            "kinds": dict({k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, mask=nmask), "vcount": vcount, "mcount": mcount, "nmissing": sum(1 for i in items if i.get("missing"))}
     try:   # 1.6.0: durations of every video/audio, probed in the background (throttled), never on this path
         from . import mediainfo
         mediainfo.want((i["hash"], i["path"], "video" if i["kind"] == "mask" else i["kind"]) for i in items if i["kind"] != "image" and not i["virtual"])
@@ -1704,7 +1721,7 @@ def _clean_filter(f) -> Dict[str, Any]:
             "sub": f.get("sub", True) is not False, "recent": bool(f.get("recent")) and not f.get("used"), "used": bool(f.get("used")),
             "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1))),
             "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS + ("mask",) else "",
-            "hasmask": bool(f.get("hasmask"))}
+            "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing"))}
 
 
 def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
@@ -1767,6 +1784,8 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
                 return False
         elif kind and i["kind"] != kind:
             return False
+        if f.get("missing") and not i.get("missing"):   # 1.7.1 "archivo no encontrado"
+            return False
         if mcount is not None and not mcount.get(i["hash"]):   # 1.7.0 "solo vídeos con máscara"
             return False
         if cols or none:
@@ -1824,6 +1843,8 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
 def _light(i: Dict[str, Any]) -> Dict[str, Any]:
     out = {"hash": i["hash"], "name": i["name"], "names": list(i["names"][:4]), "cols": sorted(i["colids"]), "pool": bool(i["in_pool"]),
            "folders": list(i["folders"]), "tags": list(i["tags"]), "added": round(i["added"] or 0, 1)}
+    if i.get("missing"):   # 1.7.1
+        out["missing"] = True
     if i["kind"] != "image":   # 1.6.0
         from . import mediainfo
         out["kind"] = i["kind"]
@@ -1859,6 +1880,7 @@ def kind_counts(f) -> Dict[str, int]:
         c[i["kind"]] += 1
         if i["mask"] and i["kind"] != "mask":   # 1.7.0: a library video that is also a mask counts in both
             c["mask"] += 1
+    c["missing"] = catalog().get("nmissing", 0)   # 1.7.1 (whole library: the "archivo no encontrado" toggle)
     return c
 
 
@@ -1967,7 +1989,7 @@ def resolve_selection(sel) -> List[str]:
 def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict[str, Any]:
     """What the selection footer needs, without the client holding every selected item."""
     by = catalog()["by_hash"]
-    n = deletable = folder_only = on_disk = in_one = nvirt = 0
+    n = deletable = folder_only = on_disk = in_one = nvirt = forgettable = missing = owned_only = 0
     cols, tags = set(), {}
     kinds = {k: 0 for k in KINDS + ("mask",)}
     for h in hashes:
@@ -1988,6 +2010,12 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             cols |= i["colids"]
         else:
             folder_only += 1
+        if _forget.forgettable(i):   # 1.7.1 watched-folder file / file gone: "Quitar de la librería" (the file stays)
+            forgettable += 1
+        elif i["colids"] or i["in_pool"]:
+            owned_only += 1
+        if i.get("missing"):
+            missing += 1
         if i["folders"]:
             on_disk += 1
         if one_col and one_col in i["colids"]:
@@ -1996,7 +2024,8 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             for t in i["tags"]:
                 tags.setdefault(_fold(t), t)
     return {"n": n, "deletable": deletable, "cols": len(cols), "folder_only": folder_only, "on_disk": on_disk,
-            "in_one": in_one, "tags": list(tags.values()), "kinds": kinds, "virtual": nvirt}
+            "in_one": in_one, "tags": list(tags.values()), "kinds": kinds, "virtual": nvirt,
+            "forgettable": forgettable, "missing": missing, "owned_only": owned_only}
 
 
 def facets(f, limit: int = 400) -> Dict[str, int]:

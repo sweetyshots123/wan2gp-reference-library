@@ -885,3 +885,37 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-mk-hasmask { margin-left: 6px; }
 .reflib-mk-btn .reflib-sv-ico { filter: none; }
 .reflib-mk-ticon { font-size: 12px; line-height: 1; }
+/* 1.7.1 "Borrar de la librería" for folder / disk-linked / missing entries, excluded files, missing filter */
+.reflib-fg-dlg { max-width: 680px; max-height: calc(100% - 40px); overflow: auto; }
+.reflib-fg-list { margin: 2px 0 0 18px; padding: 0; }
+.reflib-fg-list li { margin: 1px 0; }
+.reflib-fg-folders { word-break: break-all; font-size: 12px; }
+.reflib-fg-safe { padding: 8px 10px; border-radius: 6px; background: rgba(22,163,74,.12); border: 1px solid rgba(22,163,74,.45); }
+.reflib-fg-dlg.disk .reflib-fg-safe { background: rgba(220,38,38,.12); border-color: rgba(220,38,38,.55); color: #b91c1c; }
+.reflib-fg-disk { display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 2px; }
+.reflib-fg-diskinfo { font-size: 12.5px; padding: 6px 10px; border-left: 3px solid var(--border-color-primary, #d1d5db); }
+.reflib-fg-dlg.disk .reflib-fg-diskinfo { border-left-color: #dc2626; }
+.reflib-fg-files { margin: 4px 0; padding-left: 16px; max-height: 140px; overflow: auto; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+.reflib-fg-missing { position: absolute; left: 5px; bottom: 5px; z-index: 2; font-weight: 700; font-size: 10.5px; padding: 1px 6px; border-radius: 9px; background: rgba(217,119,6,.95); color: #fff; }
+.reflib-ib-card.missing .reflib-ib-thumb img { opacity: .45; filter: grayscale(.8); }
+.reflib-fg-pvmissing { margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: rgba(217,119,6,.14); border: 1px solid rgba(217,119,6,.5); color: #b45309; word-break: break-all; font-size: 12.5px; }
+.reflib-fg-fmissing { margin-left: 6px; }
+.reflib-fg-fmissing.on { background: rgba(217,119,6,.9) !important; color: #fff !important; border-color: transparent !important; }
+.reflib-fg-rmmissing { margin-left: 6px; padding: 2px 8px; font-size: 12px; }
+.reflib-fg-texcl { font-size: 11px; }
+.reflib-fg-texcl i { font-style: normal; margin-left: 1px; font-size: 10px; }
+.reflib-fg-exlist { max-height: 320px; overflow: auto; display: flex; flex-direction: column; gap: 3px; }
+.reflib-fg-exrow { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--border-color-primary, #e5e7eb); }
+.reflib-fg-exname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflib-fg-exflag { font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(217,119,6,.18); color: #b45309; }
+.dark .reflib-fg-safe { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.45); color: #bbf7d0; }
+.dark .reflib-fg-dlg.disk .reflib-fg-safe { background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.55); color: #fecaca; }
+.dark .reflib-fg-diskinfo { border-left-color: #3a4152; }
+.dark .reflib-fg-dlg.disk .reflib-fg-diskinfo { border-left-color: #f87171; }
+.dark .reflib-fg-pvmissing { color: #fcd34d; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.45); }
+.dark .reflib-fg-exflag { color: #fcd34d; background: rgba(245,158,11,.16); }
+.dark .reflib-fg-exrow { border-color: #3a4152; }
+.reflib-ib-kinds { flex-wrap: wrap; max-width: 100%; }
+.reflib-ib-kinds > * { flex-shrink: 0; white-space: nowrap; }
+.reflib-fg-list { padding-left: 4px; }
+.reflib-fg-dlg:not(.disk) .reflib-fg-diskinfo { opacity: .7; }

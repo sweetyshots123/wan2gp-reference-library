@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.1 — 2026-10-22
+
+- **Fix: "Borrar de la librería" was disabled for files from watched folders** (the "carpeta" badge), for videos and audios linked from disk, and for entries whose file no longer exists. It now works for all of them. **It removes only the library entry**: name and metadata, manual and auto tags, thumbnails and cached data, the collection copies of that file, its masks and its virtual copies. **The file on disk is not deleted or moved.** The confirmation lists everything that goes, says so in bold (EN/ES), and offers **Undo**.
+  - **"También borrar el archivo del disco / Also delete file from disk"**: an opt-in checkbox in that confirmation. It's **unchecked by default** and only shown when the selected files exist. It lists the files and how many there are. When ticked, the files go to the **Recycle Bin** through the Windows shell (never a permanent delete; on Linux, the desktop Trash). Only files in your own watched folders qualify, never the library's own copies or the plugin's saved-audio folder. Network shares and removable drives have no Recycle Bin, so their files are refused and kept. If a file can't be recycled, it is kept and the toast names it. Undo brings the entry back; restore recycled files from the Recycle Bin.
+  - **Each folder remembers the files removed from it**, so a rescan doesn't bring them back. The folder's row in the tree shows **⊘n**, which opens **Mostrar excluidos** with **Restaurar** / **Restaurar todos** (flags: "no está en el disco", "en la Papelera").
+  - **Missing files:**
+    - entries whose file is gone (deleted outside WanGP, or the drive is disconnected) get an **⚠ archivo no encontrado** badge on the card and a notice with the path in the details;
+    - a new **⚠ archivo no encontrado (n)** filter in the type bar;
+    - with the filter on, **Quitar todas las que faltan** removes them all, with a confirmation that also names unavailable folders.
+  - **Managed copies** (files the library owns: collections, imported images) keep the previous two-click delete, unchanged. In a mixed selection they're deleted in the same step, under the same Undo. Video Library entries are still deleted in the Video Library; the confirmation says when a removed file is also kept there.
+- Data: per-folder `exclude` list in `folders/index.json`. Undo records live in `collections/.undo/` for 15 min.
+- Unchanged: Vidosser, Media Editor (not modified), the 1.6.2 Resize button, the 1.6.5 seed rule, the 1.6.9 restore and the 1.7.0 masks. Plugin only, no WanGP core changes.
+
 ## 1.7.0 — 2026-10-20
 
 - **Mask library per video.** The masks you make in WanGP's **Video Mask** (mask creator / Matanyone, or an upload) are kept in the library, **linked to the Control Video they were made for**. The link is the video's content: the same file loaded from a folder, the Video Library or a staged copy is the same video. A **virtual copy** with a trim or crop has its own masks.

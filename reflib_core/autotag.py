@@ -26,6 +26,7 @@ class AutoTagService:
         self._map = (None, {}, {})
         self.queue = TagQueue(self.store, self.paths_for, self.backend_cfg, busy=busy, on_results=imagelib.invalidate, log=log)
         imagelib.AUTOTAGS = self.auto_map
+        imagelib.AUTOTAG_STORE = self.store   # 1.7.1
         imagelib.JOBSTATUS = self.queue.job_map
 
     # settings (secrets are stored but never returned to a UI or logged)

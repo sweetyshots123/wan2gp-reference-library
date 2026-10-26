@@ -870,7 +870,7 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
                    expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
@@ -901,7 +901,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -1032,7 +1032,7 @@
         const media = mk !== "image" ? `<span class="reflib-ib-kbadge k-${mk}" aria-hidden="true">${mk === "video" ? "🎬" : mk === "mask" ? "🎭" : "🎵"}</span>
                 <span class="reflib-ib-dur" title="${esc(img.dur ? it("pv_dur") : it("dur_none"))}">${img.dur ? esc(fmtDur(img.dur)) : "…"}</span>
                 ${mk === "audio" ? `<button type="button" class="reflib-ib-aplay ${ilib.audioHash === img.hash ? "on" : ""}" data-act="aplay" data-hash="${img.hash}" title="${esc(it(ilib.audioHash === img.hash ? "pause" : "play"))}" aria-label="${esc(it("play"))}">${ilib.audioHash === img.hash ? "❚❚" : "▶"}</button>` : ""}` : "";
-        return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${img.virtual ? "virtual" + (img.virtual.broken ? " broken" : "") : ""} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
+        return `<div title="${esc(when)}" class="reflib-ib-card k-${mk} ${img.missing ? "missing" : ""} ${img.virtual ? "virtual" + (img.virtual.broken ? " broken" : "") : ""} ${on ? "sel" : ""} ${ilib.preview === img.hash ? "cur" : ""}" data-hash="${img.hash}" data-idx="${idx}" data-kind="${mk}">
               <div class="reflib-ib-thumb ${th === "" ? "nothumb" : ""}">${th ? `<img src="${th}" alt="" decoding="async">` : ""}${media}
                 <label class="reflib-ib-cb" title="${esc(it("sel_visible"))}"><input type="checkbox" ${on ? "checked" : ""}></label>
                 ${img.virtual ? `<span class="reflib-ib-vbadge ${img.virtual.broken ? "broken" : ""}" title="${esc(vct(img.virtual.broken ? "broken_tip" : "badge_tip"))}">${img.virtual.broken ? "⚠ " + esc(vct("broken")) : VICO + esc(vct("badge"))}</span>`
@@ -1041,6 +1041,7 @@
                 ${img.masks ? `<span class="reflib-mk-count" title="${esc(mkt("count_tip", { n: img.masks }))}">🎭${img.masks}</span>` : ""}
                 ${img.mask ? `<span class="reflib-mk-of" title="${esc(mkt("of_tip", { video: (img.mask.video_name || "") }))}">${esc(mkt("badge"))}</span>` : ""}
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
+                ${img.missing ? `<span class="reflib-fg-missing" title="${esc(fgt("missing_tip"))}">⚠ ${esc(fgt("missing"))}</span>` : ""}
                 ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
               <div class="reflib-ib-name" title="${esc(img.names.join(" · "))}">${esc(img.name)}</div>
               ${img.uses ? `<div class="reflib-ib-uses" title="${esc(it("used_last", { when: whenText(img.used_at) }))}">${esc(it("used_n", { n: img.uses, when: whenText(img.used_at) }))}</div>` : ""}
@@ -1332,7 +1333,7 @@
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
                 <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : root && root.managed === "video_library" ? `<span class="reflib-pk-ticon">${FILM_SVG}</span>` : root && root.managed === "masks" ? `<span class="reflib-mk-ticon">🎭</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
                 <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
-                ${root && !root.virtual && !root.pseudo ? `<span class="reflib-ib-tacts"><button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
+                ${root && !root.virtual && !root.pseudo ? `<span class="reflib-ib-tacts">${root.excluded ? `<button type="button" class="reflib-fg-texcl" data-act="fgexcl" data-fid="${esc(root.id)}" title="${esc(fgt("excl_btn", { n: root.excluded }))}">⊘<i>${root.excluded}</i></button>` : ""}<button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
             return html;
         };
@@ -1417,13 +1418,14 @@
         if (f.jst) groups.push(chip("jst", f.jst, esc(it("jsf_title") + ": " + it("jsf_" + f.jst)), "jst"));
         if (f.kind) groups.push(chip("kind", f.kind, esc(it("chip_kind", { k: it("k_" + f.kind) })), "kind"));
         if (f.hasmask) groups.push(chip("hasmask", "", esc("🎭 " + mkt("hasmask")), "hasmask"));   // 1.7.0
+        if (f.missing) groups.push(chip("missing", "", esc("⚠ " + fgt("f_missing")), "missing"));   // 1.7.1
         if (!groups.length) return "";
         return `<div class="reflib-ib-fchips" title="${esc(it("chips_tip"))}">${join(groups, "chip_and")}<button type="button" class="reflib-ib-fclear" data-act="chipclear">${esc(it("chips_clear"))}</button></div>`;
     }
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false;
+            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false;
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
         }
@@ -1438,6 +1440,7 @@
             else if (kind === "jst") f.jst = "";
             else if (kind === "kind") f.kind = "";
             else if (kind === "hasmask") f.hasmask = false;
+            else if (kind === "missing") f.missing = false;
             else if (kind === "q") { f.q = ""; const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
             newQuery(); return true;
         }
@@ -2032,6 +2035,7 @@
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
               <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}</div>
+              ${lite && lite.missing ? `<div class="reflib-fg-pvmissing">⚠ ${esc(fgt("pv_missing", { path: (full && ((full.files || [])[0] || full.path)) || name }))}</div>` : ""}
               ${vBox}${mkSection(h, pmk, lite, full)}
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
               <div class="reflib-ib-muted">${pmk !== "image" ? esc([full && full.dur ? it("pv_dur") + " " + fmtDur(full.dur) : "", full && full.width ? `${full.width}×${full.height}` : "", full && full.fps ? Math.round(full.fps * 100) / 100 + " fps" : "",
@@ -2095,12 +2099,13 @@
         const info = ilib.info && ilib.info.sig === ilib.selSig ? ilib.info : null;
         const stale = !info && ilib.info;   // keep the last answer while the new one is on its way
         const inf = info || ilib.info || { deletable: n, cols: 0, folder_only: 0, on_disk: 0, in_one: n, tags: [] };
-        const canDelete = inf.deletable > 0;
-        const delTip = !canDelete ? it("del_tip_folder_only") : (inf.on_disk ? it("del_tip_disk", { k: inf.on_disk }) : it("del_tip_any"));
+        const canForget = inf.forgettable > 0;   // 1.7.1 folder / disk-linked / missing entries: "Quitar de la librería" (file kept)
+        const canDelete = inf.deletable > 0 || canForget;
+        const delTip = canForget ? fgt("btn_tip", { n: inf.forgettable }) : !canDelete ? it("del_tip_folder_only") : (inf.on_disk ? it("del_tip_disk", { k: inf.on_disk }) : it("del_tip_any"));
         const oc = oneCol();
         const removeBtn = oc ? `<button type="button" class="reflib-ib-btn reflib-ib-danger" data-act="removefrom" data-cid="${esc(oc.id)}" ${inf.in_one ? "" : "disabled"}
               title="${esc(inf.in_one ? it("remove_from_tip", { name: oc.name }) : it("remove_from_none", { name: oc.name }))}">${esc(it("remove_from", { name: oc.name }))}</button>` : "";
-        const delLabel = ilib.delArmed ? it("del_confirm_n", { n: inf.deletable, c: inf.cols }) : it("del_lib");
+        const delLabel = ilib.delArmed && !canForget ? it("del_confirm_n", { n: inf.deletable, c: inf.cols }) : it("del_lib");
         const def = d.collections.some(c => c.id === ilib.addTarget) ? ilib.addTarget : (d.collections.some(c => c.id === d.default_collection) ? d.default_collection : (d.collections[0] || {}).id || "__new");
         const addPanel = ilib.addOpen && n ? `<div class="reflib-ib-addpanel"><span>${esc(it("add_title", { n }))}</span>
               <select class="reflib-ib-target">${d.collections.map(c => `<option value="${esc(c.id)}" ${c.id === def ? "selected" : ""}>${esc(c.name)} (${c.count})</option>`).join("")}
@@ -2617,6 +2622,152 @@
         if (ilib.lightbox) { ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} }); ilib.lightbox.remove(); ilib.lightbox = null; }
     }
 
+    // ---- 1.7.1 "Borrar de la librería" for entries the library doesn't own: files in watched folders, disk-linked
+    // videos/audios, entries whose file is gone. Only the library entry goes (tags, thumbnails, collection copies, masks,
+    // virtual copies); the file stays on disk unless "Also delete file from disk" is ticked (-> Recycle Bin, never a
+    // permanent delete). The folder remembers removed files so a rescan doesn't bring them back ("Show excluded").
+    const FGT = {
+        en: { btn_tip: "Remove {n} item(s) from the library (folders / files on disk / missing files). Files on disk are not deleted",
+              title: "Remove from the library", title_missing: "Remove all missing entries",
+              lead: "{n} item(s) will be removed from the Reference Library. This removes:",
+              l_entry: "the library entry: name, metadata, thumbnails and cached data", l_tags: "tags of {k} item(s)",
+              l_cols: "{k} collection copy/copies ({c} collection(s))", l_masks: "{k} mask(s)", l_virt: "{k} virtual copy/copies",
+              l_missing: "{k} entry/entries whose file no longer exists", l_owned: "{k} managed copy/copies the library owns (deleted as usual)",
+              l_vlib: "{k} also in the Video Library: they stay there (delete them in the Video Library)",
+              l_folders: "From: {list}", l_offline: "⚠ Folder not available (disconnected drive?): {list}. Its entries count as missing.",
+              safe: "Files on disk are NOT deleted or moved.", safe2: "They stay where they are, and a rescan won't bring them back (“Show excluded” on the folder restores them). You can undo.",
+              disk: "Also delete file from disk", disk_n: "If ticked, these {k} file(s) go to the Recycle Bin (never a permanent delete):",
+              disk_more: "… and {k} more", disk_fail: "If a file can't be recycled, it is kept and you are told.",
+              disk_on: "The {k} file(s) listed will go to the Recycle Bin. Undo restores the entries, not the files (restore those from the Recycle Bin).",
+              cancel: "Cancel", go: "Remove from the library", go_disk: "Remove and send {k} file(s) to the Recycle Bin", loading: "Loading…",
+              missing: "file not found", missing_tip: "The file of this entry no longer exists on disk",
+              f_missing: "file not found", f_missing_tip: "Only entries whose file no longer exists ({n})",
+              rm_missing: "Remove all missing", rm_missing_tip: "Remove every entry whose file no longer exists (with confirmation)",
+              pv_missing: "File not found on disk: {path}", none: "Nothing to remove",
+              excl_btn: "Show excluded ({n}): removed from the library, skipped by rescans", excl_title: "Excluded from “{name}”",
+              excl_lead: "These files were removed from the library; rescans skip them. Restore brings them back.",
+              excl_none: "Nothing excluded in this folder.", excl_restore: "Restore", excl_restore_all: "Restore all ({n})",
+              excl_gone: "not on disk", excl_bin: "in the Recycle Bin", close: "Close", undo: "Undo" },
+        es: { btn_tip: "Quitar {n} elemento(s) de la librería (carpetas / archivos del disco / archivos que faltan). Los archivos del disco no se borran",
+              title: "Borrar de la librería", title_missing: "Quitar todas las que faltan",
+              lead: "Se quitarán {n} elemento(s) de la Reference Library. Se elimina:",
+              l_entry: "la entrada de la librería: nombre, metadatos, miniaturas y caché", l_tags: "las etiquetas de {k} elemento(s)",
+              l_cols: "{k} copia(s) en colecciones ({c} colección(es))", l_masks: "{k} máscara(s)", l_virt: "{k} copia(s) virtual(es)",
+              l_missing: "{k} entrada(s) cuyo archivo ya no existe", l_owned: "{k} copia(s) propias de la librería (se borran como siempre)",
+              l_vlib: "{k} también en la Video Library: se quedan allí (bórralos en la Video Library)",
+              l_folders: "De: {list}", l_offline: "⚠ Carpeta no disponible (¿disco desconectado?): {list}. Sus entradas cuentan como que faltan.",
+              safe: "Los archivos del disco NO se borran ni se mueven.", safe2: "Se quedan donde están y un nuevo escaneo no los volverá a añadir (“Mostrar excluidos” en la carpeta los restaura). Se puede deshacer.",
+              disk: "También borrar el archivo del disco", disk_n: "Si lo marcas, estos {k} archivo(s) irán a la Papelera de reciclaje (nunca un borrado definitivo):",
+              disk_more: "… y {k} más", disk_fail: "Si un archivo no se puede enviar a la Papelera, se conserva y se te avisa.",
+              disk_on: "Los {k} archivo(s) de la lista irán a la Papelera de reciclaje. Deshacer recupera las entradas, no los archivos (esos se recuperan desde la Papelera).",
+              cancel: "Cancelar", go: "Borrar de la librería", go_disk: "Borrar y enviar {k} archivo(s) a la Papelera", loading: "Cargando…",
+              missing: "archivo no encontrado", missing_tip: "El archivo de esta entrada ya no existe en el disco",
+              f_missing: "archivo no encontrado", f_missing_tip: "Solo las entradas cuyo archivo ya no existe ({n})",
+              rm_missing: "Quitar todas las que faltan", rm_missing_tip: "Quitar todas las entradas cuyo archivo ya no existe (con confirmación)",
+              pv_missing: "Archivo no encontrado en el disco: {path}", none: "No hay nada que quitar",
+              excl_btn: "Mostrar excluidos ({n}): quitados de la librería, los escaneos los saltan", excl_title: "Excluidos de “{name}”",
+              excl_lead: "Estos archivos se quitaron de la librería; los escaneos los saltan. Restaurar los devuelve.",
+              excl_none: "No hay nada excluido en esta carpeta.", excl_restore: "Restaurar", excl_restore_all: "Restaurar todos ({n})",
+              excl_gone: "no está en el disco", excl_bin: "en la Papelera", close: "Cerrar", undo: "Deshacer" }
+    };
+    const fgt = (k, p = {}) => String((FGT[lang()] || FGT.en)[k] || FGT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    function fgKindBar(k) {
+        const n = k.missing || 0;
+        if (!n && !ilib.f.missing) return "";
+        return `<button type="button" class="reflib-ib-kbtn reflib-fg-fmissing ${ilib.f.missing ? "on" : ""}" data-act="fgmissing" aria-pressed="${!!ilib.f.missing}" title="${esc(fgt("f_missing_tip", { n }))}">⚠ ${esc(fgt("f_missing"))} <i>${n}</i></button>`
+            + (ilib.f.missing && n ? `<button type="button" class="reflib-ib-btn reflib-ib-danger reflib-fg-rmmissing" data-act="fgrmmissing" title="${esc(fgt("rm_missing_tip"))}">${esc(fgt("rm_missing"))}</button>` : "");
+    }
+    function fgClose() { const d = ilib.root && ilib.root.querySelector(".reflib-fg-bg"); if (d) d.remove(); }
+    function fgDialogHost() { return (ilib.root.querySelector(".reflib-ib-modal") || ilib.root); }
+    function fgOpen(missingOnly) {
+        fgClose();
+        const pl = missingOnly ? {} : ilib.sel.payload(), sel = missingOnly ? { all: false, hashes: [] } : { all: !!ilib.sel.all, hashes: pl.hashes };
+        const bg = document.createElement("div");
+        bg.className = "reflib-ib-costbg reflib-fg-bg";
+        bg.innerHTML = `<div class="reflib-ib-costdlg reflib-fg-dlg" role="dialog" aria-modal="true"><h3>${esc(fgt(missingOnly ? "title_missing" : "title"))}</h3><div class="reflib-ib-muted">${esc(fgt("loading"))}</div></div>`;
+        fgDialogHost().appendChild(bg);
+        sendIlib(Object.assign({ action: missingOnly ? "forget_missing_plan" : "forget_plan" }, pl)).then(r => {
+            if (!bg.isConnected) return;
+            const p = r && r.plan;
+            if (!p || !p.n) { fgClose(); toast(fgt("none"), "info"); return; }
+            const li = (k, x) => `<li>${esc(fgt(k, x))}</li>`;
+            const files = p.disk_files || [];
+            const diskBox = !missingOnly && p.on_disk ? `<label class="reflib-fg-disk"><input type="checkbox" class="reflib-fg-diskcb"> <b>${esc(fgt("disk"))}</b></label>
+                <div class="reflib-fg-diskinfo"><div>${esc(fgt("disk_n", { k: p.on_disk }))}</div>
+                <ul class="reflib-fg-files">${files.slice(0, 12).map(f => `<li title="${esc(f)}">${esc(f)}</li>`).join("")}${p.on_disk > 12 ? `<li class="reflib-ib-muted">${esc(fgt("disk_more", { k: p.on_disk - 12 }))}</li>` : ""}</ul>
+                <div class="reflib-ib-muted">${esc(fgt("disk_fail"))}</div></div>` : "";
+            bg.querySelector(".reflib-fg-dlg").innerHTML = `<h3>${esc(fgt(missingOnly ? "title_missing" : "title"))}</h3>
+                <div>${esc(fgt("lead", { n: p.n }))}</div>
+                <ul class="reflib-fg-list">${li("l_entry")}${p.tagged ? li("l_tags", { k: p.tagged }) : ""}${p.copies_in_cols ? li("l_cols", { k: p.copies_in_cols, c: p.cols }) : ""}
+                  ${p.masks ? li("l_masks", { k: p.masks }) : ""}${p.virtuals ? li("l_virt", { k: p.virtuals }) : ""}${p.missing ? li("l_missing", { k: p.missing }) : ""}
+                  ${p.owned_only ? li("l_owned", { k: p.owned_only }) : ""}${p.vlib ? li("l_vlib", { k: p.vlib }) : ""}</ul>
+                ${(p.folders || []).length ? `<div class="reflib-ib-muted reflib-fg-folders">${esc(fgt("l_folders", { list: p.folders.join(", ") }))}</div>` : ""}
+                ${(p.offline_folders || []).length ? `<div class="reflib-ib-clwarn">${esc(fgt("l_offline", { list: p.offline_folders.join(", ") }))}</div>` : ""}
+                <div class="reflib-fg-safe"><b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}</div>
+                ${diskBox}
+                <div class="reflib-ib-costbtns"><button type="button" class="reflib-ib-btn" data-fg="no">${esc(fgt("cancel"))}</button>
+                <button type="button" class="reflib-ib-btn reflib-ib-danger reflib-fg-go" data-fg="ok">${esc(fgt("go"))}</button></div>`;
+            const cb = bg.querySelector(".reflib-fg-diskcb");
+            if (cb) cb.addEventListener("change", () => {
+                bg.querySelector(".reflib-fg-dlg").classList.toggle("disk", cb.checked);
+                bg.querySelector(".reflib-fg-go").textContent = cb.checked ? fgt("go_disk", { k: p.on_disk }) : fgt("go");
+                const safe = bg.querySelector(".reflib-fg-safe");
+                safe.innerHTML = cb.checked ? `<b>⚠ ${esc(fgt("disk_on", { k: p.on_disk }))}</b>` : `<b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}`;
+            });
+        }).catch(() => fgClose());
+        bg.addEventListener("click", (ev) => {
+            const b = ev.target.closest("[data-fg]"); if (!b) return;
+            ev.stopPropagation();
+            const cb = bg.querySelector(".reflib-fg-diskcb"), del = !!(cb && cb.checked);
+            fgClose();
+            if (b.dataset.fg !== "ok") return;
+            sendIlib(Object.assign({ action: missingOnly ? "forget_missing" : "forget", delete_files: del }, pl)).then(r => { fgUndoToast(r, sel); ilibApply(r); }).catch(() => {});
+        });
+    }
+    function fgUndoToast(r, sel) {
+        if (!r) return;
+        if (!r.undo_forget) { if (r.message) toast(r.message, r.kind === "warn" ? "error" : "info"); return; }
+        if (sel.all) ilib.sel.clear(); else for (const h of sel.hashes || []) ilib.sel.delete(h);
+        selChanged();
+        const box = ensureToasts();
+        const last = box.lastElementChild;
+        if (last) last.remove();
+        toast(r.toast, r.kind === "warn" ? "error" : "ok", [{ label: fgt("undo"), onClick: () => sendIlib({ action: "forget_undo", token: r.undo_forget }).then(x => { if (x && x.toast) toast(x.toast, "ok"); ilibApply(x); }).catch(() => {}) }], r.kind === "warn" ? 30000 : 15000);
+    }
+    function fgExcluded(fid) {
+        fgClose();
+        const f = ((ilib.data && ilib.data.folders) || []).find(x => x.id === fid) || {};
+        const bg = document.createElement("div");
+        bg.className = "reflib-ib-costbg reflib-fg-bg";
+        bg.innerHTML = `<div class="reflib-ib-costdlg reflib-fg-dlg reflib-fg-excl" role="dialog" aria-modal="true"><h3>${esc(fgt("excl_title", { name: f.name || f.path || "" }))}</h3><div class="reflib-ib-muted">${esc(fgt("loading"))}</div></div>`;
+        fgDialogHost().appendChild(bg);
+        const draw = () => sendIlib({ action: "folder_excluded", fid }).then(r => {
+            if (!bg.isConnected) return;
+            const items = (r && r.items) || [];
+            bg.querySelector(".reflib-fg-dlg").innerHTML = `<h3>${esc(fgt("excl_title", { name: f.name || f.path || "" }))}</h3>
+                <div class="reflib-ib-muted">${esc(fgt(items.length ? "excl_lead" : "excl_none"))}</div>
+                <div class="reflib-fg-exlist">${items.slice(0, 500).map(x => `<div class="reflib-fg-exrow"><span class="reflib-fg-exname" title="${esc(x.path)}">${esc(x.rel ? x.rel + "/" + x.name : x.name)}</span>
+                    ${x.recycled ? `<span class="reflib-fg-exflag">${esc(fgt("excl_bin"))}</span>` : !x.on_disk ? `<span class="reflib-fg-exflag">${esc(fgt("excl_gone"))}</span>` : ""}
+                    <span class="reflib-ib-muted">${esc(whenText(x.at))}</span>
+                    <button type="button" class="reflib-ib-btn" data-fgx="one" data-hash="${esc(x.hash)}">${esc(fgt("excl_restore"))}</button></div>`).join("")}</div>
+                <div class="reflib-ib-costbtns"><button type="button" class="reflib-ib-btn" data-fgx="close">${esc(fgt("close"))}</button>
+                ${items.length ? `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-fgx="all">${esc(fgt("excl_restore_all", { n: items.length }))}</button>` : ""}</div>`;
+        }).catch(() => fgClose());
+        bg.addEventListener("click", (ev) => {
+            const b = ev.target.closest("[data-fgx]"); if (!b) return;
+            ev.stopPropagation();
+            if (b.dataset.fgx === "close") { fgClose(); return; }
+            const req = b.dataset.fgx === "all" ? { action: "folder_restore", fid, all: true } : { action: "folder_restore", fid, hashes: [b.dataset.hash] };
+            sendIlib(req).then(r => { if (r && r.toast) toast(r.toast, "ok"); ilibApply(r); if (b.dataset.fgx === "all") fgClose(); else draw(); }).catch(() => {});
+        });
+        draw();
+    }
+    function fgClick(act, el, e) {
+        if (act === "fgmissing") { ilib.f.missing = !ilib.f.missing; newQuery(); renderKindBar(); render(); return true; }
+        if (act === "fgrmmissing") { fgOpen(true); return true; }
+        if (act === "fgexcl") { e.stopPropagation(); fgExcluded(el.dataset.fid); return true; }
+        return false;
+    }
     // ---- 1.6.0 media browser: type filter, durations, audio playback, video hover preview, WanGP audio/video targets
     const KINDS = ["image", "video", "audio", "mask"];   // 1.7.0 masks are their own type
     const closeAfter = () => localStorage.getItem("reflib_ib_close_after") === "1";
@@ -2633,7 +2784,8 @@
         host.setAttribute("aria-label", it("k_tip"));
         host.innerHTML = [["", it("k_all"), tot]].concat(KINDS.map(x => [x, it("k_" + x), k[x] || 0])).map(([v, l, n]) =>
             `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""} ${v === "mask" ? "k-mask" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${v === "mask" ? "🎭 " : ""}${esc(l)} <i>${n}</i></button>`).join("")
-            + `<button type="button" class="reflib-ib-kbtn reflib-mk-hasmask ${ilib.f.hasmask ? "on" : ""}" data-act="hasmask" aria-pressed="${!!ilib.f.hasmask}" title="${esc(mkt("hasmask_tip"))}">🎭 ${esc(mkt("hasmask"))}</button>`;
+            + `<button type="button" class="reflib-ib-kbtn reflib-mk-hasmask ${ilib.f.hasmask ? "on" : ""}" data-act="hasmask" aria-pressed="${!!ilib.f.hasmask}" title="${esc(mkt("hasmask_tip"))}">🎭 ${esc(mkt("hasmask"))}</button>`
+            + fgKindBar(k);   // 1.7.1
     }
     const murl = new Map();
     function mediaUrl(h, tries = 0) {
@@ -2789,6 +2941,7 @@
         if (act === "kind") { ilib.f.kind = el.dataset.v || ""; newQuery(); renderKindBar(); render(); return; }
         if (act === "hasmask") { ilib.f.hasmask = !ilib.f.hasmask; newQuery(); renderKindBar(); render(); return; }   // 1.7.0
         if (mkClick(act, el, e)) return;
+        if (fgClick(act, el, e)) return;   // 1.7.1
         if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
         if (act === "topick") { pickLoad([...ilib.sel][0]); return; }   // 1.6.8
         if (act === "pkcancel") { if (ilib.pick && ilib.pick.mode === "assign") mkAssignEnd(); else closeBrowser(); return; }
@@ -2809,6 +2962,8 @@
             sendIlib({ action: "pause_index", paused }).then(r => { if (r && r.scan) { ilib.scan = r.scan; renderProgress(); pollScan(false); } }).catch(() => {});
         }
         else if (act === "del") {
+            const inf0 = ilib.info && ilib.info.sig === ilib.selSig ? ilib.info : null;
+            if (inf0 && inf0.forgettable > 0) { fgOpen(false); return; }   // 1.7.1 confirmation dialog instead of the armed click
             if (!ilib.delArmed) {
                 ilib.delArmed = true; renderFooter();
                 clearTimeout(ilib.delTimer);
@@ -4116,7 +4271,7 @@
         const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
         ilib.pick = { mode: "assign", src: h, kind: "video", label: (x.mask && x.mask.label) || mkStem(x.name) || "", prevF: prev };
         Object.assign(ilib.f, { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false,
-                                atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind: "video", hasmask: false });
+                                atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind: "video", hasmask: false, missing: false });
         const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
         ilib.sel.clear(); ilib.anchorIdx = -1;
         newQuery(); renderKindBar(); render(); pkBanner();

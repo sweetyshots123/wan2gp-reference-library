@@ -60,6 +60,26 @@ class TagStore:
                     data[h]["height_cm"] = old["height_cm"]
             self._save(data)
 
+    def pop(self, hashes: Iterable[str]) -> Dict[str, Dict]:
+        """1.7.1: remove these images' auto tags; returns what was removed (for undo)."""
+        with self._lock:
+            data = dict(self.load())
+            out = {h: data.pop(h) for h in list(hashes) if h in data}
+            if out:
+                self._save(data)
+            return out
+
+    def restore(self, entries: Dict[str, Dict]) -> int:
+        with self._lock:
+            data = dict(self.load())
+            n = 0
+            for h, e in (entries or {}).items():
+                if h not in data and isinstance(e, dict):
+                    data[h] = e; n += 1
+            if n:
+                self._save(data)
+            return n
+
     def done_for(self, hashes: Iterable[str], model: str) -> set:
         d = self.load()
         return {h for h in hashes if h in d and d[h].get("model") == model}
