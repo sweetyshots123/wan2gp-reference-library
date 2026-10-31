@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.7.2"
+PLUGIN_VERSION = "1.7.3"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -278,6 +278,7 @@ TEXT = {
         "forget_done": "{n} item(s) removed from the library. Files on disk were not touched",
         "forget_done_owned": "{n} item(s) removed from the library ({k} library copy/copies deleted). Files in your folders were not touched",
         "forget_recycled": "{k} file(s) sent to the Recycle Bin",
+        "forget_vlib": "{k} deleted from the Video Library",
         "forget_recycle_failed": "{k} file(s) could not be sent to the Recycle Bin and were kept: {names}",
         "forget_none": "Nothing to remove from the library",
         "forget_undone": "{n} item(s) back in the library",
@@ -535,6 +536,7 @@ TEXT = {
         "forget_done": "{n} elemento(s) quitados de la librería. Los archivos del disco no se han tocado",
         "forget_done_owned": "{n} elemento(s) quitados de la librería ({k} copia(s) de la librería borradas). Los archivos de tus carpetas no se han tocado",
         "forget_recycled": "{k} archivo(s) enviados a la Papelera de reciclaje",
+        "forget_vlib": "{k} borrado(s) de la Librería de vídeos",
         "forget_recycle_failed": "{k} archivo(s) no se pudieron enviar a la Papelera y se han conservado: {names}",
         "forget_none": "No hay nada que quitar de la librería",
         "forget_undone": "{n} elemento(s) devueltos a la librería",
@@ -3770,6 +3772,16 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out = {"ok": True, "scan": imagelib.scan_status(), "paused": st["index_paused"]}
             elif action == "list":
                 out = self._ilib_payload(lang, rescan=bool(req.get("rescan")))
+            elif action == "col_peek":   # 1.7.3: hover preview of a collection in the input bar's dropdown (read-only)
+                label = str(req.get("label") or "").strip()
+                col = next((c for c in storage.list_collections() if f'{c["name"]} ({len(c["images"])})' == label or c["name"] == label), None)
+                if not col:
+                    out = {"ok": False}
+                else:
+                    hs = [i.get("hash") for i in col["images"] if isinstance(i, dict) and i.get("hash")][:8]
+                    pend = []
+                    out = {"ok": True, "name": col["name"], "count": len(col["images"]), "hashes": hs,
+                           "thumbs": imagelib.thumbs_for(hs, budget=0.4, pending=pend) if hs else {}, "pending": pend}
             elif action == "thumbs":
                 pend = []
                 out = {"ok": True, "thumbs": imagelib.thumbs_for((req.get("hashes") or [])[:24], budget=0.25, pending=pend), "pending": pend}
@@ -3879,6 +3891,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 else:
                     msg = tr(lang, "forget_done_owned", n=r["n"], k=r["owned"]) if r["owned"] else tr(lang, "forget_done", n=r["n"])
                     kind = "ok"
+                    if r.get("vlib"):
+                        msg += " · " + tr(lang, "forget_vlib", k=r["vlib"])
                     if r["recycled"]:
                         msg += " · " + tr(lang, "forget_recycled", k=r["recycled"])
                     if r["recycle_errors"]:
@@ -4163,7 +4177,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded"):
+        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek"):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

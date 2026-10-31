@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.3 — 2026-10-30
+
+- **Fix: "Borrar de la librería" was disabled for videos in "🎬 Librería de vídeos"** (webcam recordings, crops, resizes, saved inputs). Cause: since 1.6.8 those videos appear in the explorer as read-only items (no watched folder, no collection), so neither the managed-copy delete nor the 1.7.1 "remove from the library" applied to them. They can now be deleted from the explorer:
+  - the confirmation lists the Video Library videos, their masks and virtual copies, and says where the file goes (EN/ES);
+  - the Video Library entry is soft-deleted; **Undo** (15 min) restores the entry at its old position, with its masks and virtual copies;
+  - when the undo window ends the video file goes to the **Recycle Bin** / Trash, never a permanent delete. If it can't be recycled, it stays in `videos/.trash/` and is retried later. This also applies to videos deleted in the Video Library itself (they used to be removed permanently after 15 min);
+  - a video that is both in a watched folder and in the Video Library: the folder file stays on disk (as in 1.7.1) and the Video Library copy is deleted.
+- **Toasts moved to the top-right** (they were bottom-right, over the explorer's action bar), newest on top, above every Reference Library layer (explorer, dialogs, full-screen viewer). Undo toasts included.
+- **New: hover preview in the collection dropdown** above the inputs. Hovering a collection (`name (N)`) shows, after ~150 ms, a small floating card next to the list with up to 8 thumbnails (then `+N`), the name and the count; an empty collection says *Vacía / Empty*. Thumbnails come from the existing thumbnail cache (no originals are sent) and are kept in memory. It never takes the mouse or keyboard (clicks and arrow keys work as before) and hides when the list closes. Dark mode supported.
+- Unchanged: the 1.6.5 seed rule, Vidosser, the 1.6.2 Resize button, Media Editor and Cropper (not modified). Plugin only, no WanGP core changes.
+
 ## 1.7.2 — 2026-10-26
 
 - **Fix: "Reutilizar ajustes" / "Solo referencias" under the output player sometimes said "Este vídeo no tiene entrada en el historial ni imágenes de referencia incrustadas"** for a video that does have a history entry. Cause: the player plays **Gradio's cached copy** of the output (`…/gradio/<hash>/<name>`), and Gradio cleans up that name (only letters, digits and `._-, ` are kept, so `[Shot 1]` becomes `Shot 1`). The lookup compared the exact path and the file name, so outputs whose name contains such characters were not found. It only happened for some videos, depending on their names.
@@ -18,7 +29,7 @@
     - entries whose file is gone (deleted outside WanGP, or the drive is disconnected) get an **⚠ archivo no encontrado** badge on the card and a notice with the path in the details;
     - a new **⚠ archivo no encontrado (n)** filter in the type bar;
     - with the filter on, **Quitar todas las que faltan** removes them all, with a confirmation that also names unavailable folders.
-  - **Managed copies** (files the library owns: collections, imported images) keep the previous two-click delete, unchanged. In a mixed selection they're deleted in the same step, under the same Undo. Video Library entries are still deleted in the Video Library; the confirmation says when a removed file is also kept there.
+  - **Managed copies** (files the library owns: collections, imported images) keep the previous two-click delete, unchanged. In a mixed selection they're deleted in the same step, under the same Undo. Video Library entries are still deleted in the Video Library; the confirmation says when a removed file is also kept there (1.7.3: they can be deleted here too).
 - Data: per-folder `exclude` list in `folders/index.json`. Undo records live in `collections/.undo/` for 15 min.
 - Unchanged: Vidosser, Media Editor (not modified), the 1.6.2 Resize button, the 1.6.5 seed rule, the 1.6.9 restore and the 1.7.0 masks. Plugin only, no WanGP core changes.
 

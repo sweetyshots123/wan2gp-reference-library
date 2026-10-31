@@ -76,11 +76,12 @@
     const style = document.createElement("style");
     style.id = "reflib-style";
     style.textContent = `
-/* Bottom-right corner: top-centre is shared by Dragger / Cropper / Prompt Library toasts and bottom-centre by Vidosser.
-   Newest at the bottom, older ones stack upwards. Above Cropper's dialog (10050) and the other plugins' toasts. */
-.reflib-toasts { position: fixed; right: 20px; bottom: 20px; z-index: 10090;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; max-width: min(92vw, 520px);
-  max-height: calc(100vh - 40px); overflow: hidden; }
+/* 1.7.3: top-right corner, below the explorer's header buttons (was bottom-right, where it covered the explorer's action
+   bar). Top-centre is shared by Dragger / Cropper / Prompt Library toasts and bottom-centre by Vidosser. Above every RL
+   layer (explorer 10080, lightbox 10095, menus 10096, dialogs 10097) and Cropper's dialog (10050). */
+.reflib-toasts { position: fixed; right: 24px; top: 64px; z-index: 10120;
+  display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; pointer-events: none; max-width: min(92vw, 520px);
+  max-height: calc(100vh - 84px); overflow: hidden; }
 .reflib-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 10px;
   font: 500 14px/1.35 system-ui, sans-serif; color: #fff; background: #0f766e; box-shadow: 0 6px 22px rgba(0,0,0,.35);
   opacity: 1; transition: opacity .3s; white-space: pre-line; }
@@ -90,6 +91,17 @@
 .reflib-toast button { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,.18);
   font-weight: 700; white-space: nowrap; }
 .reflib-toast button:hover { background: rgba(255,255,255,.3); }
+.reflib-cpeek { position: fixed; z-index: 10110; display: none; pointer-events: none; width: 232px; padding: 8px; border-radius: 10px;
+  background: #fff; color: #111827; border: 1px solid #d1d5db; box-shadow: 0 8px 26px rgba(0,0,0,.25); font: 13px/1.3 system-ui, sans-serif; }
+.dark .reflib-cpeek, body.dark .reflib-cpeek { background: #111827; color: #e5e7eb; border-color: #374151; }
+.reflib-cpeek-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.reflib-cpeek-th { aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: rgba(127,127,127,.18); display: flex; align-items: center; justify-content: center; }
+.reflib-cpeek-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reflib-cpeek-more { font-weight: 700; font-size: 15px; }
+.reflib-cpeek-empty { padding: 18px 0; text-align: center; opacity: .7; }
+.reflib-cpeek-name { margin-top: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.reflib-cpeek-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflib-cpeek-name span { opacity: .7; }
 `;
     style.textContent += __REFLIB_CSS__;
     document.head.appendChild(style);
@@ -879,11 +891,11 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
+    const FAST_ACTIONS = new Set(["col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
-        const fast = FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
+        const fast = !req.slow && FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
         const ch = fast ? "fast" : "main";
         const run = () => new Promise((resolve, reject) => {
             setText(fast ? "reflib_ilib_fast_req" : "reflib_ilib_req", JSON.stringify(req));
@@ -2627,13 +2639,13 @@
     // virtual copies); the file stays on disk unless "Also delete file from disk" is ticked (-> Recycle Bin, never a
     // permanent delete). The folder remembers removed files so a rescan doesn't bring them back ("Show excluded").
     const FGT = {
-        en: { btn_tip: "Remove {n} item(s) from the library (folders / files on disk / missing files). Files on disk are not deleted",
+        en: { btn_tip: "Remove {n} item(s) from the library (folders / Video Library / files on disk / missing files). Files in your folders are not deleted",
               title: "Remove from the library", title_missing: "Remove all missing entries",
               lead: "{n} item(s) will be removed from the Reference Library. This removes:",
               l_entry: "the library entry: name, metadata, thumbnails and cached data", l_tags: "tags of {k} item(s)",
               l_cols: "{k} collection copy/copies ({c} collection(s))", l_masks: "{k} mask(s)", l_virt: "{k} virtual copy/copies",
               l_missing: "{k} entry/entries whose file no longer exists", l_owned: "{k} managed copy/copies the library owns (deleted as usual)",
-              l_vlib: "{k} also in the Video Library: they stay there (delete them in the Video Library)",
+              l_vlib: "{k} video(s) of the Video Library (“Video library”): deleted there too", vlib_bin: "Video Library files go to the Recycle Bin when the undo window ends (15 min). Until then, Undo brings them back.",
               l_folders: "From: {list}", l_offline: "⚠ Folder not available (disconnected drive?): {list}. Its entries count as missing.",
               safe: "Files on disk are NOT deleted or moved.", safe2: "They stay where they are, and a rescan won't bring them back (“Show excluded” on the folder restores them). You can undo.",
               disk: "Also delete file from disk", disk_n: "If ticked, these {k} file(s) go to the Recycle Bin (never a permanent delete):",
@@ -2648,13 +2660,13 @@
               excl_lead: "These files were removed from the library; rescans skip them. Restore brings them back.",
               excl_none: "Nothing excluded in this folder.", excl_restore: "Restore", excl_restore_all: "Restore all ({n})",
               excl_gone: "not on disk", excl_bin: "in the Recycle Bin", close: "Close", undo: "Undo" },
-        es: { btn_tip: "Quitar {n} elemento(s) de la librería (carpetas / archivos del disco / archivos que faltan). Los archivos del disco no se borran",
+        es: { btn_tip: "Quitar {n} elemento(s) de la librería (carpetas / Librería de vídeos / archivos del disco / archivos que faltan). Los archivos de tus carpetas no se borran",
               title: "Borrar de la librería", title_missing: "Quitar todas las que faltan",
               lead: "Se quitarán {n} elemento(s) de la Reference Library. Se elimina:",
               l_entry: "la entrada de la librería: nombre, metadatos, miniaturas y caché", l_tags: "las etiquetas de {k} elemento(s)",
               l_cols: "{k} copia(s) en colecciones ({c} colección(es))", l_masks: "{k} máscara(s)", l_virt: "{k} copia(s) virtual(es)",
               l_missing: "{k} entrada(s) cuyo archivo ya no existe", l_owned: "{k} copia(s) propias de la librería (se borran como siempre)",
-              l_vlib: "{k} también en la Video Library: se quedan allí (bórralos en la Video Library)",
+              l_vlib: "{k} vídeo(s) de la Video Library (“Librería de vídeos”): se borran también allí", vlib_bin: "Los archivos de la Video Library van a la Papelera de reciclaje cuando acaba el plazo para deshacer (15 min). Hasta entonces, Deshacer los recupera.",
               l_folders: "De: {list}", l_offline: "⚠ Carpeta no disponible (¿disco desconectado?): {list}. Sus entradas cuentan como que faltan.",
               safe: "Los archivos del disco NO se borran ni se mueven.", safe2: "Se quedan donde están y un nuevo escaneo no los volverá a añadir (“Mostrar excluidos” en la carpeta los restaura). Se puede deshacer.",
               disk: "También borrar el archivo del disco", disk_n: "Si lo marcas, estos {k} archivo(s) irán a la Papelera de reciclaje (nunca un borrado definitivo):",
@@ -2703,7 +2715,8 @@
                   ${p.owned_only ? li("l_owned", { k: p.owned_only }) : ""}${p.vlib ? li("l_vlib", { k: p.vlib }) : ""}</ul>
                 ${(p.folders || []).length ? `<div class="reflib-ib-muted reflib-fg-folders">${esc(fgt("l_folders", { list: p.folders.join(", ") }))}</div>` : ""}
                 ${(p.offline_folders || []).length ? `<div class="reflib-ib-clwarn">${esc(fgt("l_offline", { list: p.offline_folders.join(", ") }))}</div>` : ""}
-                <div class="reflib-fg-safe"><b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}</div>
+                ${p.vlib ? `<div class="reflib-fg-vlbin">${esc(fgt("vlib_bin"))}</div>` : ""}
+                ${p.vlib_only && p.vlib_only === p.n ? "" : `<div class="reflib-fg-safe"><b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}</div>`}
                 ${diskBox}
                 <div class="reflib-ib-costbtns"><button type="button" class="reflib-ib-btn" data-fg="no">${esc(fgt("cancel"))}</button>
                 <button type="button" class="reflib-ib-btn reflib-ib-danger reflib-fg-go" data-fg="ok">${esc(fgt("go"))}</button></div>`;
@@ -2712,7 +2725,7 @@
                 bg.querySelector(".reflib-fg-dlg").classList.toggle("disk", cb.checked);
                 bg.querySelector(".reflib-fg-go").textContent = cb.checked ? fgt("go_disk", { k: p.on_disk }) : fgt("go");
                 const safe = bg.querySelector(".reflib-fg-safe");
-                safe.innerHTML = cb.checked ? `<b>⚠ ${esc(fgt("disk_on", { k: p.on_disk }))}</b>` : `<b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}`;
+                if (safe) safe.innerHTML = cb.checked ? `<b>⚠ ${esc(fgt("disk_on", { k: p.on_disk }))}</b>` : `<b>${esc(fgt("safe"))}</b> ${esc(fgt("safe2"))}`;
             });
         }).catch(() => fgClose());
         bg.addEventListener("click", (ev) => {
@@ -4705,7 +4718,58 @@
         return r;
     }
     const folderLabel = (f) => (f && f.managed === "masks") ? mkt("folder") : (f && f.managed === "saved_audio") ? svt("folder") : (f && f.managed === "virtual") ? vct("folder") : (f && f.managed === "video_library") ? pkt("vlib") : (f ? f.name : "");
+    // ---- 1.7.3: hover preview of a collection in the input bar's dropdown ("name (N)"): up to 8 cached thumbnails,
+    // "+N", name and count. Read-only, pointer-events: none (never blocks clicks / keyboard), hidden when the list closes.
+    const colPeek = { el: null, timer: null, li: null, cache: new Map(), watch: null };
+    function cpHide() {
+        clearTimeout(colPeek.timer); colPeek.timer = null; colPeek.li = null;
+        if (colPeek.watch) { clearInterval(colPeek.watch); colPeek.watch = null; }
+        if (colPeek.el) colPeek.el.style.display = "none";
+    }
+    function cpRender(li, d) {
+        if (colPeek.li !== li || !li.isConnected) return;
+        let el = colPeek.el;
+        if (!el) { el = colPeek.el = document.createElement("div"); el.className = "reflib-cpeek"; el.setAttribute("aria-hidden", "true"); document.body.appendChild(el); }
+        const es = lang() === "es";
+        const grid = d.hashes.map(h => { const src = d.thumbs[h]; return `<div class="reflib-cpeek-th">${src ? `<img src="${src}" alt="" decoding="async">` : ""}</div>`; }).join("")
+            + (d.count > d.hashes.length ? `<div class="reflib-cpeek-th reflib-cpeek-more">+${d.count - d.hashes.length}</div>` : "");
+        el.innerHTML = `${d.count ? `<div class="reflib-cpeek-grid">${grid}</div>` : `<div class="reflib-cpeek-empty">${es ? "Vacía" : "Empty"}</div>`}
+            <div class="reflib-cpeek-name"><b>${esc(d.name)}</b> <span>${d.count}</span></div>`;
+        el.style.display = "block";
+        const r = li.getBoundingClientRect(), list = (li.closest("ul") || li).getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+        let x = list.right + 8; if (x + w > innerWidth - 8) x = Math.max(8, list.left - w - 8);
+        const y = Math.max(8, Math.min(r.top, innerHeight - h - 8));
+        el.style.left = x + "px"; el.style.top = y + "px";
+        if (!colPeek.watch) colPeek.watch = setInterval(() => { if (!colPeek.li || !colPeek.li.isConnected || !colPeek.li.offsetParent) cpHide(); }, 150);
+    }
+    function cpShow(li) {
+        const label = (li.getAttribute("aria-label") || li.textContent || "").replace(/^\s*✓\s*/, "").trim();
+        if (!/\(\d+\)$/.test(label)) { cpHide(); return; }   // "(ninguna)" / "(none)": nothing to preview
+        if (colPeek.li === li) return;
+        clearTimeout(colPeek.timer); colPeek.li = li;
+        colPeek.timer = setTimeout(() => {
+            const c = colPeek.cache.get(label);
+            if (c) { cpRender(li, c); return; }
+            sendIlib({ action: "col_peek", label }).then(r => (r && r.error === "bad request") ? sendIlib({ action: "col_peek", label, slow: 1 }) : r).then(r => {
+                if (!r || !r.ok) return;
+                const d = { name: r.name, count: r.count, hashes: r.hashes || [], thumbs: r.thumbs || {} };
+                if (!(r.pending || []).length) colPeek.cache.set(label, d);   // pending thumbs: fetched again next hover
+                cpRender(li, d);
+            }).catch(() => {});
+        }, 150);
+    }
+    document.addEventListener("mouseover", (ev) => {
+        const li = ev.target && ev.target.closest && ev.target.closest("ul.options li, [role='option']");
+        const dd = li && (li.closest("[id^='reflib_bar_dd_']") || (document.activeElement && document.activeElement.closest && document.activeElement.closest("[id^='reflib_bar_dd_']")));
+        if (li && dd) cpShow(li); else if (colPeek.li && !(li && colPeek.li === li)) cpHide();
+    }, true);
+    document.addEventListener("mousedown", () => cpHide(), true);
+    document.addEventListener("keydown", () => cpHide(), true);
+    document.addEventListener("focusout", (ev) => { if (ev.target && ev.target.closest && ev.target.closest("[id^='reflib_bar_dd_']")) cpHide(); }, true);
+    function colPeekReset() { colPeek.cache.clear(); }
+
     window.referenceLibrary = {
+        colPeekReset,
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },

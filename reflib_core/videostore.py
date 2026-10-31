@@ -393,6 +393,10 @@ def soft_delete(video_id: str) -> Dict[str, Any]:
             shutil.rmtree(dest, ignore_errors=True)
         if os.path.isdir(src) and _inside(src, VIDEOS_DIR):
             shutil.move(src, dest)
+            try:
+                os.utime(dest)   # 1.7.3: the undo window starts now (a move keeps the folder's old mtime)
+            except OSError:
+                pass
         _atomic_write_json(os.path.join(trash, vid + ".json"), {**entry, "_position": position})
         return dict(entry)
 
@@ -452,6 +456,16 @@ def purge_trash(max_age_s: float = 15 * 60) -> None:
             if now - os.path.getmtime(path) < max_age_s:
                 continue
             if os.path.isdir(path):
+                # 1.7.3: the video file itself goes to the Recycle Bin / Trash (never a permanent delete); if that fails
+                # the folder stays in .trash (retried on the next purge) instead of being destroyed
+                vids = [os.path.join(path, f) for f in os.listdir(path) if media.is_video_path(f)]
+                if vids:
+                    try:
+                        from . import forget as _fg
+                    except ImportError:
+                        import forget as _fg  # type: ignore
+                    if _fg.recycle(vids):
+                        continue
                 shutil.rmtree(path, ignore_errors=True)
             else:
                 os.unlink(path)

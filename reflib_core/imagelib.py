@@ -164,7 +164,8 @@ _vl_hash: Dict[tuple, str] = {}
 def _vlib_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
     """1.6.8: Video Library videos as library items, so the media browser (and the inputs' library button) can pick them.
     Same bytes already in a folder / collection -> that item just gains the "Librería de vídeos" location. Read-only from
-    the browser's side: such an item is never "deletable" there (it is deleted in the Video Library)."""
+    the browser's side until 1.7.2; 1.7.3: "Borrar de la librería" deletes it too (forget.py: the Video Library entry is
+    soft-deleted with undo, its file goes to the Recycle Bin when the undo window ends)."""
     try:
         from . import videostore as _vs
         vids = _vs.list_videos()
@@ -198,6 +199,8 @@ def _vlib_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Di
         if [VLFOLDER, ""] not in e["locs"]:
             e["locs"].append([VLFOLDER, ""])
         e["vlib"] = v.get("id")
+        if v.get("id") not in e.setdefault("vlibs", []):
+            e["vlibs"].append(v.get("id"))
 
 
 def _mask_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:

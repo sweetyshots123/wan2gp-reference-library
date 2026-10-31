@@ -7,7 +7,9 @@ user ticks "also delete the file from disk": then it goes to the system Recycle 
 a failed recycle keeps the file and is reported). Undo (15 min, like the other undos) restores the library entry;
 "Mostrar excluidos / Restaurar" on a folder brings excluded items back at any time.
 
-Files the library owns (collection copies, pool, Video Library, masks, virtual copies) keep their own delete paths."""
+Files the library owns (collection copies, pool, masks, virtual copies) keep their own delete paths.
+1.7.3: a Video Library video ("Librería de vídeos") can be removed here too: its Video Library entry is soft-deleted
+(undo brings it back); when the undo window ends its file goes to the Recycle Bin (videostore.purge_trash)."""
 from __future__ import annotations
 import glob, json, os, shutil, sys, time, uuid
 from typing import Any, Dict, Iterable, List, Optional
@@ -199,7 +201,13 @@ def forgettable(i) -> bool:
     """Not owned by the library: in a watched folder, or its file is gone (virtual copies have their own delete)."""
     if i.get("virtual"):
         return False
-    return bool(i.get("folders")) or bool(i.get("missing"))
+    return bool(i.get("folders")) or bool(i.get("missing")) or bool(_vlib_ids(i))
+
+
+def _vlib_ids(i) -> List[str]:
+    if i.get("virtual") or i.get("kind") == "mask":
+        return []
+    return [v for v in dict.fromkeys(list(i.get("vlibs") or []) + [i.get("vlib")]) if v]
 
 
 def plan(hashes: Iterable[str]) -> Dict[str, Any]:
@@ -220,7 +228,7 @@ def plan(hashes: Iterable[str]) -> Dict[str, Any]:
     return {"n": len(fi), "skipped": len(items) - len(fi) - len(owned_only), "owned_only": len(owned_only), "tagged": sum(1 for i in fi if i["tags"] or i.get("auto")),
             "cols": len({c for i in fi for c in i["colids"]}), "copies_in_cols": sum(1 for i in fi if i["colids"] or i["in_pool"]),
             "masks": nmask, "virtuals": len(copies), "missing": sum(1 for i in fi if i.get("missing")),
-            "vlib": sum(1 for i in fi if i.get("vlib")), "on_disk": len(disk), "disk_files": disk[:500],
+            "vlib": sum(1 for i in fi if _vlib_ids(i)), "vlib_only": sum(1 for i in fi if _vlib_ids(i) and not i.get("folders")), "on_disk": len(disk), "disk_files": disk[:500],
             "offline_folders": [folders[f]["path"] for f in offline if f in folders],
             "folders": sorted({folders[f]["path"] for i in fi for f in i.get("folders") or () if f in folders})[:20]}
 
@@ -280,6 +288,16 @@ def forget(hashes: Iterable[str], delete_files: bool = False) -> Dict[str, Any]:
         vids = [c["id"] for c in _vc.entries() if (c.get("orig") or {}).get("hash") in set(hs)]
         if vids:
             rec["virt_token"] = _vc.soft_delete(vids)["token"]
+        # 4b) 1.7.3: Video Library copies (soft delete: undo restores; the file goes to the Recycle Bin when purged)
+        from . import videostore as _vs
+        rec["vlib_ids"] = []
+        for i in items:
+            for vid in _vlib_ids(i):
+                try:
+                    _vs.soft_delete(vid)
+                    rec["vlib_ids"].append(vid)
+                except Exception as e:
+                    print(f"[Reference Library] video library delete failed: {e}")
         # 5) cached thumbnails (regenerated on demand)
         for h in hs:
             for p in glob.glob(os.path.join(imagelib._thumbs_dir(), h + "*")):
@@ -293,7 +311,7 @@ def forget(hashes: Iterable[str], delete_files: bool = False) -> Dict[str, Any]:
         storage._atomic_write_json(os.path.join(stash, "forget.json"), rec)
     imagelib.invalidate()
     return {"ok": True, "n": len(hs), "token": token, "recycled": len(rec["recycled"]), "recycle_errors": rec["recycle_errors"],
-            "masks": len(mids), "virtuals": len(vids), "owned": len(owned)}
+            "masks": len(mids), "virtuals": len(vids), "owned": len(owned), "vlib": len(rec["vlib_ids"])}
 
 
 def undo(token: str) -> Dict[str, Any]:
@@ -328,6 +346,13 @@ def undo(token: str) -> Dict[str, Any]:
             _mk.restore(rec["mask_token"])
         if rec.get("virt_token"):
             _vc.restore(rec["virt_token"])
+        if rec.get("vlib_ids"):
+            from . import videostore as _vs
+            for vid in reversed(rec["vlib_ids"]):   # reversed: each goes back to its old position
+                try:
+                    _vs.restore_soft_deleted(vid)
+                except Exception as e:
+                    print(f"[Reference Library] video library undo failed: {e}")
         shutil.rmtree(stash, ignore_errors=True)
     imagelib.invalidate()
     return {"ok": True, "n": len(rec.get("hashes") or []), "recycled": len(rec.get("recycled") or [])}

@@ -919,3 +919,6 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-kinds > * { flex-shrink: 0; white-space: nowrap; }
 .reflib-fg-list { padding-left: 4px; }
 .reflib-fg-dlg:not(.disk) .reflib-fg-diskinfo { opacity: .7; }
+/* 1.7.3: Video Library items in "Borrar de la librería" */
+.reflib-fg-vlbin { padding: 8px 10px; border-radius: 6px; background: rgba(217,119,6,.12); border: 1px solid rgba(217,119,6,.5); color: #92400e; }
+.dark .reflib-fg-vlbin { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.45); color: #fde68a; }
