@@ -4,6 +4,7 @@ import Folders, { folderLabel, nodeHref } from "./Folders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personName, personTag, upload } from "./api";
 import { ManageList } from "./Manage";
+import { PersonasPage, PersonHeader } from "./Faces";
 import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
@@ -291,6 +292,7 @@ export default function App() {
             {v === "videos" && manage && <VideoManager after={refresh} />}
             {v === "carpeta" && <p className="muted crumbs">{crumbsOf(meta, route)}</p>}
             {v === "persona" && <p className="muted">Etiqueta: <code>{filter.tags?.[0] || PERSON + route.name}</code></p>}
+            {v === "persona" && <PersonHeader name={route.name} rev={meta?.rev || 0} after={refresh} />}
             {v === "similares" && (simRef ? <SimHeader r={simRef} Thumb={Thumb} clear={() => { setSimRef(null); location.hash = "#/explorar"; }} />
               : <p className="muted">Abre una imagen y pulsa «⧉ Similares: Pose / Cara».</p>)}
             {v === "buscar" && !chips.length && <p className="muted">Escribe arriba: personas, colecciones, etiquetas o nombres de archivo. Varios filtros se combinan (Y).</p>}
@@ -339,6 +341,8 @@ export default function App() {
           {meta && manage && v === "tags" && <ManageList kind="tag" rows={meta.tags.filter((t) => !isPerson(t.tag) && t.tag.toLowerCase() !== FAV).filter((t) => !tq || fold(t.tag).includes(tq)).map((t) => ({ key: t.tag, label: t.tag, count: t.count }))} after={refresh} />}
           {meta && manage && v === "personas" && <ManageList kind="persona" rows={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count }))} after={refresh} />}
           {meta && manage && v === "colecciones" && <ManageList kind="col" rows={meta.collections.filter((c) => !tq || fold(c.name).includes(tq)).map((c) => ({ key: c.id, label: c.name, count: c.count }))} after={refresh} />}
+          {meta && !manage && v === "personas" && <PersonasPage tq={tq} rev={meta.rev} after={refresh} />}
+          {meta && !manage && v === "personas" && <h2>Etiquetas «persona:»</h2>}
           {meta && !manage && v === "personas" && <IndexCards entries={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count, href: `#/persona/${encodeURIComponent(personName(t.tag))}`, f: { tags: [t.tag] } }))} empty="Aún no hay personas. Añade una desde el panel de edición (o etiqueta con «persona:Nombre» en la Media Library)." />}
           {meta && !manage && v === "tags" && <IndexCards entries={meta.tags.filter((t) => !isPerson(t.tag) && t.tag.toLowerCase() !== FAV).filter((t) => !tq || fold(t.tag).includes(tq)).map((t) => ({ key: t.tag, label: `#${t.tag}`, count: t.count, href: `#/tag/${encodeURIComponent(t.tag)}`, f: { tags: [t.tag] } }))} empty="Aún no hay etiquetas." />}
           {meta && !manage && v === "tags" && <AutoIndex tq={tq} rev={meta.rev} />}

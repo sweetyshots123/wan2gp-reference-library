@@ -1,3 +1,4 @@
+import { ItemFaces } from "./Faces";
 import { useEffect, useMemo, useState } from "react";
 import { FAV, Item, Meta, isPerson, personName, personTag } from "./api";
 import { renameOne } from "./Manage";
@@ -91,6 +92,7 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
           ))}
           {!models.length && <span className="muted">Sin persona</span>}
         </div>
+        {n === 1 && <ItemFaces hash={items[0].hash} onChanged={onChanged} />}
         <form onSubmit={(e) => { e.preventDefault(); const v = modelIn.trim(); if (v) { addTags([personTag(v, allTags)]); setModelIn(""); } }}>
           <input list="dl-personas" value={modelIn} onChange={(e) => setModelIn(e.target.value)} placeholder="Añadir persona…" />
           <datalist id="dl-personas">{allTags.filter(isPerson).map((t) => <option key={t} value={personName(t)} />)}</datalist>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.0
+- Galería: página Personas (personas con cara de portada, «Caras sin nombre» para nombrar/asignar/unir), cabecera de persona (renombrar, unir, olvidar con deshacer, rejilla de caras con separar/quitar/portada) y tarjeta «¿Es esta también X?» (Y/S = sí, N = no).
+- Panel del elemento: caras detectadas asignables a personas.
+- Usa solo las acciones compartidas face_*/person_* y las miniaturas del servidor /reflib/face_thumb (las mismas que la Media Library); aviso amable con faces_busy.
+
 ## 1.9.7
 - Galería viewer: smooth pan and zoom. Uses pointer capture, a ref plus one requestAnimationFrame write per frame (translate+scale, will-change), and no layout reads while dragging. Polling no longer re-renders the viewer, and full-res images are decoded before they are swapped in. Measured: task time while panning is about 20% lower and there are 0 extra DOM mutations.
 - Galería viewer: fast mouse-wheel navigation. Deltas accumulate with no lockout, so each notch moves one image straight away and shows the thumbnail as a placeholder. Full-res loads after about 130 ms of idle and is aborted if you keep scrolling. Neighbours preload into an LRU cache, and the filmstrip stays in sync. Before: 10 or 30 fast notches moved 1 image. After: they move exactly 10 / 30, settling in 185 / 273 ms.

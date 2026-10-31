@@ -226,3 +226,28 @@ button.link { background: none; border: 0; padding: 0; color: inherit; opacity: 
 body:has(.bulk) main { padding-right:360px; }   /* 1.9.6: el panel de selección no tapa la rejilla */
 
 .stage .phimg { width:100%; height:100%; object-fit:contain; }   /* 1.9.7: marcador instantáneo al pasar fotos */
+/* 1.10.0 Personas */
+.personas .fstat{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 12px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:16px;margin-bottom:20px}
+.pcard{display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;color:inherit}
+.pcard b{font-weight:600;text-align:center}
+img.face,div.face{width:64px;height:64px;object-fit:cover;background:#2a2a2a;display:block}
+.pcard .face{width:110px;height:110px}
+.face.round{border-radius:50%}
+.face.big{width:120px;height:120px}
+div.face.none{display:flex;align-items:center;justify-content:center;font-size:40px;color:#777}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.ccard{background:#1d1d1f;border:2px solid transparent;border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.ccard.on{border-color:#4a8cff}
+.cfaces{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px}
+.cfaces .mini{display:flex;gap:3px}.cfaces .mini .face{width:28px;height:28px}
+.namebox{width:100%;max-width:200px}
+.phead{margin:8px 0 14px}.prow{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.pact{display:flex;flex-direction:column;gap:6px}
+.suggest{display:flex;gap:12px;align-items:center;background:#1d1d1f;border-radius:14px;padding:12px 16px}
+.suggest .yn{display:flex;gap:8px;margin:8px 0}.suggest .yes{background:#2f6fec;color:#fff}
+kbd{font-size:10px;opacity:.7;border:1px solid #666;border-radius:3px;padding:0 3px;margin-left:4px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:8px}
+.fcell{border:2px solid transparent;border-radius:50%;cursor:pointer;width:100px;height:100px}.fcell.on{border-color:#4a8cff}
+.fcell .face{width:96px;height:96px}
+.ifaces{margin-top:8px}.iface{display:flex;align-items:center;gap:8px;margin:4px 0}.iface .face{width:44px;height:44px}
