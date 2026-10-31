@@ -132,6 +132,9 @@ class SimIndex:
                         elif fm in done.get(h, ()) and fm not in self.items[h]["faces"]:
                             self.items[h]["faces"][fm] = vec[cuts[k]:cuts[k + 1]]
             self.rev += 1
+            self._dirty_pose = False
+            self._dirty_faces.clear()
+            self._dirty_meta = False
 
     def save(self, force: bool = False):
         """Atomic incremental save. force=True rewrites every npz (final job save / migration).
