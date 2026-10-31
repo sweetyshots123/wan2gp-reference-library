@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FAV, Item, Meta, call, mediaUrl, personName, isPerson } from "./api";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
+import { SimilarButtons } from "./Similar";
 import { Thumb, toast, fmtDur } from "./ui";
 
 interface Props {
@@ -226,6 +227,7 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
           <span className="zl">{Math.round(z.s * 100)}%</span>
           <button onClick={() => zoomCenter(1.4)} title="Acercar (+)">+</button>
           <button onClick={() => setZ({ s: 1, x: 0, y: 0 })} title="Ajustar (0)">⤢</button>
+          {(it.kind || "image") === "image" && <SimilarButtons hash={it.hash} name={it.name} />}
           <button onClick={() => setPanel(!panel)} className={panel ? "on" : ""} title="Editar (E)">✎ Editar</button>
           <button onClick={close} title="Cerrar (Esc)">✕</button>
         </span>

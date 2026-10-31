@@ -5,6 +5,7 @@ import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personNa
 import { ManageList } from "./Manage";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
+import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
 import { AT_DONE, autoLabel, isLeafTag, loadTax, setTax } from "./AutoTag";
 import Viewer from "./Viewer";
 import Grid, { Section } from "./Grid";
@@ -15,7 +16,7 @@ import { Thumb, Toasts, fmtDur, toast } from "./ui";
 type Route =
   | { v: "explorar" } | { v: "favoritas" } | { v: "videos" } | { v: "sin" } | { v: "buscar" }
   | { v: "personas" } | { v: "persona"; name: string }
-  | { v: "tags" } | { v: "tag"; tag: string } | { v: "auto"; id: string }
+  | { v: "tags" } | { v: "tag"; tag: string } | { v: "auto"; id: string } | { v: "similares" }
   | { v: "colecciones" } | { v: "coleccion"; id: string }
   | { v: "carpetas" } | { v: "carpeta"; fid: string; rel: string };
 
@@ -30,6 +31,7 @@ function parseRoute(): Route {
     case "persona": case "modelo": return b ? { v: "persona", name: b } : { v: "personas" };
     case "etiquetas": return { v: "tags" };
     case "tag": return b ? { v: "tag", tag: b } : { v: "tags" };
+    case "similares": return { v: "similares" };   // 1.9.3
     case "auto": return b ? { v: "auto", id: b } : { v: "tags" };   // 1.9.2: etiqueta automática
     case "colecciones": return { v: "colecciones" };
     case "coleccion": return b ? { v: "coleccion", id: b } : { v: "colecciones" };
@@ -58,6 +60,8 @@ export default function App() {
   const [sort, setSort] = useState(() => localStorage.getItem("gal.sort") || "date_desc");
   const [extraTags, setExtraTags] = useState<string[]>([]);
   const [, setTaxOk] = useState(false);
+  const [simRef, setSimRef] = useState<SimRef | null>(() => { try { return JSON.parse(sessionStorage.getItem("gal.sim") || "null"); } catch { return null; } });   // 1.9.3: búsqueda de similares activa (sim_search)
+  useEffect(() => { const h = (e: any) => { setSimRef(e.detail); try { sessionStorage.setItem("gal.sim", JSON.stringify(e.detail)); } catch {} setViewer(null); setSolo(null); setSel(new Set()); if (location.hash !== "#/similares") location.hash = "#/similares"; else refresh(); }; window.addEventListener(SIM_EVENT, h); return () => window.removeEventListener(SIM_EVENT, h); });
   useEffect(() => { const h = (e: any) => { setChips([e.detail]); setText(""); location.hash = "#/buscar"; }; window.addEventListener("reflib:search-chip", h); return () => window.removeEventListener("reflib:search-chip", h); }, []);
   useEffect(() => { loadTax().then(() => setTaxOk(true)); }, []);   // 1.9.2: nombres de las etiquetas automáticas
   const [viewer, setViewer] = useState<number | null>(null);
@@ -89,6 +93,7 @@ export default function App() {
       case "persona": return { tags: [personTag(r.name, meta?.tags || [])] };
       case "tag": return { tags: [r.tag] };
       case "auto": return { atags: [r.id] };
+      case "similares": return simRef ? { sim: simRef.sid } : {};
       case "coleccion": return { cols: [r.id] };
       case "carpetas": return {};
       case "carpeta": return { node: { fid: r.fid, rel: r.rel }, sub: true };
@@ -99,7 +104,7 @@ export default function App() {
   const baseKey = JSON.stringify(base);
   const filter = useMemo<Filter | null>(() => {
     if (!base) return null;
-    const out: Filter = { ...base, sort };
+    const out: Filter = { ...base, sort: base.sim ? "" : sort };   // 1.9.3: resultado de similitud = mejor primero
     if (kinds.length && kinds.length < 3 && !base.kind) out.kinds = kinds;
     if (extraTags.length) out.tags = [...(base.tags || []), ...extraTags];
     return out;
@@ -188,6 +193,7 @@ export default function App() {
       case "tags": return "Etiquetas";
       case "tag": return `#${route.tag}`;
       case "auto": return `🏷 ${autoLabel(route.id)}`;
+      case "similares": return "Similares";
       case "colecciones": return "Colecciones";
       case "carpetas": return "Carpetas";
       case "carpeta": { const f = meta?.folders.find((x: any) => x.id === route.fid); return route.rel ? route.rel.split("/").pop() || "" : folderLabel(f); }
@@ -253,6 +259,8 @@ export default function App() {
             <h1>{(v === "carpetas" || v === "carpeta") && <button className="sidetg" onClick={() => setFopen(!fopen)} title="Mostrar/ocultar el árbol de carpetas">{fopen ? "◧" : "☰"}</button>}{title} <small>{total}</small></h1>
             {v === "carpeta" && <p className="muted crumbs">{crumbsOf(meta, route)}</p>}
             {v === "persona" && <p className="muted">Etiqueta: <code>{filter.tags?.[0] || PERSON + route.name}</code></p>}
+            {v === "similares" && (simRef ? <SimHeader r={simRef} Thumb={Thumb} clear={() => { setSimRef(null); location.hash = "#/explorar"; }} />
+              : <p className="muted">Abre una imagen y pulsa «⧉ Similares: Pose / Cara».</p>)}
             {v === "buscar" && !chips.length && <p className="muted">Escribe arriba: personas, colecciones, etiquetas o nombres de archivo. Varios filtros se combinan (Y).</p>}
             <div className="tools">
               {!base?.kind && <KindToggles kinds={kinds} setKinds={setKinds} counts={kc} libAudio={meta?.kinds?.audio ?? kc.audio ?? 0} />}
@@ -261,6 +269,7 @@ export default function App() {
               </select>
               <input type="range" min={120} max={420} value={size} onChange={(e) => setSize(+e.target.value)} title="Tamaño de miniaturas" />
               <button className={selMode ? "on" : ""} onClick={() => { setSelMode(!selMode); setSel(new Set()); }} title="Seleccionar (S)">☑ Seleccionar</button>
+              <button onClick={() => startSimIndex(null)} title="Calcula pose y cara de toda la biblioteca para «Similares» (solo lo que falta; en segundo plano, como en la Media Library)">⧉ Calcular poses y caras</button>
             </div>
           </div>
           {v === "buscar" && chips.length > 0 && (
@@ -322,6 +331,7 @@ export default function App() {
       )}
       {drag && <div className="dropzone">Suelta para importar a la Media Library</div>}
       <AutoTagBar onDone={refresh} />
+      <SimBar />
       <Toasts />
     </div>
   );

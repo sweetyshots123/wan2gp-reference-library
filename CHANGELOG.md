@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.3
+- Galería: similitud por pose y por cara, sobre las mismas acciones sim_* de la Media Library (sim_info, sim_search → filtro {sim}, sim_index, sim_status, sim_pause, sim_cancel). Sin lógica duplicada.
+- Visor y panel de edición (una imagen): «⧉ Similares: Pose / Cara» abre #/similares ordenado por parecido, con una cabecera que muestra la miniatura de referencia, un cambio Pose/Cara y «× Quitar».
+- «⧉ Calcular poses y caras» en la barra (toda la biblioteca) y en el panel de selección, con progreso, pausa y detener.
+- Mensajes claros para: imagen aún no calculada, entorno de similitud no configurado (onnxruntime) y ninguna persona o cara detectada.
+
 ## 1.9.2
 
 - **Galería · etiquetas automáticas visibles:** tras «Autoetiquetar», el panel seguía diciendo «Sin etiquetas» porque solo mostraba las etiquetas manuales; las del autoetiquetado se guardan aparte (`autotags.json`, como en la Media Library). Ahora el panel de una imagen tiene un grupo «Etiquetas automáticas» (`at_image`) con la confianza, ✓ confirmar, × quitar y ↺ recuperar (`at_edit`), y las de poca confianza o quitadas tras «+ N». Se recarga solo al terminar la cola.

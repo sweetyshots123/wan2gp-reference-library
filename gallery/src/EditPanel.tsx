@@ -4,6 +4,7 @@ import { renameOne } from "./Manage";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { act } from "./actions";
 import { AutoTags, startAutotag } from "./AutoTag";
+import { SimilarButtons, startSimIndex } from "./Similar";
 
 interface Props {
   items: Item[];                 // los elementos a editar (1 = ficha, N = edición en bloque)
@@ -155,6 +156,10 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
             onClick={() => startAutotag(hashes)}>🏷 Autoetiquetar{n > 1 ? ` (${n})` : ""}</button>
           <button disabled={busy} title="Volver a etiquetar aunque ya tengan etiquetas automáticas" onClick={() => startAutotag(hashes, true)}>↻ Reetiquetar</button>
         </>)}
+        {one && (one.kind || "image") === "image" && <SimilarButtons hash={one.hash} name={one.name} />}
+        {items.some((i) => (i.kind || "image") === "image") && (
+          <button disabled={busy} title="Calcula pose y cara de lo seleccionado para «Similares» (las mismas acciones que la Media Library)"
+            onClick={() => startSimIndex(hashes)}>⧉ Calcular poses y caras{n > 1 ? ` (${n})` : ""}</button>)}
         <button disabled={busy} className="danger" title="La misma confirmación que la Media Library: quitar de la librería o, si lo marcas, enviar los archivos a la Papelera"
           onClick={() => startDelete(hashes, setPlan, onChanged)}>
           🗑 Borrar…
