@@ -1,3 +1,4 @@
+import { AutoTagBar } from "./AutoTag";
 import Folders, { folderLabel, nodeHref } from "./Folders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personName, personTag, upload } from "./api";
@@ -312,6 +313,7 @@ export default function App() {
         <Viewer items={solo.list} index={solo.i} total={solo.list.length} meta={meta} setIndex={(i) => setSolo({ ...solo, i })} close={() => setSolo(null)} onChanged={refresh} ensure={() => {}} />
       )}
       {drag && <div className="dropzone">Suelta para importar a la Media Library</div>}
+      <AutoTagBar onDone={refresh} />
       <Toasts />
     </div>
   );

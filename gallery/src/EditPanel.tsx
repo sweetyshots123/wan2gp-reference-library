@@ -3,6 +3,7 @@ import { FAV, Item, Meta, isPerson, personName, personTag } from "./api";
 import { renameOne } from "./Manage";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { act } from "./actions";
+import { startAutotag } from "./AutoTag";
 
 interface Props {
   items: Item[];                 // los elementos a editar (1 = ficha, N = edición en bloque)
@@ -145,6 +146,11 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
         {videos.length > 0 && !videos.every((v) => v.vl) && (
           <button disabled={busy} onClick={() => act("to_vlib", { hashes: videos.map((v) => v.hash) }, onChanged)}>🎞 Enviar a Video Library</button>
         )}
+        {items.some((i) => (i.kind || "image") === "image") && (<>
+          <button disabled={busy} title="La misma cola de autoetiquetado que la Media Library (solo imágenes; omite las ya etiquetadas)"
+            onClick={() => startAutotag(hashes)}>🏷 Autoetiquetar{n > 1 ? ` (${n})` : ""}</button>
+          <button disabled={busy} title="Volver a etiquetar aunque ya tengan etiquetas automáticas" onClick={() => startAutotag(hashes, true)}>↻ Reetiquetar</button>
+        </>)}
         <button disabled={busy} className="danger" title="La misma confirmación que la Media Library: quitar de la librería o, si lo marcas, enviar los archivos a la Papelera"
           onClick={() => startDelete(hashes, setPlan, onChanged)}>
           🗑 Borrar…

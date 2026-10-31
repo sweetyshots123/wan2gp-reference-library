@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1
+
+- **Galería · Autoetiquetar:** botones «🏷 Autoetiquetar» (uno o varios elementos; solo imágenes, omite las ya etiquetadas) y «↻ Reetiquetar» (forzar) en el panel de edición, y una barra de progreso fija con Pausa / Seguir / Cancelar. Usa las mismas acciones `ilib` que la Media Library (`at_enqueue`, `at_status`, `at_pause`, `at_cancel` → `reflib_core.autotag.AutoTagService`): misma cola, mismo modelo y el mismo aviso de descarga / coste en la nube antes de empezar. Al terminar, la Galería se refresca. Sin cambios en el backend.
+- Sobre 1.9.0: la similitud (acciones `sim_*`, ganchos y modelos) no cambia.
+
 ## 1.9.0
 
 - **Buscar similares por pose y/o cara** (nuevo módulo `reflib_core/similarity.py`, acciones compartidas `sim_*`, ver `SIMILARITY_API.md`). Desde el menú contextual, el panel de detalles o la barra de selección (varias imágenes), o soltando fotos que no se guardan. Modos Pose / Cara / Ambas, peso, similitud mínima, «parecidas a cualquiera / a todas», ignorar espejo. El resultado es un conjunto del explorador: se puede ordenar («Más parecidas primero», nombre, fecha…) y entra en el historial de navegación.

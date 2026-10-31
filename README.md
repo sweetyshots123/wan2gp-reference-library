@@ -425,6 +425,8 @@ Cross-plugin media (1.8.5): the library registers in the process-wide `wan2gp_me
 (no import between plugins) the files it streams, so Vidosser 1.4.25+ can capture frames / GIFs of watched-folder videos;
 frames come back as new library items (`imagelib.pool_add_bytes`).
 
+Auto-tagging (1.8.7): the Galería uses the existing `at_*` ilib actions unchanged (`at_enqueue` with `force` / `confirm`, `at_status` for the progress bar, `at_pause`, `at_cancel`); the queue and models live in `reflib_core.autotag.AutoTagService`, shared with the Media Library.
+
 ## Similarity models (1.9.0)
 
 | Model | Use | Size | Licence |
