@@ -1809,6 +1809,11 @@ def catalog() -> Dict[str, Any]:
                       "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ()), "vlib": i.get("vlib")})
         it_ = items[-1]
         it_["missing"] = _forget.is_missing(it_)   # 1.7.1 "archivo no encontrado"
+    try:   # 1.10.0 origin (AI / real)
+        from . import origin as _og
+        _og.resolve(items)
+    except Exception as e:
+        print(f"[Reference Library] origin: {e!r}")
     return _derive(items, key)
 
 
@@ -1874,7 +1879,8 @@ def _derive(items: List[Dict[str, Any]], key) -> Dict[str, Any]:
     data = {"rev": _cat["rev"], "items": items, "by_hash": {i["hash"]: i for i in items}, "tree": tree, "nodefold": nodefold,
             "tags": sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"]))),
             "collections": cols, "folders": folders, "n_unassigned": sum(1 for i in items if i["in_pool"] and not i["colids"]),
-            "kinds": dict({k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, mask=nmask), "vcount": vcount, "mcount": mcount, "nmissing": sum(1 for i in items if i.get("missing"))}
+            "kinds": dict({k: sum(1 for i in items if i["kind"] == k) for k in KINDS}, mask=nmask), "vcount": vcount, "mcount": mcount, "nmissing": sum(1 for i in items if i.get("missing")),
+            "origins": {"ai": sum(1 for i in items if i.get("origin") == "ai"), "real": sum(1 for i in items if i.get("origin") != "ai")}}
     try:   # 1.6.0: durations of every video/audio, probed in the background (throttled), never on this path
         from . import mediainfo
         mediainfo.want((i["hash"], i["path"], "video" if i["kind"] == "mask" else i["kind"]) for i in items if i["kind"] != "image" and not i["virtual"])
@@ -1907,7 +1913,7 @@ def _patch_remove(hashes: Iterable[str], was_fresh: bool) -> None:
 def _clean_filter(f) -> Dict[str, Any]:
     f = f if isinstance(f, dict) else {}
     node = f.get("node") if isinstance(f.get("node"), dict) else None
-    return {"cols": sorted(str(c) for c in (f.get("cols") or []))[:200], "none": bool(f.get("none")),
+    out = {"cols": sorted(str(c) for c in (f.get("cols") or []))[:200], "none": bool(f.get("none")),
             "tags": sorted({_fold(clean_tag(t)) for t in (f.get("tags") or []) if clean_tag(t)})[:50],
             "q": _fold(str(f.get("q") or "").strip())[:200],
             "qall": [t for t in dict.fromkeys(_fold(str(t)).strip()[:100] for t in (f.get("qall") or []) if str(t).strip())][:10],   # 1.8.2: every term must match (Galería search)
@@ -1923,7 +1929,23 @@ def _clean_filter(f) -> Dict[str, Any]:
             "kinds": sorted({str(k) for k in (f.get("kinds") or []) if str(k) in KINDS}) if isinstance(f.get("kinds"), list) else [],
             "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing")),
             "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else "",
-            "sim": str(f.get("sim") or "")[:40]}   # 1.8.4 similarity result set (similarity.py)
+            "sim": str(f.get("sim") or "")[:40],
+            # 1.10.0 origin toggles (IA / Real); [] = both
+            "origins": sorted({str(k) for k in (f.get("origins") or []) if str(k) in ("ai", "real")}) if isinstance(f.get("origins"), list) else []}
+    from . import origin as _og
+    out["q"], oq = _og.parse_query(out["q"])   # origin:ia / origin:real in the universal search
+    qa = []
+    for t in out["qall"]:
+        rest, o2 = _og.parse_query(t)
+        oq += o2
+        if rest:
+            qa.append(rest)
+    out["qall"] = qa
+    if oq:
+        out["origins"] = sorted(set(oq) & set(out["origins"]) if out["origins"] else set(oq))
+    if len(out["origins"]) == 2:
+        out["origins"] = []
+    return out   # 1.8.4 similarity result set (similarity.py)
 
 
 SORTS = ("date_desc", "date_asc", "name_asc", "name_desc")   # 1.7.4 explorer sort; "" = the view's own order
@@ -1999,8 +2021,11 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     kind = f["kind"]
     kinds = f.get("kinds") or []
     mcount = cat.get("mcount") or {} if f.get("hasmask") else None
+    origins = f.get("origins") or []
 
     def ok(i):
+        if origins and (i.get("origin") or "real") not in origins:   # 1.10.0
+            return False
         if kind == "mask":   # 1.7.0: every item kept as a mask (a pure mask, or a library video that is also one)
             if not i["mask"]:
                 return False
@@ -2078,6 +2103,8 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
            "folders": list(i["folders"]), "tags": list(i["tags"]), "added": round(i["added"] or 0, 1)}
     if i.get("missing"):   # 1.7.1
         out["missing"] = True
+    if i.get("origin") == "ai":   # 1.10.0 IA badge
+        out["origin"] = "ai"
     if i["kind"] != "image":   # 1.6.0
         from . import mediainfo
         out["kind"] = i["kind"]
@@ -2108,12 +2135,17 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
 def kind_counts(f) -> Dict[str, int]:
     """1.6.0: images / videos / audio over the current filter without its type (the Todo/Fotos/Vídeos/Audios chips)."""
     base = dict(f if isinstance(f, dict) else {}, kind="", kinds=[])
+    obase = dict(f if isinstance(f, dict) else {}, origins=[])
+    oc = {"ai": 0, "real": 0}
+    for i in filtered(obase)["items"]:   # 1.10.0 IA / Real toggles: counts over the filter without its origin
+        oc[i.get("origin") or "real"] += 1
     c = {k: 0 for k in KINDS + ("mask",)}
     for i in filtered(base)["items"]:
         c[i["kind"]] += 1
         if i["mask"] and i["kind"] != "mask":   # 1.7.0: a library video that is also a mask counts in both
             c["mask"] += 1
     c["missing"] = catalog().get("nmissing", 0)   # 1.7.1 (whole library: the "archivo no encontrado" toggle)
+    c["ai"], c["real"] = oc["ai"], oc["real"]
     return c
 
 
@@ -2250,6 +2282,7 @@ def resolve_selection(sel) -> List[str]:
 def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict[str, Any]:
     """What the selection footer needs, without the client holding every selected item."""
     by = catalog()["by_hash"]
+    nai = 0
     n = deletable = folder_only = on_disk = in_one = nvirt = forgettable = missing = owned_only = 0
     cols, tags = set(), {}
     kinds = {k: 0 for k in KINDS + ("mask",)}
@@ -2259,6 +2292,7 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
             continue
         n += 1
         kinds[i["kind"]] += 1
+        nai += i.get("origin") == "ai"   # 1.10.0
         if i.get("virtual"):   # 1.6.6: deleting a copy is always possible (the original stays)
             deletable += 1
             nvirt += 1
@@ -2284,7 +2318,7 @@ def selection_info(hashes: Iterable[str], one_col: Optional[str] = None) -> Dict
         if len(tags) < 60:
             for t in i["tags"]:
                 tags.setdefault(_fold(t), t)
-    return {"n": n, "deletable": deletable, "cols": len(cols), "folder_only": folder_only, "on_disk": on_disk,
+    return {"n": n, "ai": nai, "deletable": deletable, "cols": len(cols), "folder_only": folder_only, "on_disk": on_disk,
             "in_one": in_one, "tags": list(tags.values()), "kinds": kinds, "virtual": nvirt,
             "forgettable": forgettable, "missing": missing, "owned_only": owned_only}
 
@@ -2333,7 +2367,16 @@ def body_stats(f) -> Dict[str, Dict[str, float]]:
 def meta() -> Dict[str, Any]:
     cat = catalog()
     return {"rev": cat["rev"], "total": len(cat["items"]), "collections": cat["collections"], "tags": cat["tags"], "folders": cat["folders"],
-            "tree": cat["tree"], "n_unassigned": cat["n_unassigned"], "kinds": cat.get("kinds", {})}
+            "tree": cat["tree"], "n_unassigned": cat["n_unassigned"], "kinds": cat.get("kinds", {}),
+            "origins": cat.get("origins", {}), "origin_folders": _origin_marks()}   # 1.10.0
+
+
+def _origin_marks() -> Dict[str, str]:
+    try:
+        from . import origin as _og
+        return dict(_og.load()["folders"])
+    except Exception:
+        return {}
 
 
 def invalidate() -> None:

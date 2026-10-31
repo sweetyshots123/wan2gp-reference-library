@@ -1,6 +1,6 @@
 import { ItemFaces } from "./Faces";
 import { useEffect, useMemo, useState } from "react";
-import { FAV, Item, Meta, isPerson, personName, personTag } from "./api";
+import { FAV, Item, Meta, call, isPerson, personName, personTag } from "./api";
 import { renameOne } from "./Manage";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { act } from "./actions";
@@ -80,6 +80,8 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
           {favN === n ? "♥ Favorita" : favN ? `♡ Marcar favoritas (${favN}/${n})` : "♡ Añadir a favoritas"}
         </button>
       </section>
+
+      <OriginControl hashes={items.map((x) => x.hash)} onChanged={onChanged} />
 
       <section>
         <h4>Personas</h4>
@@ -169,5 +171,29 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
         {plan && <DeleteDialog plan={plan} hashes={hashes} close={() => setPlan(null)} after={onChanged} />}
       </section>
     </aside>
+  );
+}
+
+// 1.10.0 origen IA / Real / automático (origin_info + origin_set, mismas acciones que la Media Library)
+function OriginControl({ hashes, onChanged }: { hashes: string[]; onChanged: () => void }) {
+  const [info, setInfo] = useState<any>(null);
+  const key = hashes.join(",");
+  const load = () => call("origin_info", { hashes }).then((r) => r.ok && setInfo(r)).catch(() => {});
+  useEffect(() => { setInfo(null); load(); }, [key]);
+  const set = async (value: string) => {
+    setInfo((x: any) => x && { ...x, value, ...(value === "ai" ? { ai: x.n, real: 0 } : value === "real" ? { ai: 0, real: x.n } : {}) });   // optimista
+    await act("origin_set", { hashes, value }, () => { load(); onChanged(); }, { quiet: true });
+  };
+  const v = info?.value;
+  const now = !info ? "" : info.ai && info.real ? `${info.ai} IA · ${info.real} reales` : info.ai ? "IA" : "Real";
+  return (
+    <section>
+      <h4>Origen <small className="muted">{now}{v === "auto" ? " (automático)" : ""}</small></h4>
+      <div className="seg" role="group" aria-label="Origen">
+        <button className={v === "ai" ? "on" : ""} onClick={() => set("ai")} title="Marcar como generada con IA">IA</button>
+        <button className={v === "real" ? "on" : ""} onClick={() => set("real")} title="Marcar como real">Real</button>
+        <button className={v === "auto" ? "on" : ""} onClick={() => set("auto")} title="Automático: carpeta marcada, carpeta de salidas de WanGP o metadatos de generación">Auto</button>
+      </div>
+    </section>
   );
 }

@@ -894,7 +894,7 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [] },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
                    expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
@@ -934,7 +934,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, sort: sortCur(), sim: f.sim || "" };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, origins: [...(f.origins || [])], sort: sortCur(), sim: f.sim || "" };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -1078,6 +1078,7 @@
                 ${img.masks ? `<span class="reflib-mk-count" title="${esc(mkt("count_tip", { n: img.masks }))}">🎭${img.masks}</span>` : ""}
                 ${img.mask ? `<span class="reflib-mk-of" title="${esc(mkt("of_tip", { video: (img.mask.video_name || "") }))}">${esc(mkt("badge"))}</span>` : ""}
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
+                ${img.origin === "ai" ? `<span class="reflib-og-badge" title="${esc(ogt("badge_tip"))}">${esc(ogt("ai"))}</span>` : ""}
                 ${img.missing ? `<span class="reflib-fg-missing" title="${esc(fgt("missing_tip"))}">⚠ ${esc(fgt("missing"))}</span>` : ""}
                 ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
               <div class="reflib-ib-name" title="${esc(img.names.join(" · "))}">${esc(img.name)}</div>
@@ -1379,7 +1380,7 @@
             let html = `<div class="reflib-ib-tnode ${active ? "on" : ""} ${root ? "root" : ""}" style="padding-left:${6 + depth * 14}px" data-act="node" data-key="${esc(n.key)}" title="${esc((root ? (root.virtual ? vct("badge_tip") : root.managed === "video_library" ? pkt("vlib_tip") : root.managed === "masks" ? mkt("folder_tip") : root.path) : n.rel) + " — " + ktip)}">
                 <span class="reflib-ib-caret ${kids.length ? "" : "none"}" data-act="caret" data-key="${esc(n.key)}">${kids.length ? (open ? "▾" : "▸") : ""}</span>
                 <span class="reflib-ib-ticon">${root && root.virtual ? `<span class="reflib-vc-ticon">${VICO}</span>` : root && root.managed === "video_library" ? `<span class="reflib-pk-ticon">${FILM_SVG}</span>` : root && root.managed === "masks" ? `<span class="reflib-mk-ticon">🎭</span>` : FOLDER_SVG}</span><span class="reflib-ib-tname">${esc(root ? folderLabel(root).replace(/^⧉\s*/, "") : n.name)}</span>
-                <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>
+                <span class="reflib-ib-tcount">${root && root.missing ? "⚠" : count}</span>${ogTreeBtn(n)}
                 ${root && !root.virtual && !root.pseudo ? `<span class="reflib-ib-tacts">${root.excluded ? `<button type="button" class="reflib-fg-texcl" data-act="fgexcl" data-fid="${esc(root.id)}" title="${esc(fgt("excl_btn", { n: root.excluded }))}">⊘<i>${root.excluded}</i></button>` : ""}<button type="button" data-act="frescan" data-fid="${esc(root.id)}" title="${esc(it("frescan"))}">${RESCAN_SVG}</button><button type="button" class="reflib-ib-trm" data-act="fremove" data-fid="${esc(root.id)}" title="${esc(it("fremove"))}">×</button></span>` : ""}</div>`;
             if (open) for (const k of kids) html += row(k, depth + 1, null);
             return html;
@@ -1473,7 +1474,7 @@
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false;
+            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false; f.origins = [];
             EXT.forEach(x => { if (x.clear) x.clear(f); });
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
@@ -2177,6 +2178,7 @@
                 <datalist id="reflib-ib-taglist">${d.tags.map(x => `<option value="${esc(x.tag)}"></option>`).join("")}</datalist>
                 <button type="button" class="reflib-ib-btn" data-act="tag">${esc(it("tag_add"))}</button>
                 <label class="reflib-ib-check" title="${esc(it("close_after"))}"><input type="checkbox" class="reflib-ib-closeafter" ${localStorage.getItem("reflib_ib_close_after") === "1" ? "checked" : ""}> ${esc(it("close_after"))}</label>
+                ${ogSelHtml(inf, n)}
                 ${mediaActions(inf, n)}
                 <button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="addopen">${esc(it("add_to"))}</button>
                 ${!inf.kinds || inf.kinds.image ? `<button type="button" class="reflib-ib-btn reflib-ib-at" data-act="atgo" title="${esc(it("at_btn_tip"))}">✨ ${esc(it("at_btn"))}</button>` : ""}
@@ -2838,6 +2840,65 @@
         if (act === "fgexcl") { e.stopPropagation(); fgExcluded(el.dataset.fid); return true; }
         return false;
     }
+    // ---- 1.10.0 origin IA / Real: shared actions origin_set / origin_undo / origin_folder (reflib_core/origin.py), same as the Galería
+    const OGT = {
+        en: { ai: "AI", real: "Real", badge_tip: "AI-generated", f_tip: "{l} · {n} — Click: only these (again: all) · Ctrl+click: combine · also origin:ai / origin:real in search",
+              sel: "Origin", auto: "Auto", set_ai: "Mark as AI-generated", set_real: "Mark as real", set_auto: "Automatic: marked folder, WanGP outputs or generation metadata",
+              t_mark: "Mark folder as AI (subfolders and new files included)", t_own: "Marked as AI (click: remove mark)", t_real: "Marked real inside an AI folder (click: inherit)", t_inh: "AI from a parent folder (click: mark this one real)", undo: "Undo" },
+        es: { ai: "IA", real: "Real", badge_tip: "Generada con IA", f_tip: "{l} · {n} — Clic: solo estos (otra vez: todos) · Ctrl+clic: combinar · también origin:ia / origin:real en la búsqueda",
+              sel: "Origen", auto: "Auto", set_ai: "Marcar como generada con IA", set_real: "Marcar como real", set_auto: "Automático: carpeta marcada, salidas de WanGP o metadatos de generación",
+              t_mark: "Marcar carpeta como IA (incluye subcarpetas y archivos nuevos)", t_own: "Marcada como IA (clic: quitar marca)", t_real: "Marcada como real dentro de una carpeta IA (clic: heredar)", t_inh: "IA por la carpeta superior (clic: marcar esta como real)", undo: "Deshacer" }
+    };
+    const ogt = (k, p = {}) => String((OGT[lang()] || OGT.en)[k] || OGT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
+    function ogKindBar(k) {
+        const cur = ilib.f.origins || [];
+        return `<span class="reflib-og-bar">` + ["ai", "real"].map(v => `<button type="button" class="reflib-ib-kbtn reflib-og-k ${cur.includes(v) ? "on" : ""}" data-act="ogfilter" data-v="${v}" aria-pressed="${cur.includes(v)}" title="${esc(ogt("f_tip", { l: ogt(v), n: k[v] || 0 }))}">${esc(ogt(v))} <i>${k[v] || 0}</i></button>`).join("") + `</span>`;
+    }
+    function ogSelHtml(inf, n) {
+        if (!n) return "";
+        const ai = inf.ai || 0;
+        return `<span class="reflib-og-sel" title="${esc(ogt("sel"))}: ${ai} ${esc(ogt("ai"))} · ${n - ai} ${esc(ogt("real"))}">${esc(ogt("sel"))}
+            <button type="button" class="reflib-ib-btn ${ai === n ? "on" : ""}" data-act="ogset" data-v="ai" title="${esc(ogt("set_ai"))}">${esc(ogt("ai"))}</button><button type="button" class="reflib-ib-btn ${ai === 0 ? "on" : ""}" data-act="ogset" data-v="real" title="${esc(ogt("set_real"))}">${esc(ogt("real"))}</button><button type="button" class="reflib-ib-btn" data-act="ogset" data-v="auto" title="${esc(ogt("set_auto"))}">${esc(ogt("auto"))}</button></span>`;
+    }
+    function ogMarks(fid, rel) {
+        const m = (ilib.data && ilib.data.origin_folders) || {}, own = m[fid + "|" + rel];
+        const parts = rel ? rel.split("/") : []; let inh;
+        for (let k = parts.length - 1; k >= 0 && !inh; k--) inh = m[fid + "|" + parts.slice(0, k).join("/")];
+        return { own, inh };
+    }
+    function ogTreeBtn(n) {
+        const root = ilib.data && ilib.data.folders.find(x => x.id === n.fid);
+        if (!root || root.pseudo || root.virtual) return "";
+        const { own, inh } = ogMarks(n.fid, n.rel || ""), ai = own ? own === "ai" : inh === "ai";
+        const tip = own === "ai" ? ogt("t_own") : own === "real" ? ogt("t_real") : inh === "ai" ? ogt("t_inh") : ogt("t_mark");
+        return `<button type="button" class="reflib-og-tbtn ${ai ? "on" : ""} ${own ? "own" : ""}" data-act="ogfolder" data-fid="${esc(n.fid)}" data-rel="${esc(n.rel || "")}" title="${esc(tip)}">${esc(ogt("ai"))}</button>`;
+    }
+    function ogClick(act, el, e) {
+        if (act === "ogfilter") {
+            const v = el.dataset.v, cur = ilib.f.origins || [];
+            let next = (e.ctrlKey || e.metaKey) ? (cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v]) : (cur.length === 1 && cur[0] === v ? [] : [v]);
+            ilib.f.origins = next.length === 2 ? [] : next; newQuery(); renderKindBar(); render(); return true;
+        }
+        if (act === "ogset") {
+            sendIlib(Object.assign({ action: "origin_set", value: el.dataset.v }, ilib.sel.payload())).then(r => {
+                if (r && r.ok && r.undo_token) toast(r.toast, "ok", [{ label: ogt("undo"), onClick: () => sendIlib({ action: "origin_undo", undo_token: r.undo_token }).then(x => { ilibApply(x); newQuery(); render(); selChanged(); }) }], 12000);
+                else if (r && !r.ok) toast(r.error || r.message, "error");
+                ilibApply(r); newQuery(); render(); selChanged();
+            }).catch(() => {});
+            return true;
+        }
+        if (act === "ogfolder") {
+            e.stopPropagation();
+            const { own, inh } = ogMarks(el.dataset.fid, el.dataset.rel), ai = own ? own === "ai" : inh === "ai";
+            const value = own === "ai" ? (inh === "ai" ? "real" : "auto") : own === "real" ? "auto" : ai ? "real" : "ai";
+            sendIlib({ action: "origin_folder", fid: el.dataset.fid, rel: el.dataset.rel, value }).then(r => {
+                if (r && r.toast) toast(r.toast, r.ok ? "ok" : "error");
+                ilibApply(r); newQuery(); render();
+            }).catch(() => {});
+            return true;
+        }
+        return false;
+    }
     // ---- 1.6.0 media browser: type filter, durations, audio playback, video hover preview, WanGP audio/video targets
     const KINDS = ["image", "video", "audio", "mask"];   // 1.7.0 masks are their own type
     const closeAfter = () => localStorage.getItem("reflib_ib_close_after") === "1";
@@ -2855,7 +2916,8 @@
         host.innerHTML = [["", it("k_all"), tot]].concat(KINDS.map(x => [x, it("k_" + x), k[x] || 0])).map(([v, l, n]) =>
             `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""} ${v === "mask" ? "k-mask" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${v === "mask" ? "🎭 " : ""}${esc(l)} <i>${n}</i></button>`).join("")
             + `<button type="button" class="reflib-ib-kbtn reflib-mk-hasmask ${ilib.f.hasmask ? "on" : ""}" data-act="hasmask" aria-pressed="${!!ilib.f.hasmask}" title="${esc(mkt("hasmask_tip"))}">🎭 ${esc(mkt("hasmask"))}</button>`
-            + fgKindBar(k);   // 1.7.1
+            + fgKindBar(k)   // 1.7.1
+            + ogKindBar(k);   // 1.10.0
     }
     const murl = new Map();
     function mediaUrl(h, tries = 0) {
@@ -3119,6 +3181,7 @@
         if (act === "hasmask") { ilib.f.hasmask = !ilib.f.hasmask; newQuery(); renderKindBar(); render(); return; }   // 1.7.0
         if (mkClick(act, el, e)) return;
         if (fgClick(act, el, e)) return;   // 1.7.1
+        if (ogClick(act, el, e)) return;   // 1.10.0
         if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
         if (act === "topick") { pickLoad([...ilib.sel][0]); return; }   // 1.6.8
         if (act === "pkcancel") { if (ilib.pick && ilib.pick.mode === "assign") mkAssignEnd(); else closeBrowser(); return; }

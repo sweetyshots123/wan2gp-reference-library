@@ -2,7 +2,7 @@ import { call, Resp } from "./api";
 import { toast } from "./ui";
 
 // acciones compartidas con deshacer por token (1.8.6)
-const UNDO: Record<string, string> = { tag_delete: "tag_undo_delete", col_delete: "col_undo_delete", v_delete: "v_undo_delete", person_delete: "person_undo_delete" };
+const UNDO: Record<string, string> = { tag_delete: "tag_undo_delete", col_delete: "col_undo_delete", v_delete: "v_undo_delete", person_delete: "person_undo_delete", origin_set: "origin_undo" };
 
 // Ejecuta una acción de la Media Library, muestra su mensaje y ofrece "Deshacer" cuando el servidor da un token.
 export async function act(action: string, body: Record<string, any>, after: () => void, opts: { quiet?: boolean } = {}): Promise<Resp | null> {

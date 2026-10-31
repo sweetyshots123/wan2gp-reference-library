@@ -1192,6 +1192,13 @@ def _output_dirs():
     return list(dict.fromkeys(os.path.realpath(d) for d in ds))
 
 
+try:   # 1.10.0: items under WanGP's outputs count as AI (reflib_core/origin.py)
+    from .reflib_core import origin as _origin
+    _origin.AI_DIRS_FN = _output_dirs
+except Exception as _e:
+    print(f"[Reference Library] origin hook: {_e!r}")
+
+
 def _original_output(p):
     """1.7.2: Gradio's cache copy shown in the player -> the generated file in WanGP's output folder (same size, and the
     same name or the name Gradio sanitized). The path itself when it already is there, or when nothing matches."""

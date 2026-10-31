@@ -62,6 +62,7 @@ export default function Folders({ meta, node, onChanged }: { meta: Meta; node: N
           <a href={nodeHref({ fid: f.id, rel })} title={rel ? f.path + "/" + rel : f.path || name}>{name}</a>
           {!rel && f.missing && <span className="warn" title="Carpeta no encontrada">⚠</span>}
           <small>{c[1]}</small>
+          {!f.pseudo && <OriginMark f={f} rel={rel} marks={meta.origin_folders || {}} onChanged={onChanged} />}
           {!rel && !f.pseudo && <FolderActions f={f} onChanged={onChanged} watchScan={watchScan} onExcl={() => setExcl(f)} />}
         </div>
         {ch.length > 0 && open.has(k) && <ul>{ch.map((r) => row(f, r, depth + 1))}</ul>}
@@ -174,4 +175,18 @@ function Excluded({ f, onClose, onChanged }: { f: any; onClose: () => void; onCh
       </div>
     </div>
   );
+}
+
+// 1.10.0 «Marcar carpeta como IA»: heredado por subcarpetas y archivos nuevos (origin_folder, compartido con la Media Library)
+function OriginMark({ f, rel, marks, onChanged }: { f: any; rel: string; marks: Record<string, string>; onChanged: () => void }) {
+  const own = marks[f.id + "|" + rel];
+  let inh: string | undefined;
+  const parts = rel ? rel.split("/") : [];
+  for (let k = parts.length - 1; k >= 0 && !inh; k--) inh = marks[f.id + "|" + parts.slice(0, k).join("/")];
+  const ai = own ? own === "ai" : inh === "ai";
+  const next = own === "ai" ? (inh === "ai" ? "real" : "auto") : own === "real" ? "auto" : ai ? "real" : "ai";
+  const title = own === "ai" ? "Marcada como IA (clic: quitar marca)" : own === "real" ? "Marcada como real dentro de una carpeta IA (clic: heredar)"
+    : inh === "ai" ? "IA por la carpeta superior (clic: marcar esta como real)" : "Marcar carpeta como IA (incluye subcarpetas y archivos nuevos)";
+  return <button className={`omark ${ai ? "on" : ""} ${own ? "own" : ""}`} title={title}
+    onClick={(e) => { e.preventDefault(); act("origin_folder", { fid: f.id, rel, value: next }, onChanged); }}>IA</button>;
 }

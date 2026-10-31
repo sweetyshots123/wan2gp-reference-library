@@ -3,13 +3,13 @@ export type Kind = "image" | "video" | "audio" | "mask";
 export interface Item {
   hash: string; name: string; names?: string[]; cols: string[]; pool: boolean; folders: string[];
   tags: string[]; added: number; kind?: Kind; virtual?: { orig: string; broken: boolean }; missing?: boolean;
-  dur?: number; vl?: boolean; vcopies?: number;
+  dur?: number; vl?: boolean; vcopies?: number; origin?: "ai";
 }
 export interface Collection { id: string; name: string; count: number }
 export interface TagCount { tag: string; count: number }
-export interface Meta { rev: number; total: number; collections: Collection[]; tags: TagCount[]; folders: any[]; tree?: Record<string, Record<string, number[]>>; n_unassigned?: number; kinds: Record<string, number> }
+export interface Meta { rev: number; total: number; collections: Collection[]; tags: TagCount[]; folders: any[]; tree?: Record<string, Record<string, number[]>>; n_unassigned?: number; kinds: Record<string, number>; origins?: Record<string, number>; origin_folders?: Record<string, string> }
 export interface Filter {
-  kinds?: string[];
+  kinds?: string[]; origins?: string[];
   cols?: string[]; tags?: string[]; atags?: string[]; sim?: string; q?: string; qall?: string[]; kind?: string; sort?: string; none?: boolean; recent?: boolean;
   node?: { fid: string; rel: string }; sub?: boolean;
 }

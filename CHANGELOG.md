@@ -3,6 +3,7 @@
 ## 1.10.0
 - Galería: página Personas (personas con cara de portada, «Caras sin nombre» para nombrar/asignar/unir), cabecera de persona (renombrar, unir, olvidar con deshacer, rejilla de caras con separar/quitar/portada) y tarjeta «¿Es esta también X?» (Y/S = sí, N = no).
 - Panel del elemento: caras detectadas asignables a personas.
+- Origen IA / Real (reflib_core/origin.py, una lógica para ambas UIs): override por elemento o selección (IA / Real / Auto, con deshacer), marca por carpeta o subcarpeta heredada por todo su contenido y archivos nuevos (una subcarpeta o un elemento pueden anularla), y detección automática (carpetas de salida de WanGP, json de ajustes junto al archivo, nombres tipo …_seed123… / 2025-01-01-12h30m15s_…). Filtro IA / Real (clic = solo ese, Ctrl+clic = combinar), insignia IA en miniaturas, control en el panel de edición / barra de selección, botón «IA» por carpeta en el árbol, y búsqueda origin:ia / origin:real (o origen:) en ambas UIs. Las marcas se guardan en collections/origin.json; cambiarlas no reconstruye el catálogo (11 ms con 3k elementos).
 - Usa solo las acciones compartidas face_*/person_* y las miniaturas del servidor /reflib/face_thumb (las mismas que la Media Library); aviso amable con faces_busy.
 
 ## 1.9.7

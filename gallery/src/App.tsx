@@ -90,6 +90,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem("gal.size", String(size)); }, [size]);
   useEffect(() => { localStorage.setItem("gal.sort", sort); }, [sort]);
   useEffect(() => { localStorage.setItem("gal.kinds", JSON.stringify(kinds)); }, [kinds]);
+  const [origins, setOrigins] = useState<string[]>(() => { try { const k = JSON.parse(localStorage.getItem("gal.origins") || "[]"); return Array.isArray(k) ? k : []; } catch { return []; } });   // 1.10.0 IA / Real
+  useEffect(() => { localStorage.setItem("gal.origins", JSON.stringify(origins)); }, [origins]);
 
   const routeFilter = (r: Route): Filter | null => {
     switch (r.v) {
@@ -114,11 +116,12 @@ export default function App() {
     if (!base) return null;
     const out: Filter = { ...base, sort: base.sim ? "" : sort };   // 1.9.3: resultado de similitud = mejor primero
     if (kinds.length && kinds.length < 3 && !base.kind) out.kinds = kinds;
+    if (origins.length === 1) out.origins = origins;
     if (extraTags.length) out.tags = [...(base.tags || []), ...extraTags];
     const ax = afToFilter(af);
     if (ax.atags) ax.atags = [...(base.atags || []), ...ax.atags];
     return { ...out, ...ax };
-  }, [baseKey, kinds, sort, extraTags, JSON.stringify(af)]);
+  }, [baseKey, kinds, origins, sort, extraTags, JSON.stringify(af)]);
   const fkey = JSON.stringify(filter);
 
   const applyMeta = (r: any) => { const m = metaOf(r); if (m) { setMeta(m); rev.current = m.rev; } };
@@ -298,6 +301,7 @@ export default function App() {
             {v === "buscar" && !chips.length && <p className="muted">Escribe arriba: personas, colecciones, etiquetas o nombres de archivo. Varios filtros se combinan (Y).</p>}
             <div className="tools">
               {!base?.kind && <KindToggles kinds={kinds} setKinds={setKinds} counts={kc} libAudio={meta?.kinds?.audio ?? kc.audio ?? 0} />}
+              <OriginToggles origins={origins} setOrigins={setOrigins} counts={kc} />
               <select value={sort} onChange={(e) => setSort(e.target.value)} title={dateNote || "Orden (el índice de la derecha lo sigue)"}>
                 {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
@@ -386,6 +390,7 @@ function Tile({ it, sel, selMode, onOpen, onSel, onFav }: { it: Item; sel: boole
       {it.kind && it.kind !== "image" && <span className="badge">▶ {fmtDur(it.dur)}</span>}
       {it.virtual && <span className="badge v" title="Copia virtual">✂</span>}
       {it.missing && <span className="badge warn">archivo no encontrado</span>}
+      {it.origin === "ai" && <span className="badge ia" title="Generada con IA">IA</span>}
       <button className={`hfav ${fav ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); onFav(); }} title="Favorita">{fav ? "♥" : "♡"}</button>
       <button className="cb" onClick={(e) => { e.stopPropagation(); onSel(e); }} title="Seleccionar (Mayús = rango)">{sel ? "✓" : ""}</button>
       <figcaption>{people.length ? <b>{people.join(", ")}</b> : null}<span>{it.name}</span></figcaption>
@@ -459,6 +464,26 @@ function KindToggles({ kinds, setKinds, counts, libAudio }: { kinds: string[]; s
         return <button key={k} className={`kt ${active(k) && !off ? "on" : ""}`} disabled={off} aria-pressed={active(k)}
           onClick={(e) => press(k, e.ctrlKey || e.metaKey)}
           title={off ? "Sin audio" : `${KLABEL[k]} · ${n} — Clic: ${solo ? "volver a todos" : SOLO[k]} · Ctrl+clic: combinar`}>{ICONS[k]}<small>{off ? "" : n}</small></button>;
+      })}
+    </span>
+  );
+}
+
+// 1.10.0: IA / Real, same semantics as the type toggles (clic = solo ese, otra vez = todos; Ctrl+clic = combinar)
+function OriginToggles({ origins, setOrigins, counts }: { origins: string[]; setOrigins: (k: string[]) => void; counts: Record<string, number> }) {
+  const all = ["ai", "real"], L: Record<string, string> = { ai: "IA", real: "Real" };
+  const press = (k: string, combine: boolean) => {
+    let next: string[];
+    if (combine) next = origins.includes(k) ? origins.filter((x) => x !== k) : [...origins, k];
+    else next = origins.length === 1 && origins[0] === k ? [] : [k];
+    setOrigins(!next.length || next.length === all.length ? [] : all.filter((x) => next.includes(x)));
+  };
+  return (
+    <span className="kinds origins" role="group" aria-label="Origen">
+      {all.map((k) => {
+        const solo = origins.length === 1 && origins[0] === k, n = counts[k] || 0;
+        return <button key={k} className={`kt ${origins.includes(k) ? "on" : ""}`} aria-pressed={origins.includes(k)} onClick={(e) => press(k, e.ctrlKey || e.metaKey)}
+          title={`${L[k]} · ${n} — Clic: ${solo ? "volver a todos" : k === "ai" ? "solo IA" : "solo reales"} · Ctrl+clic: combinar · también origin:ia / origin:real en la búsqueda`}><b>{L[k]}</b><small>{n}</small></button>;
       })}
     </span>
   );
