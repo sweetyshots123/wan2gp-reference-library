@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personName, personTag, upload } from "./api";
 import { ManageList } from "./Manage";
 import { PersonasPage, PersonHeader } from "./Faces";
+import { DupesPage } from "./Dupes";
 import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
@@ -20,7 +21,7 @@ import { Thumb, Toasts, fmtDur, toast } from "./ui";
 // ---------------- rutas (hash): fáciles de ampliar añadiendo un caso en parseRoute + una vista
 type Route =
   | { v: "explorar" } | { v: "favoritas" } | { v: "videos" } | { v: "sin" } | { v: "buscar" }
-  | { v: "personas" } | { v: "persona"; name: string }
+  | { v: "personas" } | { v: "persona"; name: string } | { v: "duplicados" }
   | { v: "tags" } | { v: "tag"; tag: string } | { v: "auto"; id: string } | { v: "similares" }
   | { v: "colecciones" } | { v: "coleccion"; id: string }
   | { v: "carpetas" } | { v: "carpeta"; fid: string; rel: string };
@@ -34,6 +35,7 @@ function parseRoute(): Route {
     case "buscar": return { v: "buscar" };
     case "personas": case "modelos": return { v: "personas" };          // #/modelos = enlace antiguo
     case "persona": case "modelo": return b ? { v: "persona", name: b } : { v: "personas" };
+    case "duplicados": return { v: "duplicados" };   // 1.11.0
     case "etiquetas": return { v: "tags" };
     case "tag": return b ? { v: "tag", tag: b } : { v: "tags" };
     case "similares": return { v: "similares" };   // 1.9.3
@@ -224,6 +226,7 @@ export default function App() {
       case "sin": return "Sin colección";
       case "buscar": return "Búsqueda";
       case "personas": return "Personas";
+      case "duplicados": return "Duplicados";
       case "persona": return route.name;
       case "tags": return "Etiquetas";
       case "tag": return `#${route.tag}`;
@@ -278,6 +281,7 @@ export default function App() {
           {nav("#/carpetas", "Carpetas", v === "carpetas" || v === "carpeta")}
           {nav("#/favoritas", "♥ Favoritas", v === "favoritas")}
           {nav("#/videos", "Vídeos", v === "videos")}
+          {nav("#/duplicados", "Duplicados", v === "duplicados")}
         </nav>
         <Omni meta={meta} chips={chips} setChips={(c) => { setChips(c); goSearch(); }} text={text} setText={setText} onSearch={goSearch}
           onOpenItem={(it, list) => setSolo({ list, i: Math.max(0, list.findIndex((x) => x.hash === it.hash)) })} />
@@ -345,6 +349,7 @@ export default function App() {
           {meta && manage && v === "tags" && <ManageList kind="tag" rows={meta.tags.filter((t) => !isPerson(t.tag) && t.tag.toLowerCase() !== FAV).filter((t) => !tq || fold(t.tag).includes(tq)).map((t) => ({ key: t.tag, label: t.tag, count: t.count }))} after={refresh} />}
           {meta && manage && v === "personas" && <ManageList kind="persona" rows={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count }))} after={refresh} />}
           {meta && manage && v === "colecciones" && <ManageList kind="col" rows={meta.collections.filter((c) => !tq || fold(c.name).includes(tq)).map((c) => ({ key: c.id, label: c.name, count: c.count }))} after={refresh} />}
+          {meta && v === "duplicados" && <DupesPage after={refresh} />}
           {meta && !manage && v === "personas" && <PersonasPage tq={tq} rev={meta.rev} after={refresh} />}
           {meta && !manage && v === "personas" && <h2>Etiquetas «persona:»</h2>}
           {meta && !manage && v === "personas" && <IndexCards entries={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count, href: `#/persona/${encodeURIComponent(personName(t.tag))}`, f: { tags: [t.tag] } }))} empty="Aún no hay personas. Añade una desde el panel de edición (o etiqueta con «persona:Nombre» en la Media Library)." />}

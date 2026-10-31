@@ -6,3 +6,4 @@ from . import ioactions  # noqa: F401   (1.9.5 collection zips + Video Library m
 from . import similarity  # noqa: F401   (1.9.0 pose / face similarity: sim_*)
 from . import faces  # noqa: F401   (1.10.0 Personas: face_* / person_*)
 from . import origin  # noqa: F401   (1.10.0 origin IA / real: origin_*)
+from . import dupes  # noqa: F401   (1.11.0 duplicates: dup_*)

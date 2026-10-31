@@ -2732,9 +2732,9 @@
     }
     function fgClose() { const d = ilib.root && ilib.root.querySelector(".reflib-fg-bg"); if (d) d.remove(); }
     function fgDialogHost() { return (ilib.root.querySelector(".reflib-ib-modal") || ilib.root); }
-    function fgOpen(missingOnly) {
+    function fgOpen(missingOnly, only) {   // 1.11.0: `only` = explicit hashes (Duplicados) instead of the selection
         fgClose();
-        const pl = missingOnly ? {} : ilib.sel.payload(), sel = missingOnly ? { all: false, hashes: [] } : { all: !!ilib.sel.all, hashes: pl.hashes };
+        const pl = missingOnly ? {} : only ? { hashes: only } : ilib.sel.payload(), sel = missingOnly ? { all: false, hashes: [] } : { all: !!ilib.sel.all, hashes: pl.hashes };
         const bg = document.createElement("div");
         bg.className = "reflib-ib-costbg reflib-fg-bg";
         bg.innerHTML = `<div class="reflib-ib-costdlg reflib-fg-dlg" role="dialog" aria-modal="true"><h3>${esc(fgt(missingOnly ? "title_missing" : "title"))}</h3><div class="reflib-ib-muted">${esc(fgt("loading"))}</div></div>`;
@@ -5073,7 +5073,7 @@
         extend: (x) => { EXT.push(x); }, ilibRefresh: () => { newQuery(); render(); }, esc, it,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
+        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs) => fgOpen(false, hs), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

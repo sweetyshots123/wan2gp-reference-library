@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.0
+- Duplicados (`reflib_core/dupes.py`, acciones `dup_scan` / `dup_status` / `dup_groups` / `dup_resolve`, ver DUPES_API.md): idénticos por hash de contenido (mismo elemento en varios archivos) y casi iguales por pHash + dHash con umbral ajustable (0–16). Análisis en segundo plano, incremental, con caché `dupes.json`.
+- Por copia: ancho×alto, MP, tamaño, formato, fecha, carpeta/ruta y origen IA/Real; sugerencia: conservar la de mayor resolución y, a igualdad, mayor tamaño.
+- Resolver usa el flujo de borrado existente (forget_plan → diálogo / delete_all); copias idénticas del mismo elemento → Papelera + re‑escaneo, siempre queda una. Opcional: pasar etiquetas/favoritos/personas a la copia conservada.
+- UI en la Galería (página «Duplicados», grupos lado a lado, insignias Más grande / Más pequeña / IA, «Conservar la más grande en todos» con confirmación) y en la Media Library (botón «Duplicados», `reflib_dupes.js`), mismas acciones.
+- No se usan los embeddings de similitud: son de pose/cara y emparejarían fotos distintas.
+- Imágenes planas / casi de un solo color (contraste bajo, `FLAT_STD`) quedan fuera de la búsqueda de casi iguales (sus hashes perceptuales coinciden aunque sean distintas); los grupos son en estrella alrededor de la copia más grande (sin encadenar A≈B≈C).
+
 ## 1.10.0
 - Base: Media Library faces2 ea09020 (simperf 9b0ed21: caras múltiples por imagen con `box` 0..1 real, auto‑agrupado incremental, filtro de tamaño mínimo).
 - Galería Personas: ajustes compartidos `face_settings` (Auto‑agrupar = face_auto_cluster, tamaño mínimo = face_min_size px); recuadros de las caras sobre la imagen en el panel del elemento desde `box` (0..1), resaltado al pasar por cada cara; miniatura `face_thumb` por cara.
