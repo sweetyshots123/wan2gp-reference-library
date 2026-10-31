@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.6
+- Galería selection now works like the Media Library's in every grid (Explorar, Carpetas/carpeta, colecciones, etiquetas, personas, similares, vídeos), via one shared hook (`gallery/src/Selection.ts`): the ✓ circle toggles without opening the viewer (Shift = range from the anchor); Ctrl/Cmd+click toggles; Shift+click selects a range (Ctrl+Shift adds); while a selection exists, a plain click toggles; Esc clears; Ctrl+A / "Todas (N)" selects every matching item through the shared `range` action, not just the loaded ones.
+- Fix: in Carpetas the file-name caption covered the ✓ circle, so nothing could be selected. The bulk panel (edit, collections, delete, autotag, poses) now opens from any view, and the grid leaves room for it.
+
 ## 1.9.5
 - New shared actions in `reflib_core/ioactions.py`: col_export / col_import (collection zips) and v_list / v_rename / v_move / v_delete / v_undo_delete / v_import / v_export (Video Library). The Media Library's Gradio buttons now call them, so both UIs run the same code.
 - Galería: Colecciones → Gestionar can export a collection (⬇ .zip) and import zips. Vídeos → "Gestionar Video Library" can list, rename, reorder ◀▶, delete with undo, import videos or zips, download one video, and export everything.

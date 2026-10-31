@@ -1,3 +1,4 @@
+import { useSelection } from "./Selection";
 import { AutoTagBar } from "./AutoTag";
 import Folders, { folderLabel, nodeHref } from "./Folders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -175,18 +176,21 @@ export default function App() {
   };
 
   const toggleSel = (h: string) => setSel((s) => { const n = new Set(s); n.has(h) ? n.delete(h) : n.add(h); return n; });
+  const selection = useSelection(sel, setSel, filter, total, (i) => store.current.get(i)?.hash);
+  const selApi = useRef(selection); selApi.current = selection;
+  const selRef = useRef(sel); selRef.current = sel;
   const selItems = loaded.filter((i) => sel.has(i.hash));
   const open = viewer !== null || solo !== null;
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (open || (e.target as HTMLElement).closest("input,textarea,select")) return;
       if (e.key === "s") setSelMode((m) => !m);
-      else if (e.key === "Escape") { setSel(new Set()); setSelMode(false); }
-      else if (e.key === "a" && (e.ctrlKey || e.metaKey) && selMode) { e.preventDefault(); setSel(new Set(loaded.map((i) => i.hash))); }
+      else if (e.key === "Escape") { selApi.current.clear(); setSelMode(false); }
+      else if ((e.key === "a" || e.key === "A") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setSelMode(true); selApi.current.selectAll(); }
       else if (e.key === "/") { e.preventDefault(); document.getElementById("q")?.focus(); }
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
-  }, [open, selMode, loaded]);
+  }, [open]);
 
   const title = (() => {
     switch (route.v) {
@@ -298,8 +302,9 @@ export default function App() {
           {total > 0 && (
             <Grid total={total} sections={sections} size={size} version={ver} getItem={(i) => store.current.get(i)} ensure={ensure}
               renderTile={(it, i) => it ? (
-                <Tile it={it} sel={sel.has(it.hash)} selMode={selMode}
-                  onOpen={() => (selMode ? toggleSel(it.hash) : setViewer(i))} onSel={() => { setSelMode(true); toggleSel(it.hash); }}
+                <Tile it={it} sel={sel.has(it.hash)} selMode={selMode || sel.size > 0}
+                  onOpen={(e) => { if (selection.click(it.hash, i, e, false)) return; if (selMode) toggleSel(it.hash); else setViewer(i); }}
+                  onSel={(e) => { setSelMode(true); selection.click(it.hash, i, e, true); }}
                   onFav={() => act("tag", { hashes: [it.hash], ...(it.tags.some((t) => t.toLowerCase() === FAV) ? { remove: [FAV] } : { add: [FAV] }) }, refresh, { quiet: true })} />
               ) : <div className="tile"><div className="ph" /></div>} />
           )}
@@ -321,11 +326,11 @@ export default function App() {
         </main>
       )}
 
-      {selMode && sel.size > 0 && meta && !open && (
+      {sel.size > 0 && meta && !open && (
         <div className="bulk">
           <div className="bulkbar">
             <b>{sel.size} seleccionados</b>
-            <button onClick={() => setSel(new Set(loaded.map((i) => i.hash)))}>Todos los cargados</button>
+            <button onClick={() => selection.selectAll()} title="Ctrl+A">Todas ({total})</button>
             <button onClick={() => setSel(new Set())}>Ninguno</button>
             {route.v === "coleccion" && <button onClick={() => act("remove_from", { hashes: [...sel], collection_id: (route as any).id }, () => { setSel(new Set()); refresh(); })}>Quitar de esta colección</button>}
           </div>
@@ -347,17 +352,18 @@ export default function App() {
   );
 }
 
-function Tile({ it, sel, selMode, onOpen, onSel, onFav }: { it: Item; sel: boolean; selMode: boolean; onOpen: () => void; onSel: () => void; onFav: () => void }) {
+type ClickMods = { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean };
+function Tile({ it, sel, selMode, onOpen, onSel, onFav }: { it: Item; sel: boolean; selMode: boolean; onOpen: (e: ClickMods) => void; onSel: (e: ClickMods) => void; onFav: () => void }) {
   const fav = it.tags.some((t) => t.toLowerCase() === FAV);
   const people = it.tags.filter(isPerson).map(personName);
   return (
-    <figure className={`tile ${sel ? "sel" : ""} ${selMode ? "selmode" : ""}`} onClick={onOpen}>
+    <figure className={`tile ${sel ? "sel" : ""} ${selMode ? "selmode" : ""}`} onClick={(e) => { if (e.shiftKey) e.preventDefault(); onOpen(e); }} onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}>
       <Thumb hash={it.hash} alt={it.name} />
       {it.kind && it.kind !== "image" && <span className="badge">▶ {fmtDur(it.dur)}</span>}
       {it.virtual && <span className="badge v" title="Copia virtual">✂</span>}
       {it.missing && <span className="badge warn">archivo no encontrado</span>}
       <button className={`hfav ${fav ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); onFav(); }} title="Favorita">{fav ? "♥" : "♡"}</button>
-      <button className="cb" onClick={(e) => { e.stopPropagation(); onSel(); }} title="Seleccionar">{sel ? "✓" : ""}</button>
+      <button className="cb" onClick={(e) => { e.stopPropagation(); onSel(e); }} title="Seleccionar (Mayús = rango)">{sel ? "✓" : ""}</button>
       <figcaption>{people.length ? <b>{people.join(", ")}</b> : null}<span>{it.name}</span></figcaption>
     </figure>
   );

@@ -32,9 +32,9 @@ main { padding:18px 22px 80px; }
 .tile:hover figcaption { opacity:1; }
 .badge { position:absolute; top:8px; left:8px; background:rgba(0,0,0,.65); padding:2px 8px; border-radius:10px; font-size:12px; }
 .badge.v { left:auto; right:44px; } .badge.warn { top:auto; bottom:8px; background:#a33; }
-.hfav, .cb { position:absolute; top:6px; right:6px; width:32px; height:32px; border-radius:50%; padding:0; border:0; background:rgba(0,0,0,.55); font-size:17px; opacity:0; transition:opacity .2s; }
+.hfav, .cb { z-index:2; position:absolute; top:6px; right:6px; width:32px; height:32px; border-radius:50%; padding:0; border:0; background:rgba(0,0,0,.55); font-size:17px; opacity:0; transition:opacity .2s; }
 .hfav.on, .hfav.on:hover { color:var(--fav); background:rgba(0,0,0,.55); border:0; opacity:1; }
-.cb { right:auto; left:6px; top:auto; bottom:6px; border:2px solid #fff; background:rgba(0,0,0,.35); font-size:15px; }
+.cb { z-index:2; right:auto; left:6px; top:auto; bottom:6px; border:2px solid #fff; background:rgba(0,0,0,.35); font-size:15px; }
 .tile:hover .hfav, .tile:hover .cb, .tile.selmode .cb { opacity:1; }
 .tile.selmode { cursor:pointer; } .tile.sel { outline:3px solid var(--acc); outline-offset:-3px; } .tile.sel .cb { background:var(--acc); color:#111; border-color:var(--acc); }
 .sentinel { text-align:center; color:var(--mut); padding:30px; } .empty { color:var(--mut); padding:60px 0; text-align:center; }
@@ -222,3 +222,4 @@ button.link { background: none; border: 0; padding: 0; color: inherit; opacity: 
 .bodyp .bheight { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
 .bodyp .bheight input[type=number] { width: 70px; }
 @media (max-width: 760px) { .withfacets, .withside.withfacets { grid-template-columns: 1fr; } .facetp { position: static; border-left: 0; } }
+body:has(.bulk) main { padding-right:360px; }   /* 1.9.6: el panel de selección no tapa la rejilla */
