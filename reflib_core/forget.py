@@ -11,7 +11,7 @@ Files the library owns (collection copies, pool, masks, virtual copies) keep the
 1.7.3: a Video Library video ("Librería de vídeos") can be removed here too: its Video Library entry is soft-deleted
 (undo brings it back); when the undo window ends its file goes to the Recycle Bin (videostore.purge_trash)."""
 from __future__ import annotations
-import glob, json, os, shutil, sys, time, uuid
+import glob, json, os, shutil, sys, threading, time, uuid
 from typing import Any, Dict, Iterable, List, Optional
 from . import storage
 
@@ -38,7 +38,7 @@ def excluded_list(fid: str) -> List[Dict[str, Any]]:
     return sorted(out, key=lambda x: -x["at"])
 
 
-def _set_exclusions(add: Dict[str, Dict[str, Dict[str, Any]]] = None, remove: Dict[str, Iterable[str]] = None) -> int:
+def _set_exclusions(add: Dict[str, Dict[str, Dict[str, Any]]] = None, remove: Dict[str, Iterable[str]] = None, inval: bool = True) -> int:
     """add {fid: {hash: meta}}, remove {fid: [hash] | None (all)} -> number of changes."""
     from . import imagelib
     n = 0
@@ -61,7 +61,8 @@ def _set_exclusions(add: Dict[str, Dict[str, Dict[str, Any]]] = None, remove: Di
                 f.pop("exclude", None)
         if n:
             imagelib._save_folders(data)
-            imagelib.invalidate()
+            if inval:
+                imagelib.invalidate()
     return n
 
 
@@ -235,7 +236,9 @@ def plan(hashes: Iterable[str]) -> Dict[str, Any]:
 
 def forget(hashes: Iterable[str], delete_files: bool = False) -> Dict[str, Any]:
     from . import imagelib, masks as _mk, virtuals as _vc
+    t0 = time.perf_counter()
     cat = imagelib.catalog()
+    fresh = imagelib._cat_fresh()   # 1.9.7: patch the cached catalog afterwards (no full rebuild)
     by = cat["by_hash"]
     fdata = imagelib.load_folders()
     fpaths = {f["id"]: f["path"] for f in fdata["folders"]}
@@ -255,18 +258,18 @@ def forget(hashes: Iterable[str], delete_files: bool = False) -> Dict[str, Any]:
                     p = next((q for q in i.get("files") or () if imagelib._rel_dir(fpaths[fid], q) == rel), None) or i["path"]
                     rec["excl"].setdefault(fid, {})[i["hash"]] = {"name": os.path.basename(p), "rel": rel, "at": now}
         # optional: the files themselves -> Recycle Bin / Trash (never a permanent delete); a failure keeps the file
+        # 1.9.7: the Recycle Bin call (Shell API: up to seconds per file) runs in the background after the response;
+        # the entries are marked recycled now and corrected if a file stays (forget_status reports it).
         rec["recycled"], rec["recycle_errors"] = [], {}
-        if delete_files:
-            disk = [p for i in items for p in _disk_files(i, fdata)]
-            errs = recycle(disk)
-            rec["recycled"] = [p for p in disk if p not in errs]
-            rec["recycle_errors"] = errs
-            gone = {os.path.normcase(os.path.normpath(g)) for g in rec["recycled"]}
+        disk = [p for i in items for p in _disk_files(i, fdata)] if delete_files else []
+        if disk:
+            rec["recycled"] = list(disk)
+            gone = {os.path.normcase(os.path.normpath(g)) for g in disk}
             for fid, ex in rec["excl"].items():
                 for h, meta in ex.items():
                     if os.path.normcase(os.path.normpath(os.path.join(fpaths[fid], meta["rel"], meta["name"]))) in gone:
                         meta["recycled"] = True
-        _set_exclusions(add=rec["excl"])
+        _set_exclusions(add=rec["excl"], inval=False)
         # 2) collection / pool copies of them (owned copies: deleted with the usual undo stash)
         owned = [i["hash"] for i in items if i["colids"] or i["in_pool"]] + owned_extra
         if owned:
@@ -298,26 +301,90 @@ def forget(hashes: Iterable[str], delete_files: bool = False) -> Dict[str, Any]:
                     rec["vlib_ids"].append(vid)
                 except Exception as e:
                     print(f"[Reference Library] video library delete failed: {e}")
-        # 5) cached thumbnails (regenerated on demand)
-        for h in hs:
-            for p in glob.glob(os.path.join(imagelib._thumbs_dir(), h + "*")):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
         token = uuid.uuid4().hex
         stash = os.path.join(imagelib._undo_root(), "f" + token)
         os.makedirs(stash, exist_ok=True)
         storage._atomic_write_json(os.path.join(stash, "forget.json"), rec)
-    imagelib.invalidate()
-    return {"ok": True, "n": len(hs), "token": token, "recycled": len(rec["recycled"]), "recycle_errors": rec["recycle_errors"],
-            "masks": len(mids), "virtuals": len(vids), "owned": len(owned), "vlib": len(rec["vlib_ids"])}
+    t1 = time.perf_counter()
+    # 1.9.7: drop the items from the cached catalog (masks change other entries: those still rebuild)
+    imagelib._patch_remove(hs + owned_extra, fresh and not mids)
+    t2 = time.perf_counter()
+    job = _start_job(token, disk, hs, stash, rec, {fid: fpaths.get(fid) for fid in rec["excl"]})
+    print(f"[Reference Library] forget {len(hs)}: write {1000*(t1-t0):.0f} ms, catalog {1000*(t2-t1):.0f} ms"
+          f"{' (patched)' if fresh and not mids else ' (rebuild)'}, {len(disk)} to the Recycle Bin in the background")
+    return {"ok": True, "n": len(hs), "token": token, "recycled": len(disk), "recycle_errors": {}, "pending": bool(job["disk"]),
+            "masks": len(mids), "virtuals": len(vids), "owned": len(owned), "vlib": len(rec["vlib_ids"]),
+            "ms": round(1000 * (t2 - t0))}
+
+
+# ------------------------------------------------------------------------------------------------ 1.9.7 background cleanup
+_jobs: Dict[str, Dict[str, Any]] = {}
+_jobs_lock = threading.Lock()
+
+
+def _start_job(token, disk, hs, stash, rec, fpaths) -> Dict[str, Any]:
+    """Recycle Bin + thumbnail cleanup off the request thread. The result (files that stayed) is kept 10 min for
+    forget_status; a failed recycle clears the entry's "recycled" mark (the file is still in its folder)."""
+    job = {"done": threading.Event(), "disk": list(disk), "recycled": 0, "errors": {}, "at": time.time()}
+    with _jobs_lock:
+        for k in [k for k, j in _jobs.items() if time.time() - j["at"] > 600]:
+            _jobs.pop(k, None)
+        _jobs[token] = job
+
+    def run():
+        from . import imagelib
+        t = time.perf_counter()
+        try:
+            errs = recycle(disk) if disk else {}
+            job["errors"], job["recycled"] = errs, len(disk) - len(errs)
+            if errs:
+                bad = {os.path.normcase(os.path.normpath(p)) for p in errs}
+                with storage._lock:
+                    data = imagelib.load_folders()
+                    for f in data["folders"]:
+                        for h, meta in (f.get("exclude") or {}).items():
+                            if h in rec["excl"].get(f["id"], {}) and os.path.normcase(os.path.normpath(os.path.join(f["path"], meta.get("rel") or "", meta.get("name") or ""))) in bad:
+                                meta.pop("recycled", None)
+                    imagelib._save_folders(data)
+                    imagelib.invalidate()
+                    rec["recycled"] = [p for p in disk if p not in errs]
+                    rec["recycle_errors"] = errs
+                    try:
+                        storage._atomic_write_json(os.path.join(stash, "forget.json"), rec)
+                    except OSError:
+                        pass
+                print("[Reference Library] recycle failed (files kept): " + "; ".join(f"{os.path.basename(p)}: {e}" for p, e in errs.items()))
+            for h in hs:   # cached thumbnails (regenerated on demand)
+                for p in glob.glob(os.path.join(imagelib._thumbs_dir(), h + "*")):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+        except Exception as e:
+            job["errors"] = {p: str(e) for p in disk if os.path.exists(p)}
+            print(f"[Reference Library] background cleanup failed: {e!r}")
+        finally:
+            job["ms"] = round(1000 * (time.perf_counter() - t))
+            job["done"].set()
+    threading.Thread(target=run, name="reflib-forget-cleanup", daemon=True).start()
+    return job
+
+
+def status(token: str, timeout: float = 20.0) -> Dict[str, Any]:
+    """-> {done, recycled, errors{path: why}, ms} of a forget's background cleanup (waits up to `timeout`)."""
+    with _jobs_lock:
+        job = _jobs.get(str(token or ""))
+    if job is None:
+        return {"done": True, "recycled": 0, "errors": {}, "unknown": True}
+    job["done"].wait(max(0.0, min(float(timeout), 60.0)))
+    return {"done": job["done"].is_set(), "recycled": job["recycled"], "errors": dict(job["errors"]), "ms": job.get("ms")}
 
 
 def undo(token: str) -> Dict[str, Any]:
     """Undo "Quitar de la librería": entries, tags, exclusions, copies, masks come back. Recycled files stay in the
     Recycle Bin (restore them from there; they then reappear on the next rescan)."""
     import re
+    status(token, 30.0)   # 1.9.7: let the background recycle finish first (its outcome is in forget.json)
     from . import imagelib, masks as _mk, virtuals as _vc
     if not re.match(r"^[0-9a-f]{32}$", str(token or "")):
         raise storage.StorageError("undo expired")

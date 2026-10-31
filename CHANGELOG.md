@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.7
+- Galería viewer: smooth pan and zoom. Uses pointer capture, a ref plus one requestAnimationFrame write per frame (translate+scale, will-change), and no layout reads while dragging. Polling no longer re-renders the viewer, and full-res images are decoded before they are swapped in. Measured: task time while panning is about 20% lower and there are 0 extra DOM mutations.
+- Galería viewer: fast mouse-wheel navigation. Deltas accumulate with no lockout, so each notch moves one image straight away and shows the thumbnail as a placeholder. Full-res loads after about 130 ms of idle and is aborted if you keep scrolling. Neighbours preload into an LRU cache, and the filmstrip stays in sync. Before: 10 or 30 fast notches moved 1 image. After: they move exactly 10 / 30, settling in 185 / 273 ms.
+- Fast delete, shared by both UIs (`reflib_core`):
+  - Deleting no longer rebuilds the whole catalog: `imagelib._patch_remove` drops the items in place and recomputes the derived data. It falls back to a full rebuild for watched folders, masks, a stale cache or any error.
+  - Thumbnail removal and "borrar del disco" (Recycle Bin) run in a background thread. Failures are reported through the new `forget_status` action and undo waits for it.
+  - Galería and Media Library remove the item at once (the viewer jumps to the next photo) and restore it with an error toast if the server fails.
+  - Box measurements with 3k items: perceived delete 190-270 ms → about 40 ms; server forget 77-180 ms → 39-46 ms; the next query 52 ms → 4 ms.
+
 ## 1.9.6
 - Galería selection now works like the Media Library's in every grid (Explorar, Carpetas/carpeta, colecciones, etiquetas, personas, similares, vídeos), via the same rules file as the Media Library: `selection_rules.js` (pure functions cardClick / boxClick / rangeBounds / key / apply). plugin.py prepends it to reference_library.js, which now calls it (no behaviour change there), and the Galería imports the same file (`gallery/src/Selection.ts`). Unit and parity test: `node tests/test_selection_rules.mjs`. Rules: the ✓ circle toggles without opening the viewer (Shift = range from the anchor); Ctrl/Cmd+click toggles; Shift+click selects a range (Ctrl+Shift adds); a plain click works as in the Media Library (with a selection it selects just that card; with none, or on an already-selected card, it opens the viewer, which is the Galería's preview); Esc clears; Ctrl+A / "Todas (N)" selects every matching item through the shared `range` action, not just the loaded ones.
 - Fix: in Carpetas the file-name caption covered the ✓ circle, so nothing could be selected. The bulk panel (edit, collections, delete, autotag, poses) now opens from any view, and the grid leaves room for it.

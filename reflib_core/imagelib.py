@@ -1652,6 +1652,7 @@ def delete_everywhere(hashes: Iterable[str]) -> Dict[str, Any]:
     purge_undo()
     import uuid
     with storage._lock:
+        fresh = _cat_fresh()   # 1.9.7: patch the cache afterwards instead of a full rebuild
         folder_hashes = {v["hash"] for v in load_folders()["files"].values()}
         in_cols = set()
         for col in storage.list_collections():
@@ -1668,6 +1669,10 @@ def delete_everywhere(hashes: Iterable[str]) -> Dict[str, Any]:
         rec.update({"kind": "delete", "pool": pooled})
         os.makedirs(stash, exist_ok=True)
         storage._atomic_write_json(os.path.join(stash, "undo.json"), rec)
+        if target:   # items that stay in a watched folder change path / membership: those need the full rebuild
+            data = _cat["data"] if fresh else None
+            masked = data is not None and any(data["mcount"].get(h) for h in target)
+            _patch_remove(target, fresh and not (target & folder_hashes) and not masked)
         return {"token": token, "deleted": len(target), "collections": len(rec["collections"]),
                 "folder_only": len(hashes - target), "on_disk": len(hashes & folder_hashes)}
 
@@ -1804,6 +1809,12 @@ def catalog() -> Dict[str, Any]:
                       "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ()), "vlib": i.get("vlib")})
         it_ = items[-1]
         it_["missing"] = _forget.is_missing(it_)   # 1.7.1 "archivo no encontrado"
+    return _derive(items, key)
+
+
+def _derive(items: List[Dict[str, Any]], key) -> Dict[str, Any]:
+    """1.9.7: everything catalog() computes from the item list (tree, counts, tags, folders...). Cheap next to building the
+    items (list_images + a stat per file), so a delete can drop items from the cached list and re-derive (_patch_remove)."""
     folders = list_folders()
     nvirt = sum(1 for i in items if i["virtual"])
     if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
@@ -1872,6 +1883,25 @@ def catalog() -> Dict[str, Any]:
     with _cat_lock:
         _cat.update(key=key, data=data, fkey=None, flist=None, lru=[])
     return data
+
+
+def _patch_remove(hashes: Iterable[str], was_fresh: bool) -> None:
+    """1.9.7: items that left the library entirely (delete / forget) are dropped from the cached catalog and the counts,
+    tree and tags re-derived, instead of re-listing every index (seconds at 15k items). Virtual copies of them go too.
+    `was_fresh` = the cache was current before the caller's writes; otherwise (or on any surprise) full rebuild."""
+    if not was_fresh:
+        invalidate(); return
+    try:
+        hs = set(hashes)
+        with _cat_lock:
+            data = _cat["data"]
+        if data is None:
+            return
+        items = [i for i in data["items"] if i["hash"] not in hs and not (i.get("virtual") and i["virtual"].get("orig") in hs)]
+        _derive(items, _index_key())
+    except Exception as e:
+        print(f"[Reference Library] remove patch -> full rebuild: {e!r}")
+        invalidate()
 
 
 def _clean_filter(f) -> Dict[str, Any]:

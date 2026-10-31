@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FAV, Item, Meta, call, mediaUrl, personName, isPerson } from "./api";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from "./api";
+import { WheelStepper, normDelta, medium, loadFull } from "./viewerNav";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
@@ -14,13 +15,16 @@ interface VEdit { url: string; kind: string; params: { rect?: Rect; start?: numb
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export default function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure }: Props) {
+export default memo(Viewer);
+function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure }: Props) {
   const it = items[index];
   const [url, setUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
   const [panel, setPanel] = useState(() => localStorage.getItem("gal.panel") === "1");
   const [ve, setVe] = useState<VEdit | null>(null);
+  const [settled, setSettled] = useState<string | null>(null);
+  const panelIt = useRef<Item | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const media = useRef<HTMLImageElement & HTMLVideoElement>(null);
@@ -29,7 +33,27 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
   const clickStart = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   useEffect(() => { localStorage.setItem("gal.panel", panel ? "1" : "0"); }, [panel]);
-  useEffect(() => { ensure(Math.max(0, index - 13), Math.min(total, index + 14)); }, [index, total, !!it]);
+  // 1.9.7: índice "vivo" (la rueda puede dar varios pasos antes del siguiente render) y dirección del giro
+  const idxRef = useRef(index); idxRef.current = index;
+  const dirRef = useRef(1);
+  useEffect(() => { ensure(Math.max(0, index - (dirRef.current < 0 ? 40 : 13)), Math.min(total, index + (dirRef.current > 0 ? 41 : 14))); }, [index, total, !!it]);
+  // marcador instantáneo: mediana decodificada (caché LRU) o miniatura en caché; la mediana llega en cuanto esté
+  const [ph, setPh] = useState<string | null>(null);
+  useEffect(() => {
+    if (!it) return; let on = true;
+    setPh(medium.peek(it.hash) || thumbNow(it.hash));
+    if (!it.kind || it.kind === "image") medium.get(it.hash).then((u) => { if (on && u) setPh(u); });
+    return () => { on = false; };
+  }, [it?.hash]);
+  // precarga ±vecinos en la dirección del giro (5 delante, 2 detrás); lo que quede fuera se cancela
+  useEffect(() => {
+    if (!it) return;
+    const d = dirRef.current, keep = new Set<string>([it.hash]), order: string[] = [];
+    for (const k of [1, 2, 3, 4, 5, -1, -2]) { const x = items[index + k * d]; if (x && (!x.kind || x.kind === "image")) { keep.add(x.hash); order.push(x.hash); } }
+    medium.prune(keep);
+    const t = window.setTimeout(() => order.forEach((h) => medium.get(h)), 30);
+    return () => window.clearTimeout(t);
+  }, [index, !!it]);
   const vid = useVidosser();
   // favorita al instante (optimista): el corazón cambia ya y se revierte si el servidor falla
   const [favOpt, setFavOpt] = useState<{ h: string; v: boolean } | null>(null);
@@ -37,19 +61,24 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
   // medio a resolución completa (imagen original, vídeo o copia virtual renderizada)
   useEffect(() => {
     if (!it) return;
-    let on = true, tries = 0;
+    let on = true, tries = 0, full: { abort: () => void } | null = null;
     setUrl(null); setZ({ s: 1, x: 0, y: 0 }); setVe(null); setDraft(null);
     const load = () => mediaUrl(it.hash).then((r) => {
       if (!on) return;
       setRendering(!!r.rendering);
-      if (r.url) setUrl(r.url);
+      if (r.url && (!it.kind || it.kind === "image")) {   // 1.9.7: decodificada antes de mostrarla (sin tirón)
+        const f = loadFull(r.url); full = f;
+        f.p.then((ok) => { if (on && ok) setUrl(r.url); });
+      } else if (r.url) setUrl(r.url);
       else if (r.rendering && tries++ < 60) window.setTimeout(load, 1000);
     });
-    load();
-    return () => { on = false; };
+    // 1.9.7: la resolución completa (y el panel de edición) solo cuando el índice se asienta; girando rápido
+    // no se encola nada y la carga en curso se cancela
+    const settle = window.setTimeout(() => { if (!on) return; setSettled(it.hash); load(); }, 130);
+    return () => { on = false; window.clearTimeout(settle); full?.abort(); };
   }, [it?.hash]);
 
-  const go = useCallback((d: number) => { const j = index + d; if (j >= 0 && j < total) setIndex(j); }, [index, total]);
+  const go = useCallback((d: number) => { dirRef.current = d > 0 ? 1 : -1; const j = index + d; if (j >= 0 && j < total) setIndex(j); }, [index, total]);
   const isFav = favOpt && favOpt.h === it?.hash ? favOpt.v : !!it?.tags.some((t) => t.toLowerCase() === FAV);
   const toggleFav = () => {
     if (!it) return;
@@ -61,15 +90,34 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
   };
   useEffect(() => { if (favOpt && it && favOpt.h === it.hash && it.tags.some((t) => t.toLowerCase() === FAV) === favOpt.v) setFavOpt(null); }, [it]);
 
-  const zoomAt = (factor: number, cx: number, cy: number) => setZ((o) => {
-    const r = stage.current!.getBoundingClientRect();
+  // 1.9.7: zoom / desplazamiento en vivo sin React: el valor vive en live.current y se pinta en un rAF
+  // (translate + scale, will-change: transform directo en el elemento); el estado z solo se confirma al soltar / al parar la rueda,
+  // así arrastrar no re-renderiza el visor, el panel de edición ni la tira de miniaturas.
+  const live = useRef(z);
+  const tgt = useRef<HTMLElement | null>(null);
+  const raf = useRef(0);
+  const rect = useRef<DOMRect | null>(null);
+  const commitT = useRef(0);
+  const xf = (o: { s: number; x: number; y: number }) => `translate(${o.x}px, ${o.y}px) scale(${o.s})`;
+  const paint = () => { if (raf.current) return; raf.current = requestAnimationFrame(() => { raf.current = 0; const el = tgt.current; if (el) el.style.transform = xf(live.current); }); };
+  const setLive = (o: { s: number; x: number; y: number }, commit: "now" | "later" | "no") => {
+    live.current = o; paint();
+    const zoomed = o.s > 1; stage.current?.classList.toggle("zoomed", zoomed);
+    window.clearTimeout(commitT.current);
+    if (commit === "now") setZ(o); else if (commit === "later") commitT.current = window.setTimeout(() => setZ({ ...live.current }), 160);
+  };
+  useEffect(() => { live.current = z; }, [z]);
+  const animate = () => { const st = stage.current; if (!st) return; st.classList.add("anim"); window.setTimeout(() => st.classList.remove("anim"), 160); };
+  const stageRect = () => rect.current || stage.current!.getBoundingClientRect();
+  const zoomAt = (factor: number, cx: number, cy: number, commit: "now" | "later" | "no" = "now") => setLive(((o) => {
+    const r = stageRect();
     const px = cx - r.left - r.width / 2, py = cy - r.top - r.height / 2;
     const s = clamp(o.s * factor, 1, 12);
     if (s === 1) return { s: 1, x: 0, y: 0 };
     const k = s / o.s;
     return { s, x: px - (px - o.x) * k, y: py - (py - o.y) * k };
-  });
-  const zoomCenter = (f: number) => { const r = stage.current!.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
+  })(live.current), commit);
+  const zoomCenter = (f: number) => { const r = stage.current!.getBoundingClientRect(); animate(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,7 +133,7 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
       else if (k === "e" || k === "E") setPanel((p) => !p);
       else if (k === "+" || k === "=") zoomCenter(1.4);
       else if (k === "-") zoomCenter(1 / 1.4);
-      else if (k === "0") setZ({ s: 1, x: 0, y: 0 });
+      else if (k === "0") { animate(); setLive({ s: 1, x: 0, y: 0 }, "now"); }
       else if (k === " " && media.current?.tagName === "VIDEO") { e.preventDefault(); const v = media.current; v.paused ? v.play() : v.pause(); }
       else return;
       e.preventDefault();
@@ -97,23 +145,24 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
   // rueda: sin zoom = anterior/siguiente (una muesca = una foto); con zoom = desplazar; Ctrl+rueda = zoom
   const zRef = useRef(z); zRef.current = z;
   const goRef = useRef(go); goRef.current = go;
-  const wheelAcc = useRef(0), wheelLock = useRef(0);
+  const stepper = useRef(new WheelStepper());
+  const totalRef = useRef(total); totalRef.current = total;
+  const setIndexRef = useRef(setIndex); setIndexRef.current = setIndex;
   useEffect(() => {
     const el = stage.current; if (!el) return;
     const w = (e: WheelEvent) => {
       if (ve) return;
       e.preventDefault();   // también evita el zoom de página del navegador con Ctrl
-      const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY;
+      const dy = normDelta(e);
       const dx = e.deltaMode === 1 ? e.deltaX * 40 : e.deltaX;
-      if (e.ctrlKey || e.metaKey) { zoomAt(Math.exp(-dy * 0.0025), e.clientX, e.clientY); return; }
-      if (zRef.current.s > 1) { setZ((o) => ({ ...o, x: o.x - dx, y: o.y - dy })); return; }
-      const now = performance.now();
-      if (now < wheelLock.current) { wheelLock.current = Math.max(wheelLock.current, now + 120); return; }   // inercia del trackpad
-      wheelAcc.current += dy;
-      if (Math.abs(wheelAcc.current) >= 50) {
-        goRef.current(wheelAcc.current > 0 ? 1 : -1);
-        wheelAcc.current = 0; wheelLock.current = now + 280;
-      }
+      if (e.ctrlKey || e.metaKey) { rect.current = null; zoomAt(Math.exp(-dy * 0.0025), e.clientX, e.clientY, "later"); return; }
+      if (live.current.s > 1) { const o = live.current; setLive({ ...o, x: o.x - dx, y: o.y - dy }, "later"); return; }
+      // 1.9.7: tantas fotos como pasos acumulados, sin bloqueo: girar rápido recorre muchas seguidas
+      const n = stepper.current.push(dy, e.timeStamp || performance.now());
+      if (!n) return;
+      const j = clamp(idxRef.current + n, 0, totalRef.current - 1);
+      if (j === idxRef.current) return;
+      dirRef.current = n > 0 ? 1 : -1; idxRef.current = j; setIndexRef.current(j);
     };
     el.addEventListener("wheel", w, { passive: false });
     return () => el.removeEventListener("wheel", w);
@@ -123,7 +172,7 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
     if (ve) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    last.current = null;
+    last.current = null; rect.current = stage.current!.getBoundingClientRect();   // una sola lectura de layout por gesto
     if (pts.current.size === 1) clickStart.current = { x: e.clientX, y: e.clientY, moved: false };
     else if (clickStart.current) clickStart.current.moved = true;   // pellizco: no es clic
   };
@@ -135,21 +184,23 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
     const p = [...pts.current.values()];
     if (p.length === 2) {   // pellizco
       const cx = (p[0].x + p[1].x) / 2, cy = (p[0].y + p[1].y) / 2, d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
-      if (last.current?.d) zoomAt(d / last.current.d, cx, cy);
+      if (last.current?.d) zoomAt(d / last.current.d, cx, cy, "no");
       last.current = { x: cx, y: cy, d };
-    } else if (p.length === 1 && z.s > 1) {   // arrastrar
-      if (last.current) { const dx = e.clientX - last.current.x, dy = e.clientY - last.current.y; setZ((o) => ({ ...o, x: o.x + dx, y: o.y + dy })); }
+    } else if (p.length === 1 && live.current.s > 1) {   // arrastrar
+      if (last.current) { const o = live.current; setLive({ ...o, x: o.x + e.clientX - last.current.x, y: o.y + e.clientY - last.current.y }, "no"); }
       last.current = { x: e.clientX, y: e.clientY, d: 0 };
     }
   };
   // clic en la foto = zoom hacia ese punto; otro clic = ajustar. Arrastrar no cuenta como clic.
   const onUp = (e: React.PointerEvent) => {
     pts.current.delete(e.pointerId); last.current = null;
+    if (pts.current.size === 0) { rect.current = null; if (live.current !== zRef.current) setLive(live.current, "now"); }
     const c = clickStart.current;
     if (pts.current.size === 0) clickStart.current = null;
     if (ve || !c || c.moved || e.button !== 0 || e.type === "pointercancel") return;
     if (e.target !== media.current || media.current?.tagName !== "IMG") return;
-    if (z.s > 1) setZ({ s: 1, x: 0, y: 0 }); else zoomAt(2.5, e.clientX, e.clientY);
+    animate();
+    if (live.current.s > 1) setLive({ s: 1, x: 0, y: 0 }, "now"); else zoomAt(2.5, e.clientX, e.clientY);
   };
 
   // ---------- copia virtual: recorte (imagen / vídeo) y entrada-salida (vídeo / audio)
@@ -226,7 +277,7 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
           <button onClick={() => zoomCenter(1 / 1.4)} title="Alejar (-)">−</button>
           <span className="zl">{Math.round(z.s * 100)}%</span>
           <button onClick={() => zoomCenter(1.4)} title="Acercar (+)">+</button>
-          <button onClick={() => setZ({ s: 1, x: 0, y: 0 })} title="Ajustar (0)">⤢</button>
+          <button onClick={() => { animate(); setLive({ s: 1, x: 0, y: 0 }, "now"); }} title="Ajustar (0)">⤢</button>
           {(it.kind || "image") === "image" && <SimilarButtons hash={it.hash} name={it.name} />}
           <button onClick={() => setPanel(!panel)} className={panel ? "on" : ""} title="Editar (E)">✎ Editar</button>
           <button onClick={close} title="Cerrar (Esc)">✕</button>
@@ -235,13 +286,14 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
       <div className="vbody">
         <div className={`stage ${z.s > 1 ? "zoomed" : ""} ${ve ? "cropping" : ""}`} ref={stage}
           onPointerDown={ve ? cropDown : onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          {!src && <div className="loading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}<Thumb hash={it.hash} className="blur" /></div>}
+          {!src && (ph && !rendering ? <img className="phimg" src={ph} alt="" draggable={false} />
+            : <div className="loading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}<Thumb hash={it.hash} className="blur" /></div>)}
           {src && kind === "image" && (
-            <img ref={media} src={src} alt={it.name} draggable={false} onLoad={() => setDraft((d) => d && [...d] as Rect)}
-              style={{ transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})` }} />
+            <img ref={(el) => { (media as any).current = el; tgt.current = el; }} src={src} alt={it.name} draggable={false} onLoad={() => setDraft((d) => d && [...d] as Rect)}
+              style={{ transform: xf(z) }} />
           )}
           {src && (kind === "video" || kind === "mask") && (
-            <div className="vidhost" key={src} style={{ transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})` }}>
+            <div className="vidhost" key={src} ref={(el) => { tgt.current = el; }} style={{ transform: xf(z) }}>
               <video ref={media} src={src} controls autoPlay loop playsInline onLoadedMetadata={() => setDraft((d) => d && [...d] as Rect)} />
             </div>
           )}
@@ -288,7 +340,7 @@ export default function Viewer({ items, index, meta, total, setIndex, close, onC
                 </div>
               </div>
             ) : (
-              <EditPanel items={[it]} meta={meta} onChanged={onChanged} onVirtual={openVirtual} onClose={() => setPanel(false)} />
+              <EditPanel items={[(settled === it.hash ? (panelIt.current = it) : panelIt.current) || it]} meta={meta} onChanged={onChanged} onVirtual={openVirtual} onClose={() => setPanel(false)} />
             )}
           </div>
         )}

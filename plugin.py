@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.9.6"
+PLUGIN_VERSION = "1.9.7"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3892,6 +3892,15 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     out = {"ok": True, "kind": kind, "message": msg, "toast": msg, "undo_forget": r["token"], "reload": True,
                            "recycle_errors": [os.path.basename(p) for p in r["recycle_errors"]]}
                 out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
+            elif action == "forget_status":   # 1.9.7: outcome of the background Recycle Bin step of a "forget"
+                from .reflib_core import forget as _fg
+                r = _fg.status(str(req.get("token") or ""), float(req.get("wait") or 20))
+                errs = r.get("errors") or {}
+                out = {"ok": True, "done": r["done"], "recycled": r.get("recycled", 0), "ms": r.get("ms"),
+                       "recycle_errors": [os.path.basename(p) for p in errs]}
+                if errs:
+                    msg = tr(lang, "forget_recycle_failed", k=len(errs), names=", ".join(os.path.basename(p) for p in list(errs)[:5]))
+                    out.update(kind="warn", message=msg, toast=msg)
             elif action == "forget_undo":
                 from .reflib_core import forget as _fg
                 r = _fg.undo(str(req.get("token") or ""))
@@ -4013,7 +4022,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             out = {"ok": False, "error": storage_error_text(lang, e)}
         # 1.8.3: tag / add / remove patch the cached catalog themselves (the index-file key still catches any other
         # change), so they skip the blanket rebuild that made a favorite take seconds at 15k items
-        incremental = action in ("tag", "remove_from") or (action == "add" and req.get("new_name") is None)
+        # 1.9.7: forget / delete_all drop their items from the cache themselves (imagelib._patch_remove)
+        incremental = action in ("tag", "remove_from", "forget", "delete_all") or (action == "add" and req.get("new_name") is None)
         if action not in self.ILIB_READONLY and not (incremental and out.get("ok")):
             imagelib.invalidate()
         out["id"] = req.get("id")
@@ -4023,7 +4033,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
                      "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign",
-                     "forget_plan", "forget_missing_plan", "folder_excluded")
+                     "forget_plan", "forget_missing_plan", "folder_excluded", "forget_status")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()
@@ -4169,7 +4179,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or (req.get("action") not in _actions.FAST and req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek")):
+        if not isinstance(req, dict) or (req.get("action") not in _actions.FAST and req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek", "forget_status")):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

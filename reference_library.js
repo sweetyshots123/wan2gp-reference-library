@@ -903,7 +903,7 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
+    const FAST_ACTIONS = new Set(["forget_status", "col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
@@ -2773,8 +2773,26 @@
             const cb = bg.querySelector(".reflib-fg-diskcb"), del = !!(cb && cb.checked);
             fgClose();
             if (b.dataset.fg !== "ok") return;
-            sendIlib(Object.assign({ action: missingOnly ? "forget_missing" : "forget", delete_files: del }, pl)).then(r => { fgUndoToast(r, sel); ilibApply(r); }).catch(() => {});
+            const back = optHide(sel);   // 1.9.7: instant; back if the server fails
+            sendIlib(Object.assign({ action: missingOnly ? "forget_missing" : "forget", delete_files: del }, pl)).then(r => { if (!r || r.ok === false) back(); fgUndoToast(r, sel); ilibApply(r); fgStatus(r); }).catch(() => { back(); toast("Error", "error"); });
         });
+    }
+    // 1.9.7 (same as the Galería's optimistic delete): cards vanish at once and come back if the server fails; the slow
+    // Recycle Bin step runs in the background on the server and forget_status reports files that could not be recycled.
+    function optHide(sel) {
+        const hs = new Set(sel.hashes || []);
+        const cards = ilib.root ? [...ilib.root.querySelectorAll(".reflib-ib-card")].filter(c => sel.all ? c.classList.contains("sel") : hs.has(c.dataset.hash)) : [];
+        cards.forEach(c => { c.style.display = "none"; });
+        return () => cards.forEach(c => { c.style.display = ""; });
+    }
+    function fgStatus(r) {
+        if (!r || !r.pending || !r.undo_forget) return;
+        let n = 0;   // short polls (wait 0): the Gradio channel is never held by a long wait
+        const tick = () => sendIlib({ action: "forget_status", token: r.undo_forget, wait: 0 }).then(s => {
+            if (s && s.recycle_errors && s.recycle_errors.length) { toast(s.toast || s.message, "error"); newQuery(true); return; }
+            if (s && !s.done && ++n < 90) setTimeout(tick, 800);
+        }).catch(() => {});
+        setTimeout(tick, 300);
     }
     function fgUndoToast(r, sel) {
         if (!r) return;
@@ -3131,7 +3149,8 @@
             }
             ilib.delArmed = false; clearTimeout(ilib.delTimer);
             const pl = ilib.sel.payload(), sel = { all: !!ilib.sel.all, hashes: pl.hashes };
-            sendIlib(Object.assign({ action: "delete_all" }, pl)).then(r => { undoToast(r, sel); ilibApply(r); }).catch(() => {});
+            const back = optHide(sel);
+            sendIlib(Object.assign({ action: "delete_all" }, pl)).then(r => { if (!r || r.ok === false) back(); undoToast(r, sel); ilibApply(r); }).catch(() => { back(); toast("Error", "error"); });
         }
         else if (act === "removefrom") {
             const pl = ilib.sel.payload(), sel = { all: !!ilib.sel.all, hashes: pl.hashes };

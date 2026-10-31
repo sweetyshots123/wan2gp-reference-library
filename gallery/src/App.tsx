@@ -11,6 +11,7 @@ import EditPanel from "./EditPanel";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
 import { AT_DONE, autoLabel, isLeafTag, loadTax, setTax } from "./AutoTag";
 import Viewer from "./Viewer";
+import { setRemover } from "./optimistic";
 import Grid, { Section } from "./Grid";
 import Omni, { Chip, chipsFilter } from "./Omni";
 import { Thumb, Toasts, fmtDur, toast } from "./ui";
@@ -142,6 +143,7 @@ export default function App() {
     fetchPage(0, g, true);
   }, [fkey]);
 
+  const closeViewer = useCallback(() => setViewer(null), []);   // 1.9.7: props estables -> el visor (memo) no se re-renderiza por el resto de la app
   const ensure = useCallback((from: number, to: number) => {
     for (let p = Math.floor(Math.max(0, from) / PAGE); p <= Math.floor(Math.max(0, to - 1) / PAGE); p++)
       if (pages.current.get(p) !== gen.current) fetchPage(p, gen.current);
@@ -163,6 +165,24 @@ export default function App() {
     }, 5000);
     return () => window.clearInterval(t);
   }, [refresh]);
+
+  // 1.9.7: borrado optimista (optimistic.ts): se quitan de la lista cargada al instante y el visor pasa a la siguiente
+  const totalNow = useRef(0); totalNow.current = total;
+  const viewerNow = useRef<number | null>(null); viewerNow.current = viewer;
+  useEffect(() => {
+    setRemover((hs) => {
+      const snap = { store: store.current, total: totalNow.current, viewer: viewerNow.current };
+      const next = new Map<number, Item>(), gone: number[] = [];
+      [...store.current.entries()].sort((a, b) => a[0] - b[0]).forEach(([i, it]) => { if (hs.has(it.hash)) gone.push(i); else next.set(i - gone.length, it); });
+      if (!gone.length) return () => {};
+      const nt = Math.max(0, snap.total - gone.length);
+      store.current = next; setTotal(nt); setVer((v) => v + 1);
+      setSel((s) => { if (![...hs].some((h) => s.has(h))) return s; const n = new Set(s); hs.forEach((h) => n.delete(h)); return n; });
+      if (snap.viewer != null) { const before = gone.filter((i) => i < snap.viewer!).length; setViewer(nt ? Math.min(snap.viewer - before, nt - 1) : null); }
+      return () => { store.current = snap.store; setTotal(snap.total); setVer((v) => v + 1); if (snap.viewer != null) setViewer(snap.viewer); };
+    });
+    return () => setRemover(null);
+  }, []);
 
   const items = useMemo(() => { const a: Item[] = new Array(total); store.current.forEach((it, i) => { if (i < total) a[i] = it; }); return a; }, [ver, total]);
   const loaded = useMemo(() => [...store.current.values()], [ver]);
@@ -339,7 +359,7 @@ export default function App() {
       )}
 
       {viewer !== null && meta && !solo && (
-        <Viewer items={items} index={viewer} total={total} meta={meta} setIndex={setViewer} close={() => setViewer(null)} onChanged={refresh} ensure={ensure} />
+        <Viewer items={items} index={viewer} total={total} meta={meta} setIndex={setViewer} close={closeViewer} onChanged={refresh} ensure={ensure} />
       )}
       {solo && meta && (
         <Viewer items={solo.list} index={solo.i} total={solo.list.length} meta={meta} setIndex={(i) => setSolo({ ...solo, i })} close={() => setSolo(null)} onChanged={refresh} ensure={() => {}} />

@@ -53,7 +53,8 @@ main { padding:18px 22px 80px; }
 .vbtns .fav { font-size:18px; } .fav.on { color:var(--fav); } .zl { min-width:48px; text-align:center; color:var(--mut); font-variant-numeric:tabular-nums; }
 .vbody { flex:1; display:flex; min-height:0; }
 .stage { flex:1; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action:none; user-select:none; }
-.stage img, .stage video { max-width:100%; max-height:100%; object-fit:contain; transition:transform .08s linear; will-change:transform; }
+.stage img, .stage video { max-width:100%; max-height:100%; object-fit:contain; will-change:transform; transform-origin:50% 50%; }
+.stage .vidhost { will-change:transform; } .stage.anim img, .stage.anim .vidhost { transition:transform .15s ease-out; }   /* 1.9.7: sin transición al arrastrar */
 .stage.zoomed { cursor:grab; } .stage.zoomed:active { cursor:grabbing; } .stage.cropping { cursor:crosshair; }
 .stage .loading { color:var(--mut); display:flex; flex-direction:column; align-items:center; gap:10px; } .stage .loading .blur { filter:blur(6px); max-height:60vh; }
 .nav { position:absolute; top:50%; transform:translateY(-50%); width:54px; height:90px; font-size:44px; border:0; background:rgba(0,0,0,.25); border-radius:10px; opacity:.4; }
@@ -223,3 +224,5 @@ button.link { background: none; border: 0; padding: 0; color: inherit; opacity: 
 .bodyp .bheight input[type=number] { width: 70px; }
 @media (max-width: 760px) { .withfacets, .withside.withfacets { grid-template-columns: 1fr; } .facetp { position: static; border-left: 0; } }
 body:has(.bulk) main { padding-right:360px; }   /* 1.9.6: el panel de selección no tapa la rejilla */
+
+.stage .phimg { width:100%; height:100%; object-fit:contain; }   /* 1.9.7: marcador instantáneo al pasar fotos */

@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { call } from "./api";
 import { act } from "./actions";
+import { removeLocal } from "./optimistic";
+import { toast } from "./ui";
 
 const T = {
   title: "Borrar de la librería",
@@ -28,14 +30,26 @@ export async function startDelete(hashes: string[], open: (plan: any) => void, a
   const r = await call("forget_plan", { hashes });
   const p = r?.plan;
   if (p && p.n > 0) open(p);
-  else await act("delete_all", { hashes }, after);
+  else await optimistic("delete_all", { hashes }, hashes, after);
+}
+
+// 1.9.7: desaparece al instante; se devuelve si el servidor falla. El paso lento (Papelera) va en segundo plano en el
+// servidor: forget_status avisa si algún archivo no se pudo enviar.
+async function optimistic(action: string, body: Record<string, any>, hashes: string[], after: () => void) {
+  const restore = removeLocal(hashes);
+  const r = await act(action, body, after);
+  if (!r || !r.ok) { restore(); return; }
+  if (r.pending && r.undo_forget) {
+    const s = await call("forget_status", { token: r.undo_forget, wait: 30 }).catch(() => null);
+    if (s && s.recycle_errors && s.recycle_errors.length) { toast(s.toast || s.message || "Error", "err"); after(); }
+  }
 }
 
 export default function DeleteDialog({ plan: p, hashes, close, after }: { plan: any; hashes: string[]; close: () => void; after: () => void }) {
   const [disk, setDisk] = useState(false);
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") close(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [close]);
   const files: string[] = p.disk_files || [];
-  const go = () => { close(); act("forget", { hashes, delete_files: disk }, after); };
+  const go = () => { close(); optimistic("forget", { hashes, delete_files: disk }, hashes, after); };
   return (
     <div className="dlgbg" onClick={close}>
       <div className={`dlg ${disk ? "disk" : ""}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>

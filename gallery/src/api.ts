@@ -101,6 +101,7 @@ async function flush() {
   }
 }
 export const forgetThumb = (h: string) => thumbCache.delete(h);
+export const thumbNow = (h: string) => thumbCache.get(h) || null;   // 1.9.7: miniatura ya en caché (síncrona)
 
 export async function mediaUrl(hash: string): Promise<{ url: string | null; rendering?: boolean }> {
   const r = await call("media_url", { hash });
