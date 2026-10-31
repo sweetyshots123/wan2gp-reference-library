@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.1
+- Virtual copies / clips are now shared actions (`reflib_core/virtactions.py`: virt_src, virt_create, virt_update, virt_status, plus the new virt_list); the Media Library and the Galería call the same code. The logic was moved out of plugin.py unchanged (outputs checked identical against the 1.12.0 code).
+- Galería viewer editor: I / O keys set the clip's in / out points, "✂ Crear recorte" (in/out + crop) and "⧉ Copia virtual" (whole item, no changes).
+- Galería side panel: a "Versiones" section lists the original's clips and virtual copies, to open or delete (same delete as the Media Library; the original is never touched). Virtual copies stay out of duplicates.
+
 ## 1.12.0
 - Caras y poses dentro de vídeos (rama videofaces f8d087d, ver «Video» en FACES_API.md y SIMILARITY_API.md), integrada con 1.11.1.
 - Galería: los vídeos en Buscar similares, Personas y la cuadrícula de sugerencias llevan distintivo 🎬/⏱; la miniatura es la de face_thumb en best_t; al abrir, el visor salta a best_t y muestra los segmentos como chips de tiempo pulsables. La barra de cálculo muestra el progreso de vídeos (videos_done / library_videos); ajustes de vídeo (index_videos, intervalo, máx. fotogramas) junto a los de caras.

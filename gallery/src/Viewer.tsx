@@ -125,6 +125,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       if ((e.target as HTMLElement).closest("input,textarea,select")) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
       const k = e.key;
       if (e.defaultPrevented) return;
+      // 1.12.1: en el editor de clip, I/O marcan entrada/salida (como en la Media Library)
+      if (ve && ve.kind !== "image" && (k === "i" || k === "I" || k === "o" || k === "O")) { e.preventDefault(); setIO(k.toLowerCase() === "i" ? "start" : "end"); return; }
       // con Vidosser en un vídeo, sus teclas mandan (l = bucle, e = vídeo anterior…): aquí solo flechas, F, Esc, h
       if (vid && media.current?.tagName === "VIDEO" && k.length === 1 && vidKeys().has(k.toLowerCase()) && k.toLowerCase() !== "f") return;
       if (k === "Escape") { ve ? setVe(null) : close(); }
@@ -232,14 +234,15 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
   const setIO = (k: "start" | "end") => { const v = media.current as HTMLVideoElement; if (v && ve) setVe({ ...ve, params: { ...ve.params, [k]: Math.round(v.currentTime * 100) / 100 } }); };
-  const saveVirtual = async () => {
+  const saveVirtual = async (full = false) => {
     if (!ve) return;
+    if (full) { const r = await act("virt_create", { hash: it.hash, name: ve.name }, onChanged); if (r?.ok) { setVe(null); window.dispatchEvent(new Event("gal:versions")); } return; }   // copia virtual entera
     const params: any = {};
     if (draft && draft[2] > 8 && draft[3] > 8 && ve.kind !== "audio") params.rect = draft;
     if (ve.kind !== "image") { if (ve.params.start != null) params.start = ve.params.start; if (ve.params.end != null) params.end = ve.params.end; }
     if (!Object.keys(params).length) { toast("Marca un recorte o un tramo de entrada/salida", "info"); return; }
     const r = await act(ve.isVirtual ? "virt_update" : "virt_create", { hash: it.hash, params, name: ve.name }, onChanged);
-    if (r?.ok) setVe(null);
+    if (r?.ok) { setVe(null); window.dispatchEvent(new Event("gal:versions")); }
   };
   // en un vídeo con tramo, reproducir en bucle dentro del tramo
   useEffect(() => {
@@ -327,12 +330,12 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
                   <div>
                     <h4>Tramo (clip)</h4>
                     <div className="io">
-                      <button onClick={() => setIO("start")}>[ Entrada aquí</button>
+                      <button title="Tecla I" onClick={() => setIO("start")}>[ Entrada aquí (I)</button>
                       <input type="number" step="0.1" min={0} value={ve.params.start ?? ""} placeholder="0"
                         onChange={(e) => setVe({ ...ve, params: { ...ve.params, start: e.target.value === "" ? undefined : +e.target.value } })} />
                     </div>
                     <div className="io">
-                      <button onClick={() => setIO("end")}>Salida aquí ]</button>
+                      <button title="Tecla O" onClick={() => setIO("end")}>Salida aquí (O) ]</button>
                       <input type="number" step="0.1" min={0} value={ve.params.end ?? ""} placeholder={ve.duration ? String(ve.duration) : "fin"}
                         onChange={(e) => setVe({ ...ve, params: { ...ve.params, end: e.target.value === "" ? undefined : +e.target.value } })} />
                     </div>
@@ -340,7 +343,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
                   </div>
                 )}
                 <div className="row">
-                  <button className="primary" onClick={saveVirtual}>{ve.isVirtual ? "Guardar cambios" : "Crear copia virtual"}</button>
+                  <button className="primary" title="Entrada/salida (teclas I / O) y encuadre" onClick={() => saveVirtual()}>{ve.isVirtual ? "Guardar cambios" : "✂ Crear recorte"}</button>
+                  {!ve.isVirtual && <button title="Copia virtual del elemento entero (sin cambios)" onClick={() => saveVirtual(true)}>⧉ Copia virtual</button>}
                   <button onClick={() => setVe(null)}>Cancelar</button>
                 </div>
               </div>

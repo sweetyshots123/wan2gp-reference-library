@@ -6,6 +6,7 @@ import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { act } from "./actions";
 import { AutoTags, startAutotag } from "./AutoTag";
 import { SimilarButtons, startSimIndex } from "./Similar";
+import { fmtT, openAt } from "./videoT";
 
 interface Props {
   items: Item[];                 // los elementos a editar (1 = ficha, N = edición en bloque)
@@ -145,6 +146,8 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
         </form>
       </section>
 
+      {one && <Versions one={one} onChanged={onChanged} />}
+
       <section className="actions">
         <h4>Acciones</h4>
         {one && onVirtual && one.kind !== "mask" && (
@@ -194,6 +197,41 @@ function OriginControl({ hashes, onChanged }: { hashes: string[]; onChanged: () 
         <button className={v === "real" ? "on" : ""} onClick={() => set("real")} title="Marcar como real">Real</button>
         <button className={v === "auto" ? "on" : ""} onClick={() => set("auto")} title="Automático: carpeta marcada, carpeta de salidas de WanGP o metadatos de generación">Auto</button>
       </div>
+    </section>
+  );
+}
+
+/** 1.12.1: clips / copias virtuales del original (acción compartida virt_list); abrir o borrar (mismo borrado que la Media Library). */
+function Versions({ one, onChanged }: { one: Item; onChanged: () => void }) {
+  const [v, setV] = useState<{ orig: string; copies: any[] } | null>(null);
+  const [tick, setTick] = useState(0);
+  const want = (one.kind || "image") !== "mask";
+  useEffect(() => { const f = () => setTick((x) => x + 1); window.addEventListener("gal:versions", f); return () => window.removeEventListener("gal:versions", f); }, []);
+  useEffect(() => {
+    if (!want) { setV(null); return; }
+    let live = true;
+    call("virt_list", { hash: one.hash }).then((r: any) => { if (live && r?.ok) setV({ orig: r.orig, copies: r.copies || [] }); }).catch(() => {});
+    return () => { live = false; };
+  }, [one.hash, want, one.vcopies, tick]);
+  if (!want || !v || (!v.copies.length && !one.virtual)) return null;
+  const open = (h: string, name: string, kind: string, t?: number | null) => openAt({ hash: h, name, kind: (kind || "video") as any }, t);
+  const del = async (h: string) => { const r = await act("delete", { hashes: [h] }, onChanged); if (r?.ok) setTick((x) => x + 1); };
+  return (
+    <section className="versions">
+      <h4>Versiones</h4>
+      <ul>
+        {one.virtual && <li><button className="link" onClick={() => open(v.orig, "", one.kind || "video")}>↩ Original</button></li>}
+        {v.copies.map((c) => (
+          <li key={c.hash} className={c.hash === one.hash ? "cur" : ""}>
+            <button className="link" title="Abrir" onClick={() => open(c.hash, c.name, c.kind, c.params?.start)}>
+              {c.kind === "image" ? "🖼" : "✂"} {c.name}
+              <span className="muted"> {c.params?.end != null ? `${fmtT(c.params.start || 0)}–${fmtT(c.params.end)}` : ""}{c.params?.rect ? ` ${c.params.rect[2]}×${c.params.rect[3]}` : ""}{c.broken ? " · sin original" : ""}</span>
+            </button>
+            <button className="x" title="Borrar esta copia (el original no se toca)" onClick={() => del(c.hash)}>×</button>
+          </li>
+        ))}
+        {!v.copies.length && <li className="muted">Sin copias</li>}
+      </ul>
     </section>
   );
 }

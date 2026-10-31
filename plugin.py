@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.0"
+PLUGIN_VERSION = "1.12.1"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3621,63 +3621,6 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         out.update({k: v for k, v in self._ilib_payload(lang).items() if k not in ("ok",)})
         return out
 
-    def _virtual(self, action, req, lang):
-        from .reflib_core import virtuals as _vc
-        h = str(req.get("hash") or "")
-        ent = imagelib.entry_for(h) or {}
-        try:
-            if action == "virt_src":   # what the editor needs: the ORIGINAL's file + facts, and the copy's params
-                c = _vc.by_hash(h) if ent.get("virtual") else None
-                if ent.get("virtual") and not c:
-                    return self._err(lang, "err_image_missing")
-                if c:
-                    src = _vc.source_path(c)
-                    if not src:
-                        return {"ok": False, "broken": True, "error": tr(lang, "virt_broken")}
-                    kind, name, params, ohash = c["kind"], c["name"], c.get("params") or {}, (c.get("orig") or {}).get("hash")
-                else:
-                    src = next((q for q in [ent.get("path")] + list(ent.get("files") or []) if q and os.path.isfile(q)), None) if ent else None
-                    if not src:
-                        return self._err(lang, "err_image_missing")
-                    kind, name, params, ohash = ("video" if ent.get("kind") == "mask" else ent.get("kind") or "image"), ent.get("name") or os.path.basename(src), {}, h   # 1.7.0 a mask is a video
-                facts = _vc.original_facts(src, kind)
-                if c and _vc.refresh_facts(c["id"], facts):   # 1.6.7: heal a duration stored as 0 by 1.6.6
-                    imagelib.invalidate()
-                return {"ok": True, "kind": kind, "name": os.path.splitext(name)[0] if not c else name, "path": os.path.abspath(src),
-                        "url": _serve_url(src), "params": params, "virtual": bool(c), "orig_hash": ohash, **facts}
-            if action == "virt_create":
-                c = _vc.create(h, req.get("params") if isinstance(req.get("params"), dict) else None, name=req.get("name"), lang=lang)
-                imagelib.invalidate()
-                out = self._ok(lang, "virt_created", name=c["name"])
-                out.update(hash=c["hash"], copy=_vc.describe(c), reload=True, quiet=True)
-                return out
-            if action == "virt_update":
-                c = _vc.by_hash(h)
-                if not c:
-                    return self._err(lang, "err_image_missing")
-                c = _vc.update(c["id"], req.get("params") if isinstance(req.get("params"), dict) else None, name=req.get("name"))
-                imagelib.invalidate()
-                out = self._ok(lang, "virt_updated", name=c["name"])
-                out.update(hash=c["hash"], copy=_vc.describe(c), reload=True, quiet=True)
-                return out
-            if action == "virt_status":
-                c = _vc.by_hash(h)
-                if not c:
-                    return {"ok": True, "state": "gone"}
-                st = _vc.render_async(c["id"])
-                out = {"ok": True, "state": st.get("state"), "error": st.get("error")}
-                if st.get("state") == "ready":
-                    out["url"] = _serve_url(st["path"])
-                return out
-        except _vc.VirtualError as e:
-            msg = str(e)
-            if msg in ("original missing",):
-                return {"ok": False, "broken": True, "error": tr(lang, "virt_broken")}
-            if msg == "original not in the library":
-                return {"ok": False, "error": tr(lang, "virt_no_orig")}
-            return {"ok": False, "error": tr(lang, "virt_bad", e=msg)}
-        return self._err(lang, "bad_request")
-
     def _actx(self, lang, request=None):
         """Context for shared actions: this plugin's texts, meta payload and undo store."""
         return _actions.Ctx(lang, ok=self._ok, err=self._err, payload=self._ilib_payload, state=self._delete_undo, request=request, exc=storage_error_text)
@@ -3853,8 +3796,6 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     except Exception as e:
                         print(f"[Reference Library] to video library failed: {e}")
                 out = {"ok": bool(n_add or n_dup), "added": n_add, "dup": n_dup, "message": tr(lang, "vlib_added", n=n_add, k=n_dup)}
-            elif action and action.startswith("virt_"):   # 1.6.6 virtual copies
-                out = self._virtual(action, req, lang)
             elif action == "preview":
                 p = imagelib.preview(str(req.get("hash") or ""))
                 out = {"ok": bool(p), "image": p} if p else self._err(lang, "err_image_missing")
