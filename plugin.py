@@ -876,6 +876,11 @@ def build_js(settings=None):
     settings = settings or load_settings()
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
+    try:   # 1.9.6: selection rules shared with the Galería (one source file)
+        with open(os.path.join(_PLUGIN_DIR, "selection_rules.js"), "r", encoding="utf-8") as reader:
+            script = reader.read() + "\n" + script
+    except OSError:
+        pass
     for extra in ("reflib_similarity.js",):   # 1.8.4: explorer extension modules (window.referenceLibrary.extend)
         try:
             with open(os.path.join(_PLUGIN_DIR, extra), "r", encoding="utf-8") as reader:

@@ -1,14 +1,22 @@
-// 1.9.6: selección compartida por TODAS las rejillas de la Galería (explorar, carpetas, colecciones, similares…),
-// con la misma semántica que la Media Library (reference_library.js):
-//  · círculo ✓: alterna sin abrir el visor; con Mayús selecciona el rango desde el ancla (aditivo)
-//  · Ctrl/Cmd+clic: alterna y fija el ancla · Mayús+clic: rango desde el ancla (Ctrl+Mayús = añade)
-//  · Ctrl+A: todas las que coinciden con el filtro (acción compartida "range", no solo las cargadas)
-//  · Esc: la 1.ª vez limpia la selección
+// 1.9.6: selección compartida por TODAS las rejillas de la Galería. Las reglas (clic, Ctrl, Mayús+ancla, círculo,
+// Esc, Ctrl+A) son el MISMO archivo que usa la Media Library: ../../selection_rules.js (aquí solo se aplican).
 import { useRef } from "react";
+import "../../selection_rules.js";
 import { call } from "./api";
 
+type Op = { op: string; from?: number; to?: number; additive?: boolean; anchor?: number; preview?: boolean };
+type RSApi = {
+  cardClick: (anchor: number, idx: number, isSelected: boolean, ev: { shift: boolean; ctrl: boolean }) => Op;
+  boxClick: (anchor: number, idx: number, ev: { shift: boolean }) => Op;
+  rangeBounds: (a: number, b: number, max?: number) => [number, number];
+  key: (ev: { ctrl?: boolean; key: string }, has: boolean) => Op | null;
+};
+export const RS: RSApi = (globalThis as any).ReflibSelection;
+
+type Mods = { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean };
 export type SelApi = {
-  click: (hash: string, idx: number, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }, viaBox: boolean) => boolean;
+  click: (hash: string, idx: number, e: Mods, viaBox: boolean) => boolean;
+  key: (e: KeyboardEvent) => boolean;
   selectAll: () => Promise<void>;
   clear: () => void;
 };
@@ -17,29 +25,40 @@ export function useSelection(sel: Set<string>, setSel: (s: Set<string>) => void,
                              hashAt: (i: number) => string | undefined): SelApi {
   const anchor = useRef(-1);
   const cur = useRef(sel); cur.current = sel;
-  const range = async (a: number, b: number, additive: boolean) => {
-    const lo = Math.min(a, b), hi = Math.max(a, b), got: string[] = [];
-    let missing = false;
-    for (let k = lo; k <= hi; k++) { const h = hashAt(k); if (h) got.push(h); else { missing = true; break; } }
-    let hs = got;
-    if (missing) { const r = await call("range", { f: filter, start: lo, end: hi }); hs = r.ok ? r.hashes : got; }
+  const range = async (from: number, to: number, additive: boolean) => {
+    const [lo, hi] = RS.rangeBounds(from, to);
+    let hs: string[] = [];
+    for (let k = lo; k <= hi; k++) { const h = hashAt(k); if (!h) { hs = []; break; } hs.push(h); }
+    if (!hs.length) { const r = await call("range", { f: filter, start: lo, end: hi }); if (!r.ok) return; hs = r.hashes; }
     const n = additive ? new Set(cur.current) : new Set<string>();
     hs.forEach((h) => n.add(h)); setSel(n);
   };
-  const toggle = (h: string) => { const n = new Set(cur.current); n.has(h) ? n.delete(h) : n.add(h); setSel(n); };
-  // devuelve true si el clic se consumió como selección (si no, el llamador abre el visor)
+  const run = (r: Op, h: string) => {
+    if (r.anchor !== undefined) anchor.current = r.anchor;
+    if (r.op === "range") { range(r.from!, r.to!, !!r.additive); return true; }
+    if (r.op === "toggle") { const n = new Set(cur.current); n.has(h) ? n.delete(h) : n.add(h); setSel(n); return true; }
+    return false;
+  };
+  // true = consumido como selección; false = el llamador abre el visor (la "vista previa" de la Media Library)
   const click: SelApi["click"] = (h, idx, e, viaBox) => {
     const ctrl = e.ctrlKey || e.metaKey;
-    if (e.shiftKey && anchor.current >= 0 && anchor.current !== idx) { range(anchor.current, idx, viaBox || ctrl); return true; }
-    if (viaBox || ctrl) { toggle(h); anchor.current = idx; return true; }
-    anchor.current = idx;
-    if (cur.current.size > 0) { toggle(h); return true; }   // con selección activa, un clic alterna (como el modo selección)
-    return false;
+    if (viaBox) return run(RS.boxClick(anchor.current, idx, { shift: e.shiftKey }), h) || true;
+    const r = RS.cardClick(anchor.current, idx, cur.current.has(h), { shift: e.shiftKey, ctrl });
+    if (run(r, h)) return true;
+    if (r.op === "single" && cur.current.size > 0) { setSel(new Set([h])); return true; }   // como en la ML: reemplaza la selección
+    return false;   // sin selección, o clic en una ya seleccionada ("keep"): vista previa = visor
   };
   const selectAll = async () => {
     if (!total) return;
     const r = await call("range", { f: filter, start: 0, end: total - 1 });
     if (r.ok) setSel(new Set(r.hashes));
   };
-  return { click, selectAll, clear: () => { anchor.current = -1; setSel(new Set()); } };
+  const clear = () => { anchor.current = -1; setSel(new Set()); };
+  const key = (e: KeyboardEvent) => {
+    const r = RS.key({ ctrl: e.ctrlKey || e.metaKey, key: e.key }, cur.current.size > 0);
+    if (!r) return false;
+    if (r.op === "all") selectAll(); else if (r.op === "clear") clear();
+    return true;
+  };
+  return { click, key, selectAll, clear };
 }

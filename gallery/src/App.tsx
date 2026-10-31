@@ -185,8 +185,8 @@ export default function App() {
     const k = (e: KeyboardEvent) => {
       if (open || (e.target as HTMLElement).closest("input,textarea,select")) return;
       if (e.key === "s") setSelMode((m) => !m);
-      else if (e.key === "Escape") { selApi.current.clear(); setSelMode(false); }
-      else if ((e.key === "a" || e.key === "A") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setSelMode(true); selApi.current.selectAll(); }
+      else if (selApi.current.key(e)) { e.preventDefault(); if (e.key === "Escape") setSelMode(false); }
+      else if (e.key === "Escape") setSelMode(false);
       else if (e.key === "/") { e.preventDefault(); document.getElementById("q")?.focus(); }
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
@@ -303,7 +303,7 @@ export default function App() {
             <Grid total={total} sections={sections} size={size} version={ver} getItem={(i) => store.current.get(i)} ensure={ensure}
               renderTile={(it, i) => it ? (
                 <Tile it={it} sel={sel.has(it.hash)} selMode={selMode || sel.size > 0}
-                  onOpen={(e) => { if (selection.click(it.hash, i, e, false)) return; if (selMode) toggleSel(it.hash); else setViewer(i); }}
+                  onOpen={(e) => { if (selection.click(it.hash, i, e, false)) return; if (selMode && sel.size === 0) toggleSel(it.hash); else setViewer(i); }}
                   onSel={(e) => { setSelMode(true); selection.click(it.hash, i, e, true); }}
                   onFav={() => act("tag", { hashes: [it.hash], ...(it.tags.some((t) => t.toLowerCase() === FAV) ? { remove: [FAV] } : { add: [FAV] }) }, refresh, { quiet: true })} />
               ) : <div className="tile"><div className="ph" /></div>} />

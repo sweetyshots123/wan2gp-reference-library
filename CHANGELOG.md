@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.9.6
-- Galería selection now works like the Media Library's in every grid (Explorar, Carpetas/carpeta, colecciones, etiquetas, personas, similares, vídeos), via one shared hook (`gallery/src/Selection.ts`): the ✓ circle toggles without opening the viewer (Shift = range from the anchor); Ctrl/Cmd+click toggles; Shift+click selects a range (Ctrl+Shift adds); while a selection exists, a plain click toggles; Esc clears; Ctrl+A / "Todas (N)" selects every matching item through the shared `range` action, not just the loaded ones.
+- Galería selection now works like the Media Library's in every grid (Explorar, Carpetas/carpeta, colecciones, etiquetas, personas, similares, vídeos), via the same rules file as the Media Library: `selection_rules.js` (pure functions cardClick / boxClick / rangeBounds / key / apply). plugin.py prepends it to reference_library.js, which now calls it (no behaviour change there), and the Galería imports the same file (`gallery/src/Selection.ts`). Unit and parity test: `node tests/test_selection_rules.mjs`. Rules: the ✓ circle toggles without opening the viewer (Shift = range from the anchor); Ctrl/Cmd+click toggles; Shift+click selects a range (Ctrl+Shift adds); a plain click works as in the Media Library (with a selection it selects just that card; with none, or on an already-selected card, it opens the viewer, which is the Galería's preview); Esc clears; Ctrl+A / "Todas (N)" selects every matching item through the shared `range` action, not just the loaded ones.
 - Fix: in Carpetas the file-name caption covered the ✓ circle, so nothing could be selected. The bulk panel (edit, collections, delete, autotag, poses) now opens from any view, and the grid leaves room for it.
 
 ## 1.9.5

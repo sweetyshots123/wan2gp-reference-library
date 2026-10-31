@@ -4,6 +4,7 @@
     const VERSION = "__REFLIB_VERSION__";
     let cfg = __REFLIB_SETTINGS__;
     const log = (...a) => console.log("[Reference Library]", ...a);
+    const RS = window.ReflibSelection;   // 1.9.6: selection_rules.js, shared with the Galería
     const I18N = {
         en: {
             error: "Error: {e}",
@@ -2461,10 +2462,11 @@
         if (el.matches(".reflib-ib-cb input")) {
             const card = el.closest(".reflib-ib-card");
             const h = card.dataset.hash, idx = +card.dataset.idx;
-            if (ilib.cbShift && ilib.anchorIdx >= 0 && ilib.anchorIdx !== idx) { selectRange(ilib.anchorIdx, idx, true); }
+            const r = RS.boxClick(ilib.anchorIdx, idx, { shift: ilib.cbShift });   // 1.9.6: shared rules (selection_rules.js)
+            if (r.op === "range") selectRange(r.from, r.to, r.additive);
             else { if (el.checked) ilib.sel.add(h); else ilib.sel.delete(h); selChanged(); }
             ilib.cbShift = false;
-            ilib.anchorIdx = idx;
+            ilib.anchorIdx = r.anchor;
         } else if (el.matches(".reflib-ib-target")) {
             ilib.addTarget = el.value;
             const nn = ilib.root.querySelector(".reflib-ib-newname");
@@ -3075,10 +3077,11 @@
             if (ilib.justDragged) { ilib.justDragged = false; return; }
             const hh = el.dataset.hash, idx = +el.dataset.idx;
             if (!hh) return;
-            if (e.shiftKey && ilib.anchorIdx >= 0) { selectRange(ilib.anchorIdx, idx, e.ctrlKey || e.metaKey); return; }
-            if (e.ctrlKey || e.metaKey) { ilib.sel.has(hh) ? ilib.sel.delete(hh) : ilib.sel.add(hh); ilib.anchorIdx = idx; selChanged(); return; }
-            ilib.anchorIdx = idx;
-            if (!ilib.sel.has(hh)) { ilib.sel.clear(); ilib.sel.add(hh); selChanged(); }   // 1.5.3: a click on an already-selected card keeps the selection (preview + anchor only)
+            const r = RS.cardClick(ilib.anchorIdx, idx, ilib.sel.has(hh), { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });   // 1.9.6: shared rules
+            if (r.op === "range") { selectRange(r.from, r.to, r.additive); return; }
+            if (r.op === "toggle") { ilib.sel.has(hh) ? ilib.sel.delete(hh) : ilib.sel.add(hh); ilib.anchorIdx = r.anchor; selChanged(); return; }
+            ilib.anchorIdx = r.anchor;
+            if (r.op === "single") { ilib.sel.clear(); ilib.sel.add(hh); selChanged(); }   // 1.5.3: a click on an already-selected card keeps the selection (preview + anchor only)
             showPreview(hh, idx);
             return;
         }
@@ -3199,7 +3202,7 @@
     }
     function onKey(e) {
         if (!ilib.open) return;
-        if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A") && !inField(document.activeElement)) {
+        if (!inField(document.activeElement) && (RS.key({ ctrl: e.ctrlKey || e.metaKey, key: e.key }, false) || {}).op === "all") {
             e.preventDefault(); e.stopPropagation();
             selectAllMatching();   // 1.4.4: every matching image, not only the loaded ones
             return;
@@ -3219,7 +3222,7 @@
         if (ilib.addOpen) { ilib.addOpen = false; renderFooter(); return; }
         if (ilib.picker) { ilib.picker = null; renderPicker(); return; }
         if (ilib.faddOpen) { ilib.faddOpen = false; render(); return; }
-        if (ilib.sel.size) { ilib.sel.clear(); selChanged(); return; }   // 1st Esc clears, 2nd closes
+        if ((RS.key({ key: "Escape" }, ilib.sel.size > 0) || {}).op === "clear") { ilib.sel.clear(); selChanged(); return; }   // 1st Esc clears, 2nd closes
         if (ilib.pick && ilib.pick.mode === "assign") { mkAssignEnd(); return; }   // 1.7.0: Esc cancels the assignment only
         closeBrowser();
     }
@@ -3239,7 +3242,7 @@
     }
     function selectRange(fromIdx, toIdx, additive) {
         if (!additive) ilib.sel.clear();
-        const a = Math.min(fromIdx, toIdx), b = Math.max(fromIdx, toIdx), idxs = [];
+        const [a, b] = RS.rangeBounds(fromIdx, toIdx), idxs = [];
         for (let k = a; k <= b; k++) idxs.push(k);
         addIndices(idxs, selChanged);
         selChanged();
