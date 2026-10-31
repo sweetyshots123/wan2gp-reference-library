@@ -22,7 +22,7 @@ sort key works on the result set.
 
 ## Storage
 `data/similarity/` – `pose.npz`, `face-<model>.npz` (per-vector model id), `meta.json`, `worker.log`.
-Settings: `similarity/settings.json` (`models_dir`, `python`, `workers` 0=auto decode threads), env `REFLIB_SIM_PYTHON`.
+Settings: `similarity/settings.json` (`models_dir`, `python`, `workers` 0=auto decode threads (2–4), 1=sequential), env `REFLIB_SIM_PYTHON`.
 
 
 

@@ -19,7 +19,7 @@
               fm: "Face model", fm_done: "{n} of {l} images", fm_dl: "not downloaded · {mb} MB, downloads on first use", faces_build: "Compute faces ({m})",
               fm_lic: "Licence: {l}", fm_fb: "{m} could not load, using SFace instead ({e})", dlp: "Downloading {m}: {d} / {t} MB ({p}%)",
               fm_switch: "Each model keeps its own face index: switching back is instant once computed.",
-              workers: "Decode workers", workers_auto: "Auto (CPU)", workers_tip: "Parallel image decode / resize while the GPU runs. 0 = auto from CPU count. Takes effect on the next indexing batch." },
+              workers: "Decode workers", workers_auto: "Auto (CPU)", workers_tip: "Parallel image decode / resize while the GPU runs. 0 = auto (2–4). 1 = sequential (best when images are local/fast). Takes effect on the next indexing batch." },
         es: { find: "Buscar similares", find_tip: "Busca imágenes con una pose y/o cara parecida", find_sel: "Buscar similares ({n})", title: "Buscar imágenes similares",
               q_n: "{n} imágenes de consulta", drop: "Suelta fotos aquí o haz clic para añadir (no se guardan en la biblioteca)", mode: "Comparar", m_pose: "Pose", m_face: "Cara", m_both: "Ambas",
               w: "Peso de la pose", thr: "Similitud mínima", agg: "Varias imágenes de consulta", a_any: "Parecidas a cualquiera", a_avg: "Parecidas a todas (media)",
@@ -32,7 +32,7 @@
               fm: "Modelo de caras", fm_done: "{n} de {l} imágenes", fm_dl: "sin descargar · {mb} MB, se descarga al usarlo", faces_build: "Calcular caras ({m})",
               fm_lic: "Licencia: {l}", fm_fb: "{m} no se pudo cargar, se usa SFace ({e})", dlp: "Descargando {m}: {d} / {t} MB ({p}%)",
               fm_switch: "Cada modelo guarda su propio índice de caras: volver a uno ya calculado es instantáneo.",
-              workers: "Workers de decodificación", workers_auto: "Auto (CPU)", workers_tip: "Decodifica / redimensiona imágenes en paralelo mientras la GPU calcula. 0 = automático según la CPU. Se aplica en el siguiente lote de indexación." },
+              workers: "Workers de decodificación", workers_auto: "Auto (CPU)", workers_tip: "Decodifica / redimensiona imágenes en paralelo mientras la GPU calcula. 0 = auto (2–4). 1 = secuencial (mejor si las imágenes son locales/rápidas). Se aplica en el siguiente lote de indexación." },
     };
     const lang = () => (RL.lang && RL.lang() === "es" ? "es" : "en");
     const st = (k, p = {}) => String((S[lang()] || S.en)[k] ?? S.en[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p[n] ?? m));

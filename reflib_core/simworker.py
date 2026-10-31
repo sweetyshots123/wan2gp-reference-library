@@ -23,14 +23,6 @@ import numpy as np
 
 ARC_SRC = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], np.float32)
 
-# Cap OpenCV's internal threads so they do not fight the decode pool / ORT.
-try:
-    import cv2 as _cv2_boot
-    _cv2_boot.setNumThreads(1)
-except Exception:
-    pass
-
-
 def imread(path, max_side=1600):
     import cv2
     data = np.fromfile(path, dtype=np.uint8)   # unicode-safe on Windows
@@ -252,7 +244,16 @@ class Worker:
 
     def _ensure_pool(self):
         if self._pool is None:
-            self._pool = ThreadPoolExecutor(max_workers=_decode_workers(self.cfg), thread_name_prefix="simdec")
+            nw = _decode_workers(self.cfg)
+            # Only cap OpenCV when the decode pool is actually parallel; otherwise YuNet /
+            # warpAffine benefit from OpenCV's own threads on a quiet GPU box.
+            if nw > 1:
+                try:
+                    import cv2
+                    cv2.setNumThreads(1)
+                except Exception:
+                    pass
+            self._pool = ThreadPoolExecutor(max_workers=nw, thread_name_prefix="simdec")
 
     def load(self, pose, face):
         gpu = self.cfg.get("gpu", True)
@@ -286,15 +287,38 @@ class Worker:
         return r
 
     def analyse_many(self, paths, pose=True, face=True):
-        """Decode with a prefetch pool, then run models in order (sessions stay on this thread)."""
+        """Decode with a small prefetch window, then run models in order (sessions stay on this thread).
+
+        Submitting the whole batch at once fights ORT for CPU/RAM when decode is cheap (local SSD)
+        and under live WanGP contention; a window of size=workers keeps 1..N images decoding ahead.
+        """
         if not paths:
             return []
+        if len(paths) == 1:
+            try:
+                return [self.analyse(paths[0], pose, face)]
+            except Exception as e:
+                return [{"ok": False, "error": str(e)[:200]}]
+        nw = _decode_workers(self.cfg)
+        # workers=1 → sequential (no pool); useful when decode is free / GPU saturated.
+        if nw <= 1:
+            out = []
+            for p in paths:
+                try:
+                    out.append(self.analyse(p, pose, face))
+                except Exception as e:
+                    out.append({"ok": False, "error": str(e)[:200]})
+            return out
         self._ensure_pool()
-        # Submit all decodes up front so later images decode while earlier ones run on GPU/CPU.
-        futs = [self._pool.submit(_imread_safe, p) for p in paths]
-        res = []
-        for fut in futs:
-            path, img, s, err = fut.result()
+        window = max(2, nw)   # keep about one decode-ahead per worker
+        res, i, n = [], 0, len(paths)
+        pending = []   # [(path, Future)]
+        while i < n or pending:
+            while len(pending) < window and i < n:
+                p = paths[i]; i += 1
+                pending.append((p, self._pool.submit(_imread_safe, p)))
+            path, fut = pending.pop(0)
+            _p, img, s, err = fut.result()
             if err is not None or img is None:
                 res.append({"ok": False, "error": err or "cannot decode"})
                 continue
