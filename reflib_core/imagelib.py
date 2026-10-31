@@ -1724,7 +1724,26 @@ def _clean_filter(f) -> Dict[str, Any]:
             "sub": f.get("sub", True) is not False, "recent": bool(f.get("recent")) and not f.get("used"), "used": bool(f.get("used")),
             "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1))),
             "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS + ("mask",) else "",
-            "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing"))}
+            "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing")),
+            "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else ""}
+
+
+SORTS = ("date_desc", "date_asc", "name_asc", "name_desc")   # 1.7.4 explorer sort; "" = the view's own order
+
+
+def _sorted(cat, out, how):
+    """1.7.4: sort a filtered list. Date = the item's modification / added time (newest first by default); name = the
+    file name, case- and accent-insensitive, natural. The name rank is computed once per catalog (cheap at 11k+)."""
+    if not how or len(out) < 2:
+        return out
+    if how.startswith("date"):
+        return sorted(out, key=lambda i: (i["added"] or 0, i["hash"]), reverse=(how == "date_desc"))
+    rank = cat.get("_name_rank")
+    if rank is None:
+        def nk(i):
+            return [(0, int(t), "") if t.isdigit() else (1, 0, t) for t in re.split(r"(\d+)", _fold(i["name"])) if t] + [(2, 0, i["hash"])]
+        rank = cat["_name_rank"] = {i["hash"]: n for n, i in enumerate(sorted(cat["items"], key=nk))}
+    return sorted(out, key=lambda i: rank.get(i["hash"], 0), reverse=(how == "name_desc"))
 
 
 def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
@@ -1837,6 +1856,7 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     if f["used"]:   # 1.5.5 "Usadas como referencia": newest use first
         um = _ru.load()
         out = sorted((i for i in out if i["hash"] in um), key=lambda i: -um[i["hash"]].get("last", 0))
+    out = _sorted(cat, out, f["sort"])
     res = {"items": out, "recent_more": more, "recent": f["recent"], "used": f["used"]}
     with _cat_lock:
         _cat.update(fkey=fkey, flist=res, lru=([(fkey, res)] + [x for x in (_cat.get("lru") or []) if x[0] != fkey and x[0][0] == fkey[0]])[:6])

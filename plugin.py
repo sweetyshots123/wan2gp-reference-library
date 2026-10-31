@@ -78,7 +78,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.7.3"
+PLUGIN_VERSION = "1.7.4"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -310,6 +310,10 @@ TEXT = {
         "sec_img_crops": "### Image crops",
         "browser_fullscreen": "Always open the media browser full screen",
         "browser_fullscreen_info": "The media browser opens filling the whole screen (the ⛶ button in its header still switches for the current session).",
+        "browser_sort": "Default sort order in the media browser",
+        "browser_sort_info": "How the explorer orders what it shows (any folder, collection, filter or search). The sort menu in its header changes it for the current session.",
+        "bs_date_desc": "Date modified: newest first", "bs_date_asc": "Date modified: oldest first",
+        "bs_name_asc": "File name: A–Z", "bs_name_desc": "File name: Z–A",
         "index_paused": "Pause folder indexing",
         "index_paused_info": "Watched folders stop being indexed in the background until you turn this off (also from the media browser).",
         "indexing_paused": "Indexing paused",
@@ -568,6 +572,10 @@ TEXT = {
         "sec_img_crops": "### Recortes de imágenes",
         "browser_fullscreen": "Abrir siempre a pantalla completa",
         "browser_fullscreen_info": "El explorador de medios se abre ocupando toda la pantalla (el botón ⛶ de su cabecera sigue cambiándolo solo para esa vez).",
+        "browser_sort": "Orden por defecto en el explorador de medios",
+        "browser_sort_info": "Cómo ordena el explorador lo que muestra (cualquier carpeta, colección, filtro o búsqueda). El menú de orden de su cabecera lo cambia solo para la sesión actual.",
+        "bs_date_desc": "Fecha de modificación: más recientes primero", "bs_date_asc": "Fecha de modificación: más antiguos primero",
+        "bs_name_asc": "Nombre de archivo: A–Z", "bs_name_desc": "Nombre de archivo: Z–A",
         "index_paused": "Pausar la indexación de carpetas",
         "index_paused_info": "Las carpetas vigiladas dejan de indexarse en segundo plano hasta que lo desactives (también desde el explorador de medios).",
         "indexing_paused": "Indexación en pausa",
@@ -676,6 +684,10 @@ def crop_save_images_choices(lang):
     return [(tr(lang, "cs_img_auto"), "auto"), (tr(lang, "cs_ask"), "ask"), (tr(lang, "cs_off"), "off")]
 
 
+def browser_sort_choices(lang):
+    return [(tr(lang, "bs_" + k), k) for k in ("date_desc", "date_asc", "name_asc", "name_desc")]
+
+
 def replace_choices(lang):
     return [(tr(lang, "mode_replace"), "replace"), (tr(lang, "mode_append"), "append")]
 
@@ -695,9 +707,10 @@ DEFAULT_SETTINGS = {
     "browser_fullscreen": False,  # 1.5.5: always open the image browser full screen (also kept in localStorage)
     "browser_details": False,     # 1.5.9: right details panel in the image browser (off: a click only selects)
     "browser_thumb": "m",         # 1.5.9: thumbnail size l / m / s
+    "browser_sort": "date_desc",  # 1.7.4: default explorer sort (date_desc | date_asc | name_asc | name_desc)
     "mask_autosave": True,        # 1.7.0: masks made in Video Mask (and generations with a mask) go to the mask library
 }
-_CHOICES = {"browser_thumb": ("l", "m", "s"), "replace_mode": ("replace", "append"), "language": ("auto",) + LANGS,
+_CHOICES = {"browser_sort": ("date_desc", "date_asc", "name_asc", "name_desc"), "browser_thumb": ("l", "m", "s"), "replace_mode": ("replace", "append"), "language": ("auto",) + LANGS,
             "on_apply_prompts": ("offer", "apply_first", "off"), "crop_save": ("auto", "ask", "off"),
             "crop_save_images": ("auto", "ask", "off")}
 _CHANGE_REASONS = {"saved_col": "create", "created_empty": "create", "imported": "create", "renamed_col": "rename",
@@ -2339,7 +2352,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         "sec_messages", "toasts", "toast_s", "sec_prompts", "on_apply_prompts", "save", "sec_manager",
         "mgr_dd", "mgr_refresh", "mgr_name", "mgr_new", "mgr_rename", "mgr_dup", "mgr_delete", "mgr_apply",
         "mgr_prompts_title", "mgr_prompts_save", "mgr_gallery", "mgr_gallery_title", "mgr_add", "mgr_remove", "mgr_left", "mgr_right", "mgr_cover", "mgr_export", "mgr_import",
-        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "browser_fullscreen", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
+        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "browser_fullscreen", "browser_sort", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
         "vmgr_import", "vmgr_left", "vmgr_right", "vmgr_download", "vmgr_export",
     )
 
@@ -2391,6 +2404,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                                  "choices": crop_save_images_choices(lang)},
             "index_paused": {"label": t("index_paused"), "info": t("index_paused_info")},
             "browser_fullscreen": {"label": t("browser_fullscreen"), "info": t("browser_fullscreen_info")},
+            "browser_sort": {"label": t("browser_sort"), "info": t("browser_sort_info"), "choices": browser_sort_choices(lang)},
             "vsec": {"value": t("vsec")},
             "vmgr_title": {"value": _panel_title_html(tr(lang, "vmgr_title", n=len(videostore.list_videos())), t("vmgr_title_tip"))},
             "vmgr_name": {"label": t("vmgr_name"), "placeholder": t("vmgr_name_ph")},
@@ -2439,6 +2453,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                                                      **tx["crop_save_images"])
                 ui["index_paused"] = gr.Checkbox(value=current("index_paused"), elem_id="reflib_index_paused", **tx["index_paused"])
                 ui["browser_fullscreen"] = gr.Checkbox(value=current("browser_fullscreen"), elem_id="reflib_browser_fullscreen", **tx["browser_fullscreen"])
+                ui["browser_sort"] = gr.Dropdown(value=current("browser_sort"), elem_id="reflib_browser_sort", **tx["browser_sort"])
             with gr.Group():
                 ui["sec_messages"] = gr.Markdown(tx["sec_messages"]["value"])
                 with gr.Row():
@@ -2666,9 +2681,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         ui["save"].click(
             fn=self._save_from_ui,
             inputs=[ui["replace_mode"], ui["auto_apply"], ui["show_edit"], ui["toasts"], ui["toast_s"], ui["language"],
-                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"]],
+                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"], ui["browser_sort"]],
             outputs=[status, settings_json] + tab_outputs + bar_outputs + prompt_outputs, show_progress="hidden",
-            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma]",
+            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma,bs) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma, bs]",
         ).then(fn=None, inputs=[settings_json], outputs=None,
                js="(s) => { if (window.referenceLibrary) window.referenceLibrary.applySettings(s, 'saved'); }")
 
@@ -3458,8 +3473,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 gr.update(choices=choices, label=tr(lang, "mgr_prompts"), interactive=promptlink.can_write()))
 
     def _save_from_ui(self, replace_mode, auto_apply, show_edit, toasts, toast_s, language="auto", on_apply_prompts="offer",
-                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True):
+                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True, browser_sort="date_desc"):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings["browser_sort"] = _coerce("browser_sort", "date_desc", browser_sort)
         settings.update({
             "replace_mode": _coerce("replace_mode", "replace", replace_mode),
             "auto_apply": bool(auto_apply),
@@ -3477,6 +3493,13 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         })
         _cur = load_settings()
         settings.update({k: _cur.get(k, DEFAULT_SETTINGS[k]) for k in ("browser_details", "browser_thumb")})   # 1.5.9: set from the browser header
+        try:   # 1.7.4: keep keys this version doesn't know (written by a newer/older version), never clobber them
+            with open(SETTINGS_PATH, "r", encoding="utf-8") as reader:
+                raw = json.load(reader)
+            if isinstance(raw, dict):
+                settings = {**{k: v for k, v in raw.items() if k not in DEFAULT_SETTINGS}, **settings}
+        except Exception:
+            pass
         imagelib.set_paused(settings["index_paused"])
         lang = resolve_lang(settings["language"], browser_lang)
         try:

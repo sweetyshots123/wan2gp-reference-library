@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.4 — 2026-10-31
+
+- **New: sort the explorer.** A sort menu in the explorer header orders whatever is shown — any folder you click, watched folders, collections, filters, search and the photo/video/audio type filter — by **date modified, newest first** (default), **oldest first**, **file name A–Z** or **Z–A** (natural order: img2 before img10; accents ignored). The choice is remembered for the browser session. / **Nuevo: ordenar el explorador.** Un menú en la cabecera ordena lo que se muestra (carpetas, colecciones, filtros, búsqueda y filtro de tipo) por fecha de modificación (más recientes primero, por defecto, o más antiguos primero) o por nombre de archivo (A–Z / Z–A). Se recuerda durante la sesión.
+- **New: navigation history, like Lightroom.** ◀ / ▶ buttons in the explorer header (also **Alt+←/Alt+→** and the mouse back/forward buttons) step through every place you were: folder, collection, filters, type filter, search and sort order (changing the sort is a step too), with the scroll position. Going somewhere new after stepping back drops the forward steps, like a browser. The 🕘 menu lists the last 50 states with a readable label (e.g. *Carpeta: X · Fecha ↓*); click one to jump there. Kept for the browser session. / **Nuevo: historial de navegación, como Lightroom.** Botones ◀ / ▶ (y Alt+←/Alt+→ y los botones atrás/adelante del ratón) recorren cada sitio visitado (carpeta, colección, filtros, tipo, búsqueda y orden, con el scroll); el menú 🕘 lista los últimos 50 estados.
+- The **"Used as reference"** view keeps its last-use order by default (menu option *Last used first*); the sort menu can still override it. / La vista **"Usadas como referencia"** mantiene por defecto su orden por último uso; el menú puede cambiarlo.
+- **New setting: "Default sort order"** in the plugin settings. Saving it applies the new default immediately. / **Nuevo ajuste: "Orden por defecto"** en los ajustes del plugin.
+- Saving the settings now keeps any settings keys this version doesn't know about. / Guardar los ajustes conserva las claves desconocidas.
+- Sorting runs server-side and is cached per filter, so it stays fast with ~11k items. **Restart WanGP after updating.**
+
 ## 1.7.3 — 2026-10-30
 
 - **Fix: "Borrar de la librería" was disabled for videos in "🎬 Librería de vídeos"** (webcam recordings, crops, resizes, saved inputs). Cause: since 1.6.8 those videos appear in the explorer as read-only items (no watched folder, no collection), so neither the managed-copy delete nor the 1.7.1 "remove from the library" applied to them. They can now be deleted from the explorer:

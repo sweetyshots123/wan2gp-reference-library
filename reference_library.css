@@ -922,3 +922,20 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 /* 1.7.3: Video Library items in "Borrar de la librería" */
 .reflib-fg-vlbin { padding: 8px 10px; border-radius: 6px; background: rgba(217,119,6,.12); border: 1px solid rgba(217,119,6,.5); color: #92400e; }
 .dark .reflib-fg-vlbin { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.45); color: #fde68a; }
+
+/* 1.7.4 navigation history */
+.reflib-ib-nav { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 2px; margin-right: 6px; border-radius: 8px; border: 1px solid var(--border-color-primary, #d1d5db); }
+.reflib-ib-navb { all: unset; cursor: pointer; height: 26px; min-width: 26px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 13px; color: var(--body-text-color, #111827); }
+.reflib-ib-navb:hover:not(:disabled), .reflib-ib-navb:focus-visible { background: var(--background-fill-secondary, #f3f4f6); }
+.reflib-ib-navb:disabled { opacity: .35; cursor: default; }
+.reflib-ib-navmenu { position: absolute; top: calc(100% + 6px); right: 0; left: auto; z-index: 60; min-width: 320px; max-width: 520px; max-height: 60vh; overflow: auto; padding: 4px; border-radius: 10px; border: 1px solid #d1d5db; background: #fff; color: #111827; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.reflib-ib-navmenu[hidden] { display: none; }
+.reflib-ib-navit { all: unset; box-sizing: border-box; cursor: pointer; display: flex; width: 100%; gap: 10px; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; }
+.reflib-ib-navit span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflib-ib-navit i { font-style: normal; opacity: .6; font-size: 11.5px; flex: none; }
+.reflib-ib-navit:hover, .reflib-ib-navit:focus-visible { background: #f3f4f6; }
+.reflib-ib-navit.on { font-weight: 600; box-shadow: inset 3px 0 0 #6366f1; }
+.reflib-ib-navnone { padding: 8px 10px; font-size: 12.5px; opacity: .7; }
+.dark .reflib-ib-navmenu { background: #111827; color: #e5e7eb; border-color: #374151; }
+.dark .reflib-ib-navit:hover, .dark .reflib-ib-navit:focus-visible { background: #1f2937; }
+.dark .reflib-ib-navb { color: #e5e7eb; }

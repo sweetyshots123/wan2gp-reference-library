@@ -91,6 +91,9 @@
 .reflib-toast button { all: unset; cursor: pointer; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,.18);
   font-weight: 700; white-space: nowrap; }
 .reflib-toast button:hover { background: rgba(255,255,255,.3); }
+.reflib-ib-sort { height: 30px; padding: 0 6px; margin-right: 6px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; color: #111827; font-size: 13px; cursor: pointer; color-scheme: light; }
+.dark .reflib-ib-sort { background: #1f2937; color: #e5e7eb; border-color: #4b5563; color-scheme: dark; }
+.reflib-ib-sort option { background: inherit; color: inherit; }
 .reflib-cpeek { position: fixed; z-index: 10110; display: none; pointer-events: none; width: 232px; padding: 8px; border-radius: 10px;
   background: #fff; color: #111827; border: 1px solid #d1d5db; box-shadow: 0 8px 26px rgba(0,0,0,.25); font: 13px/1.3 system-ui, sans-serif; }
 .dark .reflib-cpeek, body.dark .reflib-cpeek { background: #111827; color: #e5e7eb; border-color: #374151; }
@@ -648,7 +651,7 @@
         }
         cfg = next;
         if (fromServer || source === "saved") tabLang = lang(); else localizeTab(false);
-        if (source === "saved") toast(t("settings_applied"), "ok");
+        if (source === "saved") { toast(t("settings_applied"), "ok"); try { sessionStorage.removeItem(SORT_KEY); sessionStorage.removeItem(SORT_KEY + "_used"); } catch (e) {} if (ilib.open) { newQuery(); render(); } }   // 1.7.4: a new default sort applies now
         applyTooltips();
         for (const tab of Object.keys(applied)) renderChips(tab);
         log("settings applied, language:", lang());
@@ -676,6 +679,8 @@
             reveal: "Show in folder", reveal_tip: "Opens the folder with this file highlighted", reveal_remote: "Only available when the browser runs on the same PC as WanGP",
             big_preview: "Large preview",
             v_size: "Thumbnail size", v_l: "Very large thumbnails", v_m: "Medium thumbnails", v_s: "Small thumbnails",
+            s_used: "Last used first", nav_back: "Back (Alt+←)", nav_fwd: "Forward (Alt+→)", nav_list: "Navigation history", nav_empty: "No history yet", nav_all: "All", nav_folder: "Folder: {n}", nav_col: "Collection: {n}", nav_cols: "{n} collections", nav_nocol: "No collection", nav_q: "Search: “{q}”", nav_tags: "+{n} filters", n_date_desc: "Date ↓", n_date_asc: "Date ↑", n_name_asc: "Name A–Z", n_name_desc: "Name Z–A", n_used: "Last used",
+            sort_lbl: "Sort", sort_tip: "Sort what the explorer shows (this session; the default is in the plugin settings)", s_date_desc: "Newest first", s_date_asc: "Oldest first", s_name_asc: "Name A–Z", s_name_desc: "Name Z–A",
             v_details: "Details", v_details_tip: "Show or hide the details panel on the right (selected image)", v_pick: "Select an image to see its details.",
             ctx_details: "Show details", crop: "Crop", crop_tip: "Crop with Cropper; the result is saved to the library", crop_na: "Needs Cropper with file cropping (window.cropper.cropFile, file API 1). Update Cropper to enable it.", crop_audio: "Audio can't be cropped", crop_saved_img: "Crop saved to \u201c{c}\u201d", crop_saved_vid: "Crop saved to the Video Library", crop_fail: "Crop failed: {e}", crop_busy: "A crop is already open", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
             lb_prev: "Previous (←)", lb_next: "Next (→)",
@@ -771,6 +776,8 @@
             reveal: "Abrir en el Explorador", reveal_tip: "Abre la carpeta con este archivo resaltado", reveal_remote: "Solo disponible cuando el navegador está en el mismo PC que WanGP",
             big_preview: "Vista grande",
             v_size: "Tamaño de miniaturas", v_l: "Miniaturas muy grandes", v_m: "Miniaturas medianas", v_s: "Miniaturas pequeñas",
+            s_used: "Último uso primero", nav_back: "Atrás (Alt+←)", nav_fwd: "Adelante (Alt+→)", nav_list: "Historial de navegación", nav_empty: "Aún no hay historial", nav_all: "Todo", nav_folder: "Carpeta: {n}", nav_col: "Colección: {n}", nav_cols: "{n} colecciones", nav_nocol: "Sin colección", nav_q: "Búsqueda: «{q}»", nav_tags: "+{n} filtros", n_date_desc: "Fecha ↓", n_date_asc: "Fecha ↑", n_name_asc: "Nombre A–Z", n_name_desc: "Nombre Z–A", n_used: "Último uso",
+            sort_lbl: "Orden", sort_tip: "Ordena lo que muestra el explorador (esta sesión; el orden por defecto está en los ajustes del plugin)", s_date_desc: "Más recientes primero", s_date_asc: "Más antiguos primero", s_name_asc: "Nombre A–Z", s_name_desc: "Nombre Z–A",
             v_details: "Detalles", v_details_tip: "Muestra u oculta el panel de detalles de la derecha (imagen seleccionada)", v_pick: "Selecciona una imagen para ver sus detalles.",
             ctx_details: "Ver detalles", crop: "Recortar", crop_tip: "Recortar con Cropper; el resultado se guarda en la librería", crop_na: "Necesita Cropper con recorte de archivos (window.cropper.cropFile, API de archivos 1). Actualiza Cropper para activarlo.", crop_audio: "Los audios no se pueden recortar", crop_saved_img: "Recorte guardado en «{c}»", crop_saved_vid: "Recorte guardado en la Librería de vídeos", crop_fail: "No se pudo recortar: {e}", crop_busy: "Ya hay un recorte abierto", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
             lb_prev: "Anterior (←)", lb_next: "Siguiente (→)",
@@ -913,7 +920,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, sort: sortCur() };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -950,6 +957,7 @@
     }
     // A new filter: forget the pages; same filter after a change (tag, add, delete…): refetch, keep showing the old ones.
     function newQuery(keepScroll) {
+        navRecord();
         const sig = JSON.stringify(filterSnap());
         setTimeout(() => loadFacets(), 0);
         const q = ilib.q;
@@ -1077,6 +1085,9 @@
         fsb.textContent = fsOn ? "🗗" : "⛶"; fsb.title = it(fsOn ? "fs_restore" : "fs_max"); fsb.setAttribute("aria-pressed", fsOn ? "true" : "false");
         renderKindBar();
         pkBanner();   // 1.6.8
+        navUi();
+        const so = root.querySelector(".reflib-ib-sort");   // 1.7.4 sort menu
+        if (so) { const cur = sortCur(); so.innerHTML = (ilib.f.used ? ["used"] : []).concat(SORTS).map(k => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(it("s_" + k))}</option>`).join(""); so.title = it("sort_tip"); so.setAttribute("aria-label", it("sort_lbl")); }
         const vp = viewPref();   // 1.5.9 view selector
         root.querySelector(".reflib-ib-view").setAttribute("aria-label", it("v_size"));
         root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
@@ -2226,7 +2237,7 @@
               <button type="button" class="reflib-ib-btn reflib-ib-rescan"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-histbtn" data-act="hist"></button>
               <span class="reflib-ib-kinds" role="group"></span>
-              <span class="reflib-ib-view" role="group"><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="l">▣</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="m">▦</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="s">▩</button><button type="button" class="reflib-ib-vdet" data-act="vdetails"></button></span>
+              <span class="reflib-ib-nav" role="group"><button type="button" class="reflib-ib-navb" data-act="navback">◀</button><button type="button" class="reflib-ib-navb" data-act="navfwd">▶</button><button type="button" class="reflib-ib-navb" data-act="navlist" aria-haspopup="true">🕘</button><div class="reflib-ib-navmenu" role="menu" hidden></div></span><select class="reflib-ib-sort" data-act="sort"></select><span class="reflib-ib-view" role="group"><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="l">▣</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="m">▦</button><button type="button" class="reflib-ib-vsz" data-act="vsize" data-v="s">▩</button><button type="button" class="reflib-ib-vdet" data-act="vdetails"></button></span>
               <button type="button" class="reflib-ib-fs" data-act="fullscreen" aria-label="fullscreen">⛶</button>
               <button type="button" class="reflib-ib-x" aria-label="close">×</button></div>
             <div class="reflib-pk-banner" hidden></div>
@@ -2880,6 +2891,109 @@
         }).catch(() => {});
     }
     // 1.5.9 view preferences (thumbnail size, details panel): plugin settings + localStorage fallback
+    const SORTS = ["date_desc", "date_asc", "name_asc", "name_desc"], SORT_KEY = "reflib_sort";   // 1.7.4
+    const sortKey = () => (ilib.f && ilib.f.used ? SORT_KEY + "_used" : SORT_KEY);   // the "used" view keeps its last-use order unless overridden
+    function sortCur() {
+        let v = null; try { v = sessionStorage.getItem(sortKey()); } catch (e) {}
+        if (ilib.f && ilib.f.used) return SORTS.includes(v) ? v : "used";
+        return SORTS.includes(v) ? v : (SORTS.includes(cfg.browser_sort) ? cfg.browser_sort : "date_desc");
+    }
+    function setSort(v) { try { if (v === "used") sessionStorage.removeItem(sortKey()); else sessionStorage.setItem(sortKey(), v); } catch (e) {} }
+    document.addEventListener("change", (e) => {
+        const so = e.target && e.target.closest && e.target.closest(".reflib-ib-sort");
+        if (!so || !(SORTS.includes(so.value) || so.value === "used")) return;
+        setSort(so.value);
+        newQuery(); render();
+    });
+    // ---- 1.7.4 navigation history (Lightroom-like): back / forward / list, per browser session ----
+    const NAV_KEY = "reflib_nav", NAV_MAX = 50, NAV_SETS = ["cols", "folders", "tags", "atags", "xtags"];
+    let nav = (() => { try { const v = JSON.parse(sessionStorage.getItem(NAV_KEY)); if (v && Array.isArray(v.s) && v.s.length) return { s: v.s, i: Math.min(Math.max(+v.i || 0, 0), v.s.length - 1) }; } catch (e) {} return { s: [], i: -1 }; })();
+    let navApplying = false, navTimer = null, navScrollT = null;
+    function navSnap() {
+        const f = ilib.f, o = {};
+        for (const k of Object.keys(f)) o[k] = NAV_SETS.includes(k) ? [...f[k]] : JSON.parse(JSON.stringify(f[k] === undefined ? null : f[k]));
+        o.q = (o.q || "").trim();
+        return { f: o, sort: sortCur(), scroll: 0, t: Date.now() };
+    }
+    const navSig = st => JSON.stringify([st.f, st.sort]);
+    function navSave() { try { sessionStorage.setItem(NAV_KEY, JSON.stringify(nav)); } catch (e) {} }
+    function navPush() {
+        if (!ilib.open) return;
+        const st = navSnap(), cur = nav.s[nav.i];
+        if (cur && navSig(cur) === navSig(st)) return;
+        nav.s = nav.s.slice(0, nav.i + 1); nav.s.push(st);   // a new place after going back drops the forward states, like a browser
+        if (nav.s.length > NAV_MAX) nav.s.splice(0, nav.s.length - NAV_MAX);
+        nav.i = nav.s.length - 1; navSave(); navUi();
+    }
+    function navRecord() {   // debounced: typing a search makes one state, not one per key
+        if (navApplying || !ilib.open) return;
+        clearTimeout(navTimer); navTimer = setTimeout(navPush, 450);
+    }
+    document.addEventListener("scroll", (e) => {   // remember the scroll of the current state (cheap: one number)
+        const m = e.target; if (navApplying || !m || !m.classList || !m.classList.contains("reflib-ib-main")) return;
+        clearTimeout(navScrollT);
+        navScrollT = setTimeout(() => { const cur = nav.s[nav.i]; if (cur && navSig(cur) === navSig(navSnap())) { cur.scroll = m.scrollTop; navSave(); } }, 250);
+    }, true);
+    function navGo(idx) {
+        if (!ilib.open || idx < 0 || idx >= nav.s.length || idx === nav.i) return;
+        clearTimeout(navTimer); navPush();   // a pending (debounced) state is kept before leaving it
+        if (idx >= nav.s.length) return;
+        const st = nav.s[idx]; nav.i = idx; navSave(); navMenu(false);
+        const f = {};
+        for (const k of Object.keys(st.f)) f[k] = NAV_SETS.includes(k) ? new Set(st.f[k] || []) : st.f[k];
+        for (const k of NAV_SETS) if (!f[k]) f[k] = new Set();
+        navApplying = true;
+        try {
+            ilib.f = f; setSort(st.sort);
+            const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = f.q || "";
+            if (f.node) { const parts = (f.node.rel || "").split("/").filter(Boolean); let k = f.node.fid; ilib.expanded.add(k + "|"); for (const p of parts) { k += (k.includes("|") ? "/" : "|") + p; ilib.expanded.add(k); } }
+            newQuery(); render();
+        } finally { navApplying = false; }
+        let n = 0; const want = st.scroll || 0;
+        if (want) { const iv = setInterval(() => { const m = ilib.root && ilib.root.querySelector(".reflib-ib-main"); if ((m && m.scrollHeight >= want + m.clientHeight) || ++n > 30) { clearInterval(iv); if (m) { navApplying = true; m.scrollTop = want; setTimeout(() => { navApplying = false; }, 300); } } }, 100); }
+        navUi();
+    }
+    function navLabel(st) {
+        const f = st.f, d = ilib.data, parts = [];
+        if (f.used) parts.push(it("used"));
+        else if (f.recent) parts.push(it("recent"));
+        else if (f.node) { const r = d && d.folders && d.folders.find(x => x.id === f.node.fid); const nm = f.node.rel ? f.node.rel.split("/").filter(Boolean).pop() : (r ? folderLabel(r) : "?"); parts.push(it("nav_folder", { n: nm })); }
+        const cols = f.cols || [];
+        if (cols.length === 1) { const c = d && d.collections && d.collections.find(x => x.id === cols[0]); parts.push(it("nav_col", { n: c ? c.name : "?" })); }
+        else if (cols.length > 1) parts.push(it("nav_cols", { n: cols.length }));
+        if (f.none) parts.push(it("nav_nocol"));
+        if (f.kind) parts.push(it("chip_kind", { k: it("k_" + f.kind) }));
+        if (f.q) parts.push(it("nav_q", { q: f.q.length > 30 ? f.q.slice(0, 29) + "…" : f.q }));
+        const extra = (f.tags || []).length + (f.atags || []).length + (f.xtags || []).length + Object.keys(f.ranges || {}).length + (f.jst ? 1 : 0) + (f.hasmask ? 1 : 0);
+        if (extra) parts.push(it("nav_tags", { n: extra }));
+        if (!parts.length) parts.push(it("nav_all"));
+        return parts.join(" · ") + " · " + it("n_" + st.sort);
+    }
+    function navUi() {
+        const root = ilib.root; if (!root) return;
+        const b = root.querySelector('[data-act="navback"]'), fw = root.querySelector('[data-act="navfwd"]'), l = root.querySelector('[data-act="navlist"]');
+        if (!b) return;
+        const set = (el, key, dis) => { el.title = it(key); el.setAttribute("aria-label", it(key)); el.disabled = !!dis; el.setAttribute("aria-disabled", dis ? "true" : "false"); };
+        set(b, "nav_back", nav.i <= 0); set(fw, "nav_fwd", nav.i >= nav.s.length - 1); set(l, "nav_list", false);
+        root.querySelector(".reflib-ib-nav").setAttribute("aria-label", it("nav_list"));
+    }
+    function navMenu(force) {
+        const m = ilib.root && ilib.root.querySelector(".reflib-ib-navmenu"); if (!m) return;
+        const show = force === undefined ? m.hidden : force;
+        if (!show) { m.hidden = true; return; }
+        clearTimeout(navTimer); navPush();
+        m.innerHTML = nav.s.length ? nav.s.map((st, i) => ({ st, i })).reverse().map(({ st, i }) => `<button type="button" role="menuitem" class="reflib-ib-navit${i === nav.i ? " on" : ""}" data-act="navjump" data-i="${i}"><span>${esc(navLabel(st))}</span><i>${new Date(st.t || 0).toLocaleTimeString(ilib.lang === "es" ? "es-ES" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</i></button>`).join("") : `<div class="reflib-ib-navnone">${esc(it("nav_empty"))}</div>`;
+        m.hidden = false;
+    }
+    document.addEventListener("click", (e) => { const m = ilib.root && ilib.root.querySelector(".reflib-ib-navmenu"); if (m && !m.hidden && !e.target.closest(".reflib-ib-nav")) m.hidden = true; }, true);
+    document.addEventListener("keydown", (e) => {
+        if (!ilib.open) return;
+        if (e.key === "Escape") { const m = ilib.root && ilib.root.querySelector(".reflib-ib-navmenu"); if (m && !m.hidden) { m.hidden = true; e.stopPropagation(); e.preventDefault(); } return; }
+        if (!e.altKey || e.ctrlKey || e.metaKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+        e.preventDefault(); e.stopPropagation(); navGo(nav.i + (e.key === "ArrowLeft" ? -1 : 1));
+    }, true);
+    const navMouse = (e) => { if (!ilib.open || (e.button !== 3 && e.button !== 4) || !ilib.root || !ilib.root.contains(e.target)) return; e.preventDefault(); e.stopPropagation(); if (e.type === "mouseup") navGo(nav.i + (e.button === 3 ? -1 : 1)); };
+    document.addEventListener("mousedown", navMouse, true); document.addEventListener("mouseup", navMouse, true); document.addEventListener("auxclick", navMouse, true);
     function viewPref() {
         const t = cfg.browser_thumb || "m";
         return { thumb: CARD_SIZES[t] ? t : "m", details: !!cfg.browser_details };
@@ -3005,6 +3119,10 @@
             addFolder();
         }
         else if (act === "hist") histOpen();
+        else if (act === "navback") navGo(nav.i - 1);
+        else if (act === "navfwd") navGo(nav.i + 1);
+        else if (act === "navlist") navMenu();
+        else if (act === "navjump") navGo(+el.dataset.i);
         else if (act === "fullscreen") setFull(!ilib.root.classList.contains("reflib-ib-full"));
         else if (act === "node") {
             const key = el.dataset.key, [fid, ...relParts] = key.split("|"), rel = relParts.join("|");
@@ -4773,7 +4891,7 @@
         version: VERSION,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems,
+        openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,
