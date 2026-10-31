@@ -52,7 +52,7 @@ smaller faces are skipped when bbox is known). Change via `face_settings`.
 | `face_settings` | `{settings?:{face_cluster_threshold, …}}` | `{ok, settings}` |
 
 FACE = `{id, hash, n, model, bbox:[x,y,w,h]|null (pixels of the original image), w, h, score?, person?:pid,
-cluster?:cid, thumb:"/reflib/thumb?h=<hash>"}` — `bbox` is filled when the index has face boxes (simperf face
+cluster?:cid}` (thumbnails: Media Library via the existing `thumbs` action, Galería via its own thumb route) — `bbox` is filled when the index has face boxes (simperf face
 records, see SIMILARITY_API.md); UIs crop/draw with it, else show the whole thumbnail.
 PERSON = `{id, name, tag, count (faces, active model), items, cover:FACE|null, seeded?:bool}`.
 

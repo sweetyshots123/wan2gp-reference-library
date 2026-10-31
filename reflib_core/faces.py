@@ -1,0 +1,778 @@
+"""Personas (1.10.0): iPhone-Photos-style people built on the face embeddings of `sim_index`.
+
+Contract: FACES_API.md. numpy only. Storage: <data>/faces/persons.json (source of truth, atomic + .bak) and
+clusters-<model>.json (rebuildable cache). Face data never leaves the machine. Both UIs (Media Library
+reflib_faces.js, Galería Personas page) only call the face_* / person_* actions registered at the bottom.
+"""
+from __future__ import annotations
+import json, os, re, shutil, threading, time, unicodedata, uuid
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
+
+from . import actions as _actions
+from .actions import ActionError
+
+VERSION = 1
+UNDO_S = 5 * 60
+THRESH = {"arcface": 0.42, "glintr100": 0.40, "adaface": 0.40, "sface": 0.50}
+DEFAULTS = {"face_cluster_threshold": None, "face_suggest_threshold": None, "face_min_cluster": 2, "face_min_size": 40}
+_FID = re.compile(r"^([0-9A-Za-z_\-]+):(\d+)@([a-z0-9_]+)$")
+
+
+def fid(h: str, n: int, model: str) -> str:
+    return "%s:%d@%s" % (h, n, model)
+
+
+def parse_fid(f: str) -> Optional[Tuple[str, int, str]]:
+    m = _FID.match(str(f or ""))
+    return (m.group(1), int(m.group(2)), m.group(3)) if m else None
+
+
+def _fold(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", str(s).strip().lower()) if not unicodedata.combining(c))
+
+
+def _atomic_json(path: str, obj, bak: bool = False):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if bak and os.path.isfile(path):
+        shutil.copy2(path, path + ".bak")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh, ensure_ascii=False)
+        fh.flush(); os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def _norm(m: np.ndarray) -> np.ndarray:
+    m = np.asarray(m, np.float32)
+    n = np.linalg.norm(m, axis=-1, keepdims=True)
+    return m / np.maximum(n, 1e-8)
+
+
+class FaceSource:
+    """Adapter over similarity.SimIndex: vectors(model) -> {fid: vec}, boxes, image size. Tests pass a fake."""
+
+    def __init__(self, index):
+        self.index = index
+
+    @property
+    def model(self) -> str:
+        return self.index.active
+
+    def faces(self, model: str) -> Tuple[List[str], np.ndarray]:
+        ids, vecs = [], []
+        with self.index.lock:
+            for h, e in self.index.items.items():
+                v = e["faces"].get(model)
+                if v is not None and len(v):
+                    ids += [fid(h, i, model) for i in range(len(v))]
+                    vecs.append(np.asarray(v, np.float32))
+        from .similarity import FACE_DIM
+        return ids, (_norm(np.concatenate(vecs)) if vecs else np.zeros((0, FACE_DIM.get(model, 512)), np.float32))
+
+    def item(self, h: str, model: str) -> Dict[str, Any]:
+        e = self.index.items.get(h) or {}
+        fa = (e.get("faces") or {}).get(model)
+        n = 0 if fa is None else len(fa)
+        boxes = (e.get("boxes") or {}).get(model)   # simperf face records (bbox per face) when present
+        return {"w": e.get("w", 0), "h": e.get("h", 0), "n": n,
+                "boxes": [list(map(float, b[:4])) for b in boxes] if boxes is not None and len(boxes) == n else [None] * n}
+
+
+class Faces:
+    def __init__(self, data_dir: str, source, settings: Callable[[], Dict[str, Any]] = lambda: {},
+                 save_settings: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+                 tagger=None):
+        self.dir = os.path.join(data_dir, "faces")
+        self.src, self._settings, self._save_settings = source, settings, save_settings
+        self.tagger = tagger   # object with add(hashes, tag), remove(hashes, tag), rename(old, new)
+        self.lock = threading.RLock()
+        self.st = {"running": False, "done": 0, "total": 0}
+        self.rev = 0
+        self._cache: Dict[str, Any] = {}
+        self.undo: Dict[str, Any] = {}
+        self.db = self._load_json("persons.json") or {"version": VERSION, "persons": {}, "assign": {}, "reject": {}}
+        for k in ("persons", "assign", "reject"):
+            self.db.setdefault(k, {})
+        self.cl: Dict[str, Dict[str, Any]] = {}
+
+    # ------------------------------------------------------------------ storage
+    def _load_json(self, name):
+        try:
+            with open(os.path.join(self.dir, name), encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            return None
+
+    def _save_db(self):
+        _atomic_json(os.path.join(self.dir, "persons.json"), self.db, bak=True)
+        self.rev += 1
+
+    def clusters(self, model: Optional[str] = None) -> Dict[str, Any]:
+        m = model or self.src.model
+        if m not in self.cl:
+            c = self._load_json("clusters-%s.json" % m) or {}
+            self.cl[m] = {"version": VERSION, "threshold": c.get("threshold"), "seen": list(c.get("seen") or []),
+                          "clusters": dict(c.get("clusters") or {})}
+        return self.cl[m]
+
+    def _save_cl(self, m):
+        _atomic_json(os.path.join(self.dir, "clusters-%s.json" % m), self.clusters(m))
+        self.rev += 1
+
+    # ------------------------------------------------------------------ settings
+    def settings(self) -> Dict[str, Any]:
+        s = dict(DEFAULTS); s.update({k: v for k, v in (self._settings() or {}).items() if k in DEFAULTS and v is not None})
+        m = self.src.model
+        if s["face_cluster_threshold"] is None:
+            s["face_cluster_threshold"] = THRESH.get(m, 0.42)
+        if s["face_suggest_threshold"] is None:
+            s["face_suggest_threshold"] = round(s["face_cluster_threshold"] - 0.05, 3)
+        return s
+
+    # ------------------------------------------------------------------ data helpers
+    def _mat(self, m: str):
+        ids, M = self.src.faces(m)
+        key = (m, len(ids), getattr(self.src.index, "rev", None) if hasattr(self.src, "index") else id(M))
+        if self._cache.get("key") != key:
+            self._cache = {"key": key, "ids": ids, "M": M, "pos": {f: i for i, f in enumerate(ids)}}
+        return self._cache
+
+    def assign(self, m) -> Dict[str, str]:
+        return self.db["assign"].setdefault(m, {})
+
+    def _person(self, pid) -> Dict[str, Any]:
+        p = self.db["persons"].get(str(pid or ""))
+        if not p:
+            raise ActionError("person_not_found", person=pid)
+        return p
+
+    def face_obj(self, f: str, m: str, extra=None) -> Dict[str, Any]:
+        h, n, _ = parse_fid(f)
+        it = self.src.item(h, m)
+        o = {"id": f, "hash": h, "n": n, "model": m, "bbox": it["boxes"][n] if n < len(it["boxes"]) else None,
+             "w": it["w"], "h": it["h"]}
+        pid = self.assign(m).get(f)
+        if pid:
+            o["person"] = pid
+        if extra:
+            o.update(extra)
+        return o
+
+    def _check(self, faces, m) -> List[str]:
+        pos = self._mat(m)["pos"]
+        out = []
+        for f in faces or []:
+            p = parse_fid(f)
+            if not p:
+                raise ActionError("face_not_found", id=f)
+            if p[2] != m:
+                raise ActionError("faces_model_mismatch", id=f)
+            if f not in pos:
+                raise ActionError("face_not_found", id=f)
+            out.append(f)
+        return list(dict.fromkeys(out))
+
+    def _cl_of(self, m) -> Dict[str, str]:
+        return {f: cid for cid, c in self.clusters(m)["clusters"].items() for f in c["faces"]}
+
+    # ------------------------------------------------------------------ clustering
+    def run(self, full: bool = False, threshold: Optional[float] = None) -> Dict[str, Any]:
+        with self.lock:
+            m = self.src.model
+            s = self.settings()
+            th = float(threshold if threshold is not None else s["face_cluster_threshold"])
+            c = self.mat = self._mat(m)
+            ids, M, pos = c["ids"], c["M"], c["pos"]
+            cl = self.clusters(m)
+            asg = self.assign(m)
+            if full or (cl["threshold"] is not None and abs(cl["threshold"] - th) > 1e-6):
+                cl["clusters"], cl["seen"] = {}, []
+            cl["threshold"] = th
+            # drop vanished / assigned faces from clusters
+            for cid in list(cl["clusters"]):
+                fs = [f for f in cl["clusters"][cid]["faces"] if f in pos and f not in asg]
+                if fs:
+                    cl["clusters"][cid]["faces"] = fs
+                else:
+                    del cl["clusters"][cid]
+            seen = set(cl["seen"]) & set(pos)
+            todo = [f for f in ids if f not in seen and f not in asg]
+            self.st = {"running": True, "done": 0, "total": len(todo)}
+            cids = list(cl["clusters"])
+            sums = [M[[pos[f] for f in cl["clusters"][k]["faces"]]].sum(0) for k in cids]
+            cent = _norm(np.stack(sums)) if sums else np.zeros((0, M.shape[1]), np.float32)
+            cap = max(64, len(cids) * 2)
+            C = np.zeros((cap, M.shape[1]), np.float32); C[:len(cids)] = cent
+            S = np.zeros_like(C); S[:len(cids)] = np.stack(sums) if sums else 0
+            nc = len(cids)
+            for i, f in enumerate(todo):
+                v = M[pos[f]]
+                j = -1
+                if nc:
+                    sc = C[:nc] @ v
+                    j = int(sc.argmax())
+                    if sc[j] < th:
+                        j = -1
+                if j < 0:
+                    if nc == len(C):
+                        C = np.concatenate([C, np.zeros_like(C)]); S = np.concatenate([S, np.zeros_like(S)])
+                    cid = "c_" + uuid.uuid4().hex[:12]
+                    cids.append(cid); cl["clusters"][cid] = {"faces": []}
+                    j = nc; nc += 1
+                cl["clusters"][cids[j]]["faces"].append(f)
+                S[j] += v; C[j] = S[j] / max(np.linalg.norm(S[j]), 1e-8)
+                self.st["done"] = i + 1
+            # merge pass: clusters whose centroids are >= th
+            if nc > 1:
+                G = C[:nc] @ C[:nc].T
+                np.fill_diagonal(G, -1)
+                parent = list(range(nc))
+                def root(a):
+                    while parent[a] != a:
+                        parent[a] = parent[parent[a]]; a = parent[a]
+                    return a
+                for a, b in zip(*np.nonzero(np.triu(G >= th))):
+                    ra, rb = root(int(a)), root(int(b))
+                    if ra != rb:
+                        parent[rb] = ra
+                for k in range(nc):
+                    r = root(k)
+                    if r != k and cids[k] in cl["clusters"]:
+                        cl["clusters"][cids[r]]["faces"] += cl["clusters"].pop(cids[k])["faces"]
+            cl["seen"] = sorted(seen | set(todo))
+            self._save_cl(m)
+            self.st = {"running": False, "done": len(todo), "total": len(todo)}
+            return self.status()
+
+    def status(self) -> Dict[str, Any]:
+        m = self.src.model
+        c = self._mat(m)
+        asg = self.assign(m)
+        cl = self.clusters(m)
+        return {"model": m, **self.st, "faces": len(c["ids"]), "unassigned": sum(1 for f in c["ids"] if f not in asg),
+                "clusters": len(cl["clusters"]), "persons": len(self.db["persons"]), "rev": self.rev,
+                "threshold": self.settings()["face_cluster_threshold"]}
+
+    def _cover(self, faces: List[str], m: str) -> Optional[str]:
+        """Face closest to the group centroid (most typical face)."""
+        c = self._mat(m)
+        idx = [c["pos"][f] for f in faces if f in c["pos"]]
+        if not idx:
+            return None
+        V = c["M"][idx]
+        return faces[int((V @ _norm(V.sum(0))).argmax())] if len(idx) == len(faces) else [f for f in faces if f in c["pos"]][int((V @ _norm(V.sum(0))).argmax())]
+
+    def list_clusters(self, offset=0, limit=50, min_size=None, faces_per=6):
+        m = self.src.model
+        ms = int(min_size if min_size is not None else self.settings()["face_min_cluster"])
+        cs = sorted(((k, v["faces"]) for k, v in self.clusters(m)["clusters"].items() if len(v["faces"]) >= ms),
+                    key=lambda x: (-len(x[1]), x[0]))
+        out = []
+        for k, fs in cs[offset:offset + limit]:
+            cov = self._cover(fs, m)
+            out.append({"id": k, "size": len(fs), "cover": self.face_obj(cov, m) if cov else None,
+                        "faces": [self.face_obj(f, m) for f in fs[:faces_per]]})
+        return {"total": len(cs), "clusters": out}
+
+    # ------------------------------------------------------------------ persons
+    def person_obj(self, pid: str) -> Dict[str, Any]:
+        p = self._person(pid)
+        m = self.src.model
+        fs = [f for f, q in self.assign(m).items() if q == pid]
+        cov = (p.get("cover") or {}).get(m)
+        if cov not in fs:
+            cov = self._cover(fs, m) if fs else None
+        return {"id": pid, "name": p["name"], "tag": "persona:" + p["name"], "count": len(fs),
+                "items": len({parse_fid(f)[0] for f in fs}), "cover": self.face_obj(cov, m) if cov else None,
+                **({"seeded": True} if p.get("seeded", {}).get(m) else {})}
+
+    def find_person(self, name: str) -> Optional[str]:
+        f = _fold(name)
+        return next((k for k, p in self.db["persons"].items() if _fold(p["name"]) == f), None)
+
+    def new_person(self, name: str) -> str:
+        name = str(name or "").strip()
+        if not name:
+            raise ActionError("person_need_name")
+        pid = self.find_person(name)
+        if pid:
+            return pid
+        pid = "p_" + uuid.uuid4().hex[:12]
+        self.db["persons"][pid] = {"name": name, "created": time.time(), "cover": {}}
+        return pid
+
+    def _tag(self, op, hashes, *a):
+        if self.tagger and hashes:
+            getattr(self.tagger, op)(sorted(hashes), *a)
+
+    def assign_faces(self, pid=None, name=None, clusters=(), faces=()) -> Dict[str, Any]:
+        with self.lock:
+            m = self.src.model
+            if not pid:
+                pid = self.new_person(name)
+            p = self._person(pid)
+            cl = self.clusters(m)["clusters"]
+            fs = []
+            for cid in clusters or []:
+                if cid not in cl:
+                    raise ActionError("cluster_not_found", cluster=cid)
+                fs += cl[cid]["faces"]
+            fs = self._check(list(fs) + list(faces or []), m)
+            asg = self.assign(m)
+            prev = {f: asg.get(f) for f in fs}
+            for f in fs:
+                asg[f] = pid
+            rej = self.db["reject"].get(m, {}).get(pid)
+            if rej:
+                self.db["reject"][m][pid] = [f for f in rej if f not in set(fs)]
+            for cid in list(cl):
+                cl[cid]["faces"] = [f for f in cl[cid]["faces"] if f not in set(fs)]
+                if not cl[cid]["faces"]:
+                    del cl[cid]
+            self._save_db(); self._save_cl(m)
+            hashes = {parse_fid(f)[0] for f in fs}
+            self._tag("add", hashes, "persona:" + p["name"])
+            for q in {q for q in prev.values() if q and q != pid}:
+                self._retag_after_remove(q, {parse_fid(f)[0] for f, x in prev.items() if x == q})
+            return {"person": self.person_obj(pid), "assigned": len(fs), "hashes": sorted(hashes)}
+
+    def _retag_after_remove(self, pid, hashes):
+        p = self.db["persons"].get(pid)
+        if not p:
+            return
+        still = {parse_fid(f)[0] for mm in self.db["assign"].values() for f, q in mm.items() if q == pid}
+        self._tag("remove", set(hashes) - still, "persona:" + p["name"])
+
+    def unassign(self, faces) -> Dict[str, Any]:
+        with self.lock:
+            m = self.src.model
+            fs = self._check(faces, m)
+            asg = self.assign(m)
+            by: Dict[str, set] = {}
+            for f in fs:
+                q = asg.pop(f, None)
+                if q:
+                    by.setdefault(q, set()).add(parse_fid(f)[0])
+            cl = self.clusters(m)
+            cl["seen"] = [f for f in cl["seen"] if f not in set(fs)]
+            self._save_db(); self._save_cl(m)
+            for q, hs in by.items():
+                self._retag_after_remove(q, hs)
+            return {"n": sum(len(v) for v in by.values()), "hashes": sorted(set().union(*by.values())) if by else []}
+
+    def suggest(self, pid, method="nn", limit=40, threshold=None) -> List[Dict[str, Any]]:
+        self._person(pid)
+        m = self.src.model
+        c = self._mat(m)
+        asg = self.assign(m)
+        mine = [c["pos"][f] for f, q in asg.items() if q == pid and f in c["pos"]]
+        if not mine:
+            return []
+        th = float(threshold if threshold is not None else self.settings()["face_suggest_threshold"])
+        rej = set(self.db["reject"].get(m, {}).get(pid, []))
+        cand = [i for i, f in enumerate(c["ids"]) if f not in asg and f not in rej]
+        if not cand:
+            return []
+        P, X = c["M"][mine], c["M"][cand]
+        sc = X @ _norm(P.sum(0)) if method == "centroid" else (X @ P.T).max(1)
+        order = np.argsort(-sc)
+        out = []
+        for k in order[:max(1, int(limit)) * 4]:
+            if sc[k] < th or len(out) >= limit:
+                break
+            out.append(self.face_obj(c["ids"][cand[k]], m, {"score": round(float(sc[k]), 4)}))
+        return out
+
+    def reject(self, pid, faces) -> int:
+        with self.lock:
+            self._person(pid)
+            m = self.src.model
+            fs = self._check(faces, m)
+            r = self.db["reject"].setdefault(m, {}).setdefault(pid, [])
+            n = 0
+            for f in fs:
+                if f not in r:
+                    r.append(f); n += 1
+            self._save_db()
+            return n
+
+    def unreject(self, pid, faces=None) -> int:
+        with self.lock:
+            self._person(pid)
+            r = self.db["reject"].setdefault(self.src.model, {}).get(pid, [])
+            keep = [f for f in r if faces is not None and f not in set(faces)]
+            self.db["reject"][self.src.model][pid] = keep
+            self._save_db()
+            return len(r) - len(keep)
+
+    def merge_clusters(self, cids) -> str:
+        with self.lock:
+            m = self.src.model
+            cl = self.clusters(m)["clusters"]
+            if len(set(cids)) < 2:
+                raise ActionError("faces_need_two")
+            for k in cids:
+                if k not in cl:
+                    raise ActionError("cluster_not_found", cluster=k)
+            into = cids[0]
+            for k in cids[1:]:
+                if k != into:
+                    cl[into]["faces"] += cl.pop(k)["faces"]
+            self._save_cl(m)
+            return into
+
+    def merge_persons(self, pids, into) -> Dict[str, Any]:
+        with self.lock:
+            if len(set(pids) | {into}) < 2:
+                raise ActionError("faces_need_two")
+            tgt = self._person(into)
+            for q in pids:
+                if q == into:
+                    continue
+                src = self._person(q)
+                for mm in self.db["assign"].values():
+                    for f, x in list(mm.items()):
+                        if x == q:
+                            mm[f] = into
+                for mm in self.db["reject"].values():
+                    if q in mm:
+                        mm.setdefault(into, [])
+                        mm[into] += [f for f in mm.pop(q) if f not in mm[into]]
+                del self.db["persons"][q]
+                if self.tagger:
+                    self.tagger.rename("persona:" + src["name"], "persona:" + tgt["name"])
+            self._save_db()
+            return self.person_obj(into)
+
+    def split(self, faces, cluster=None, person=None) -> str:
+        with self.lock:
+            m = self.src.model
+            fs = self._check(faces, m)
+            if not fs:
+                raise ActionError("face_not_found", id="")
+            cl = self.clusters(m)
+            if person:
+                self._person(person)
+                self.unassign([f for f in fs if self.assign(m).get(f) == person])
+            elif cluster:
+                if cluster not in cl["clusters"]:
+                    raise ActionError("cluster_not_found", cluster=cluster)
+            for cid in list(cl["clusters"]):
+                cl["clusters"][cid]["faces"] = [f for f in cl["clusters"][cid]["faces"] if f not in set(fs)]
+                if not cl["clusters"][cid]["faces"]:
+                    del cl["clusters"][cid]
+            new = "c_" + uuid.uuid4().hex[:12]
+            cl["clusters"][new] = {"faces": fs}
+            cl["seen"] = sorted(set(cl["seen"]) | set(fs))
+            self._save_cl(m)
+            return new
+
+    def rename(self, pid, name) -> Dict[str, Any]:
+        with self.lock:
+            p = self._person(pid)
+            name = str(name or "").strip()
+            if not name:
+                raise ActionError("person_need_name")
+            other = self.find_person(name)
+            if other and other != pid:
+                return self.merge_persons([pid], other)
+            old = p["name"]; p["name"] = name
+            self._save_db()
+            if self.tagger and old != name:
+                self.tagger.rename("persona:" + old, "persona:" + name)
+            return self.person_obj(pid)
+
+    def delete(self, pid, keep_tag=False) -> str:
+        with self.lock:
+            p = self._person(pid)
+            snap = {"person": dict(p), "assign": {m: {f: q for f, q in mm.items() if q == pid} for m, mm in self.db["assign"].items()},
+                    "reject": {m: list(mm.get(pid, [])) for m, mm in self.db["reject"].items()}, "keep_tag": keep_tag}
+            hashes = {parse_fid(f)[0] for mm in snap["assign"].values() for f in mm}
+            for mm in self.db["assign"].values():
+                for f in [f for f, q in mm.items() if q == pid]:
+                    del mm[f]
+            for mm in self.db["reject"].values():
+                mm.pop(pid, None)
+            del self.db["persons"][pid]
+            for m in self.cl:
+                self.cl[m]["seen"] = [f for f in self.cl[m]["seen"] if parse_fid(f)[0] not in hashes]
+            self._save_db()
+            if not keep_tag:
+                self._tag("remove", hashes, "persona:" + p["name"])
+            tok = uuid.uuid4().hex
+            now = time.time()
+            for k in [k for k, v in self.undo.items() if now - v["at"] > UNDO_S]:
+                del self.undo[k]
+            self.undo[tok] = {"at": now, "pid": pid, "hashes": sorted(hashes), **snap}
+            return tok
+
+    def undo_delete(self, tok) -> Dict[str, Any]:
+        with self.lock:
+            u = self.undo.pop(str(tok or ""), None)
+            if not u or time.time() - u["at"] > UNDO_S:
+                raise ActionError("undo_expired")
+            pid = u["pid"]
+            self.db["persons"][pid] = u["person"]
+            for m, mm in u["assign"].items():
+                self.db["assign"].setdefault(m, {}).update(mm)
+            for m, r in u["reject"].items():
+                if r:
+                    self.db["reject"].setdefault(m, {})[pid] = r
+            self._save_db()
+            if not u["keep_tag"]:
+                self._tag("add", set(u["hashes"]), "persona:" + u["person"]["name"])
+            return self.person_obj(pid)
+
+    def set_cover(self, pid, face):
+        with self.lock:
+            p = self._person(pid)
+            m = self.src.model
+            f = self._check([face], m)[0]
+            if self.assign(m).get(f) != pid:
+                raise ActionError("face_not_found", id=face)
+            p.setdefault("cover", {})[m] = f
+            self._save_db()
+            return self.person_obj(pid)
+
+    def seed(self, tag_users: Callable[[str], List[str]]):
+        """Model switch: persons with no faces for the active model get the single face of items carrying their tag."""
+        with self.lock:
+            m = self.src.model
+            asg = self.assign(m)
+            have = set(asg.values())
+            ch = False
+            for pid, p in self.db["persons"].items():
+                if pid in have:
+                    continue
+                for h in tag_users("persona:" + p["name"]):
+                    if self.src.item(h, m)["n"] == 1:
+                        f = fid(h, 0, m)
+                        if f not in asg:
+                            asg[f] = pid; ch = True
+                            p.setdefault("seeded", {})[m] = True
+            if ch:
+                self._save_db()
+
+    def for_items(self, hashes) -> Dict[str, Any]:
+        m = self.src.model
+        out = {}
+        for h in hashes[:200]:
+            it = self.src.item(h, m)
+            out[h] = {"w": it["w"], "h": it["h"], "model": m, "faces": [self.face_obj(fid(h, i, m), m) for i in range(it["n"])]}
+        cmap = self._cl_of(m)
+        for v in out.values():
+            for f in v["faces"]:
+                if f["id"] in cmap:
+                    f["cluster"] = cmap[f["id"]]
+        return out
+
+
+# ---------------------------------------------------------------------------------------------------- host glue
+_F: Optional[Faces] = None
+
+
+class _ImagelibTagger:
+    def add(self, hashes, tag):
+        from . import imagelib
+        imagelib.set_tags(hashes, add=[tag])
+
+    def remove(self, hashes, tag):
+        from . import imagelib
+        imagelib.set_tags(hashes, remove=[tag])
+
+    def rename(self, old, new):
+        from . import imagelib, storage
+        try:
+            imagelib.rename_tag(old, new)
+        except storage.StorageError:
+            pass
+
+
+def service() -> Faces:
+    global _F
+    if _F is None:
+        from . import similarity
+        svc = similarity.service()
+        def save(upd):   # merge face_* keys into similarity/settings.json without restarting the sim worker
+            with svc.lock:
+                try:
+                    with open(svc.settings_path, encoding="utf-8-sig") as fh:
+                        cur = json.load(fh)
+                except Exception:
+                    cur = {}
+                cur.update(upd)
+                _atomic_json(svc.settings_path, cur)
+            return cur
+        _F = Faces(os.path.dirname(svc.dir), FaceSource(svc.index), settings=svc.settings, save_settings=save,
+                   tagger=_ImagelibTagger())
+    return _F
+
+
+def _svc() -> Faces:
+    f = service()
+    if not f._mat(f.src.model)["ids"] and not f.db["persons"]:
+        pass
+    return f
+
+
+def _need_index(f: Faces):
+    if not f._mat(f.src.model)["ids"]:
+        raise ActionError("faces_no_index")
+
+
+def _meta(ctx, out, req):
+    if req.get("meta", True) and getattr(ctx, "_payload", None):
+        out.update(ctx.payload())
+    return out
+
+
+def _model_seed(f: Faces):
+    if f.db["persons"] and f._cache.get("seeded") != f.src.model:
+        try:
+            from . import imagelib
+            f.seed(imagelib.tag_users)
+        except Exception:
+            pass
+        f._cache["seeded"] = f.src.model
+
+
+A = _actions.action
+
+
+@A("face_status", fast=True, doc="Personas: clustering progress / counts (fast)")
+def a_status(req, ctx):
+    return {"ok": True, "faces": _svc().status()}
+
+
+@A("face_cluster_run", doc="Group unnamed faces {full?, threshold?} (incremental)")
+def a_run(req, ctx):
+    f = _svc(); _need_index(f); _model_seed(f)
+    if f.st.get("running"):
+        raise ActionError("faces_busy")
+    th = req.get("threshold")
+    t = threading.Thread(target=f.run, kwargs={"full": bool(req.get("full")), "threshold": float(th) if th is not None else None}, daemon=True)
+    t.start(); t.join(float(req.get("wait", 2.0)))
+    return {"ok": True, "job": True, "faces": f.status()}
+
+
+@A("face_clusters", fast=True, doc="Unnamed face clusters {offset, limit, min_size, faces_per}")
+def a_clusters(req, ctx):
+    f = _svc()
+    return {"ok": True, **f.list_clusters(int(req.get("offset", 0)), int(req.get("limit", 50)), req.get("min_size"), int(req.get("faces_per", 6)))}
+
+
+@A("face_cluster_faces", fast=True, doc="Faces of one cluster {cluster, offset, limit}")
+def a_cluster_faces(req, ctx):
+    f = _svc(); m = f.src.model
+    c = f.clusters(m)["clusters"].get(str(req.get("cluster") or ""))
+    if not c:
+        raise ActionError("cluster_not_found", cluster=req.get("cluster"))
+    o, l = int(req.get("offset", 0)), int(req.get("limit", 200))
+    return {"ok": True, "total": len(c["faces"]), "faces": [f.face_obj(x, m) for x in c["faces"][o:o + l]]}
+
+
+@A("face_for_item", fast=True, doc="Faces (bbox, person, cluster) of {hash} or {hashes}")
+def a_for_item(req, ctx):
+    hs = req.get("hashes") if isinstance(req.get("hashes"), list) else [req.get("hash")]
+    return {"ok": True, "items": _svc().for_items([str(h) for h in hs if h])}
+
+
+@A("face_assign", doc="Clusters / faces -> person {person|name, clusters, faces}; adds persona:<Name>")
+def a_assign(req, ctx):
+    f = _svc()
+    r = f.assign_faces(req.get("person"), req.get("name"), req.get("clusters") or [], req.get("faces") or [])
+    return _meta(ctx, {**ctx.ok("face_assigned", n=r["assigned"], name=r["person"]["name"]), **r}, req)
+
+
+@A("face_confirm", doc="'Is this also X?' yes {person, faces}")
+def a_confirm(req, ctx):
+    if not req.get("person"):
+        raise ActionError("person_not_found", person="")
+    return a_assign({**req, "name": None, "clusters": []}, ctx)
+
+
+@A("face_unassign", doc="Remove faces from their person {faces}")
+def a_unassign(req, ctx):
+    r = _svc().unassign(req.get("faces") or [])
+    return _meta(ctx, {"ok": True, **r}, req)
+
+
+@A("face_suggest", fast=True, doc="Unassigned faces like a person {person, method nn|centroid, limit, threshold}")
+def a_suggest(req, ctx):
+    f = _svc(); _model_seed(f)
+    th = req.get("threshold")
+    return {"ok": True, "person": req.get("person"), "faces": f.suggest(req.get("person"), req.get("method") or "nn", int(req.get("limit", 40)),
+                                                                         float(th) if th is not None else None)}
+
+
+@A("face_reject", doc="'Is this also X?' no {person, faces}; never suggested again")
+def a_reject(req, ctx):
+    return {"ok": True, "n": _svc().reject(req.get("person"), req.get("faces") or [])}
+
+
+@A("face_unreject", doc="Forget rejections {person, faces?}")
+def a_unreject(req, ctx):
+    fs = req.get("faces")
+    return {"ok": True, "n": _svc().unreject(req.get("person"), fs if isinstance(fs, list) else None)}
+
+
+@A("face_merge", doc="Merge {clusters:[..]} or {persons:[..], into}")
+def a_merge(req, ctx):
+    f = _svc()
+    if req.get("persons"):
+        into = req.get("into") or req["persons"][0]
+        return _meta(ctx, {"ok": True, "person": f.merge_persons(list(req["persons"]), into)}, req)
+    return {"ok": True, "cluster": f.merge_clusters(list(req.get("clusters") or []))}
+
+
+@A("face_split", doc="Move faces to a new cluster {cluster|person, faces}")
+def a_split(req, ctx):
+    return _meta(ctx, {"ok": True, "cluster": _svc().split(req.get("faces") or [], req.get("cluster"), req.get("person"))}, req)
+
+
+@A("person_list", fast=True, doc="Personas {offset, limit}")
+def a_plist(req, ctx):
+    f = _svc(); _model_seed(f)
+    ps = sorted((f.person_obj(k) for k in f.db["persons"]), key=lambda p: (-p["count"], _fold(p["name"])))
+    o, l = int(req.get("offset", 0)), int(req.get("limit", 200))
+    return {"ok": True, "total": len(ps), "persons": ps[o:o + l]}
+
+
+@A("person_get", fast=True, doc="One person and its faces {person, offset, limit}")
+def a_pget(req, ctx):
+    f = _svc(); m = f.src.model
+    p = f.person_obj(req.get("person"))
+    fs = [x for x, q in f.assign(m).items() if q == p["id"]]
+    o, l = int(req.get("offset", 0)), int(req.get("limit", 200))
+    return {"ok": True, "person": p, "total": len(fs), "faces": [f.face_obj(x, m) for x in fs[o:o + l]]}
+
+
+@A("person_rename", doc="Rename a person and its persona: tag {person, name}")
+def a_prename(req, ctx):
+    return _meta(ctx, {"ok": True, "person": _svc().rename(req.get("person"), req.get("name"))}, req)
+
+
+@A("person_delete", doc="Forget a person (never deletes images) {person, keep_tag} -> undo_token")
+def a_pdel(req, ctx):
+    return _meta(ctx, {"ok": True, "undo_token": _svc().delete(req.get("person"), bool(req.get("keep_tag")))}, req)
+
+
+@A("person_undo_delete", doc="Restore a deleted person {undo_token}")
+def a_pundo(req, ctx):
+    return _meta(ctx, {"ok": True, "person": _svc().undo_delete(req.get("undo_token"))}, req)
+
+
+@A("person_set_cover", doc="Cover face of a person {person, face}")
+def a_pcover(req, ctx):
+    return {"ok": True, "person": _svc().set_cover(req.get("person"), req.get("face"))}
+
+
+@A("face_settings", doc="Read / update face clustering settings {settings}")
+def a_settings(req, ctx):
+    f = _svc()
+    s = req.get("settings")
+    if isinstance(s, dict) and f._save_settings:
+        f._save_settings({k: v for k, v in s.items() if k in DEFAULTS})
+    return {"ok": True, "settings": f.settings()}

@@ -881,7 +881,7 @@ def build_js(settings=None):
             script = reader.read() + "\n" + script
     except OSError:
         pass
-    for extra in ("reflib_similarity.js",):   # 1.8.4: explorer extension modules (window.referenceLibrary.extend)
+    for extra in ("reflib_similarity.js", "reflib_faces.js"):   # 1.10.0: + Personas   # 1.8.4: explorer extension modules (window.referenceLibrary.extend)
         try:
             with open(os.path.join(_PLUGIN_DIR, extra), "r", encoding="utf-8") as reader:
                 script += "\n" + reader.read()
