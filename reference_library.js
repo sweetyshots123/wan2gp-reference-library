@@ -732,6 +732,8 @@
             f_cols: "Collections", f_all: "All", f_none: "Unassigned", f_tags: "Tags", f_folders: "Folders", no_tags: "no tags yet",
             n_images: "{n} files", n_shown: "{shown} of {n}", more: "Show more",
             empty: "Nothing matches these filters.", empty_lib: "The library is empty. Import some files or add a folder.",
+            q_loading: "Loading…", q_slow: "Still waiting for the server… If WanGP was restarted or updated, this tab is out of date: reload the page.", q_failed: "The server did not answer ({e}). If WanGP was restarted or updated, reload the page.", reload_page: "Reload page",
+            stale_tab: "This tab runs Reference Library {mine}, the server runs {srv}: reload the page (F5) to get the current version.",
             in_n: "In {n} collection(s): {names}", in_none: "Not in any collection", from_folder: "From a watched folder",
             sel_n: "{n} selected", sel_visible: "Select shown", sel_clear: "Clear selection",
             tag_ph: "Add tag…", tag_add: "Add tag", tag_remove: "Remove “{tag}” from the selected images",
@@ -829,6 +831,8 @@
             f_cols: "Colecciones", f_all: "Todas", f_none: "Sin colección", f_tags: "Etiquetas", f_folders: "Carpetas", no_tags: "aún no hay etiquetas",
             n_images: "{n} archivos", n_shown: "{shown} de {n}", more: "Mostrar más",
             empty: "Nada coincide con estos filtros.", empty_lib: "La librería está vacía. Importa archivos o añade una carpeta.",
+            q_loading: "Cargando…", q_slow: "Esperando al servidor… Si WanGP se reinició o se actualizó, esta pestaña está desfasada: recarga la página.", q_failed: "El servidor no respondió ({e}). Si WanGP se reinició o se actualizó, recarga la página.", reload_page: "Recargar página",
+            stale_tab: "Esta pestaña ejecuta Reference Library {mine} y el servidor {srv}: recarga la página (F5) para usar la versión actual.",
             in_n: "En {n} colección(es): {names}", in_none: "No está en ninguna colección", from_folder: "De una carpeta vigilada",
             sel_n: "{n} seleccionadas", sel_visible: "Seleccionar las mostradas", sel_clear: "Quitar selección",
             tag_ph: "Añadir etiqueta…", tag_add: "Añadir etiqueta", tag_remove: "Quitar «{tag}» de las imágenes elegidas",
@@ -916,6 +920,11 @@
         chains[ch] = p.catch(() => {});
         return p;
     }
+    let staleShown = false;
+    function staleTab(srv) {   // 1.8.4: an old tab (loaded before an update/restart) silently runs old code
+        if (staleShown) return; staleShown = true;
+        toast(it("stale_tab", { mine: VERSION, srv }), "error", [{ label: it("reload_page"), onClick: () => location.reload() }], 600000);
+    }
     function filterSnap() {
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
@@ -963,6 +972,7 @@
         const q = ilib.q;
         if (sig !== q.sig) {
             ilib.q = { sig, total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: q.gen + 1, ready: false };
+            ilib.qSince = Date.now(); ilib.qErr = null;
             if (ilib.sel.all && ilib.sel.all.sig !== sig) ilib.sel.clear();   // "all matching" belongs to its filter
             ilib.anchorIdx = -1;
             if (!keepScroll) { const m = ilib.root && ilib.root.querySelector(".reflib-ib-main"); if (m) m.scrollTop = 0; }
@@ -979,11 +989,13 @@
             q.loading.add(pg);
             const sig = q.sig, gen = q.gen;
             sendIlib({ action: "query", f: filterSnap(), offset: pg * PAGE, limit: PAGE, tz: tz() }).then(r => {
-                if (!r || r.ok === false || !r.page) { if (ilib.q.gen === gen) ilib.q.loading.delete(pg); return; }
+                if (r && r.v && r.v !== VERSION) staleTab(r.v);
+                if (!r || r.ok === false || !r.page) { if (ilib.q.gen === gen) { ilib.q.loading.delete(pg); ilib.qErr = (r && r.error) || "error"; renderGrid(); } return; }
+                ilib.qErr = null;
                 const relayout = applyPage(r.page, sig, gen);
                 if (relayout) renderGrid(); else renderWindow();
                 renderFooter();
-            }).catch(() => { if (ilib.q.gen === gen) ilib.q.loading.delete(pg); });
+            }).catch((e) => { if (ilib.q.gen === gen) { ilib.q.loading.delete(pg); ilib.qErr = String((e && e.message) || e); renderGrid(); } });
         }
     }
     function loadedItems() { return ilib.q.items.filter(Boolean); }
@@ -1175,6 +1187,13 @@
             vg.style.height = "auto";
             vg.innerHTML = `<div class="reflib-ib-empty">${esc(ilib.f.used ? it("used_empty") : ilib.f.recent ? it("recent_empty") : (d && d.total ? it("empty") : it("empty_lib")))}</div>`;
             ilib.cards = new Map(); ilib.heads = new Map();
+        } else if (!q.ready && !q.total) {   // 1.8.4: never a blank grid while the first page is on its way (or failed)
+            const slow = ilib.qSince && Date.now() - ilib.qSince > 8000;
+            const msg = ilib.qErr ? it("q_failed", { e: ilib.qErr }) : slow ? it("q_slow") : it("q_loading");
+            vg.style.height = "auto";
+            vg.innerHTML = `<div class="reflib-ib-empty reflib-ib-loading${ilib.qErr ? " err" : ""}">${esc(msg)}${ilib.qErr || slow ? ` <button type="button" class="reflib-ib-btn" data-act="reloadpage">${esc(it("reload_page"))}</button>` : ""}</div>`;
+            ilib.cards = new Map(); ilib.heads = new Map();
+            clearTimeout(ilib.qSlowT); if (!ilib.qErr && !slow) ilib.qSlowT = setTimeout(() => { if (!ilib.q.ready) renderGrid(); }, 8200);
         } else if (vg.querySelector(".reflib-ib-empty")) { vg.innerHTML = ""; ilib.cards = new Map(); ilib.heads = new Map(); }
         ilib.lay = computeLayout();
         if (q.total) vg.style.height = ilib.lay.height + "px";
@@ -3119,6 +3138,7 @@
             addFolder();
         }
         else if (act === "hist") histOpen();
+        else if (act === "reloadpage") location.reload();
         else if (act === "navback") navGo(nav.i - 1);
         else if (act === "navfwd") navGo(nav.i + 1);
         else if (act === "navlist") navMenu();

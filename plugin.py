@@ -52,6 +52,8 @@ except Exception:
 from . import api as _public_api
 from .reflib_core.autotag import AutoTagService
 from .reflib_core import taxonomy as _taxonomy
+from .reflib_core import actions_all as _actions_all  # noqa: F401  (registers every shared action)
+from .reflib_core import actions as _actions
 
 
 def _wgp_busy() -> bool:
@@ -78,7 +80,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.7.4"
+PLUGIN_VERSION = "1.8.6"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -150,6 +152,12 @@ TEXT = {
         "undo": "Undo",
         "restored_col": "Collection \"{name}\" restored",
         "undo_expired": "Can't undo any more",
+        "tag_renamed": "Tag \"{old}\" renamed to \"{tag}\" ({n} items)",
+        "tag_merged": "\"{old}\" merged into \"{tag}\" ({n} items)",
+        "tag_deleted": "Tag \"{tag}\" removed from {n} items",
+        "tag_restored": "Tag \"{tag}\" restored on {n} items",
+        "tag_not_found": "Tag \"{tag}\" not found",
+        "tag_need_name": "Write the new tag name",
         "bar_pick": "Collection",
         "bar_apply": "Apply",
         "bar_save_as": "Save as…",
@@ -412,6 +420,12 @@ TEXT = {
         "undo": "Deshacer",
         "restored_col": "Colección \"{name}\" restaurada",
         "undo_expired": "Ya no se puede deshacer",
+        "tag_renamed": "Etiqueta «{old}» renombrada a «{tag}» ({n} elementos)",
+        "tag_merged": "«{old}» fusionada en «{tag}» ({n} elementos)",
+        "tag_deleted": "Etiqueta «{tag}» quitada de {n} elementos",
+        "tag_restored": "Etiqueta «{tag}» restaurada en {n} elementos",
+        "tag_not_found": "No existe la etiqueta «{tag}»",
+        "tag_need_name": "Escribe el nuevo nombre de la etiqueta",
         "bar_pick": "Colección",
         "bar_apply": "Aplicar",
         "bar_save_as": "Guardar como…",
@@ -786,6 +800,40 @@ def _serve_url(path):
 
 
 imagelib.SERVE_URL = _serve_url
+
+
+def _register_media_hooks():
+    """1.8.5: vouch for the files this library streams (the same _SERVED set Gradio may serve) so Vidosser can save a
+    frame of a video in a watched folder outside WanGP's folders; the frame comes back here as a new pool item, visible
+    in the WanGP tab and the Galería. Process-wide registry, no import between plugins."""
+    import sys
+    import types
+    from pathlib import Path
+    m = sys.modules.get("wan2gp_media_hooks")
+    if m is None:
+        m = types.ModuleType("wan2gp_media_hooks")
+        m.video_sources = []
+        sys.modules["wan2gp_media_hooks"] = m
+
+    def owns(real):
+        try:
+            return Path(real).resolve() in _SERVED
+        except Exception:
+            return False
+
+    def save_frame(source, data, name):
+        try:
+            res = imagelib.pool_add_bytes(data, name, source="frame")
+        except storage.StorageError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "name": res["name"], "hash": res["hash"], "path": "Media Library / " + res["name"],
+                "created": res["created"]}
+
+    m.video_sources[:] = [p for p in m.video_sources if p.get("name") != "reference-library"]
+    m.video_sources.append({"name": "reference-library", "owns": owns, "save_frame": save_frame})
+
+
+_register_media_hooks()
 
 
 def _prewarm_catalog():
@@ -1249,6 +1297,12 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if name not in WATCH_VIDEOS + AUDIO_TARGETS + ("video_mask",):
                 self.request_component(name)
         self.add_custom_js(build_js())
+        try:   # Galería: a second web UI on the same data (/reflib/gallery/)
+            from . import gallery_routes as _gr
+            _gr.set_plugin(self)
+            _gr.install()
+        except Exception:
+            traceback.print_exc()
         self.add_tab(tab_id="reference_library", label="Reference Library", component_constructor=self.create_ui)
 
     def post_ui_setup(self, components):
@@ -2715,39 +2769,16 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             a, b, c, d = refresh_mgr(col["id"], browser_lang)
             return a, b, c, d, out["message"], json.dumps(out, ensure_ascii=False)
 
-        def on_rename(cid, name, browser_lang=""):
+        def on_rename(cid, name, browser_lang=""):   # 1.8.5: shared action col_rename
             lang2 = self._lang(browser_lang)
-            name = (name or "").strip()
-            if not cid:
-                out = self._err(lang2, "no_collection")
-                a, b, c, d = refresh_mgr(cid, browser_lang)
-                return a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False)
-            if not name:
-                out = self._err(lang2, "need_name")
-                a, b, c, d = refresh_mgr(cid, browser_lang)
-                return a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                col = storage.rename_collection(cid, name, fallback=tr(lang2, "default_name"))
-                out = self._ok(lang2, "renamed_col", name=col["name"], _cid=col["id"])
-            except storage.StorageError:
-                out = self._err(lang2, "not_found")
-                col = None
-            a, b, c, d = refresh_mgr((col or {}).get("id") or cid, browser_lang)
+            out = _actions.call("col_rename", {"collection_id": cid, "name": name, "fallback": tr(lang2, "default_name"), "meta": False}, self._actx(lang2))
+            a, b, c, d = refresh_mgr((out.get("collection") or {}).get("id") or cid, browser_lang)
             return a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False)
 
-        def on_dup(cid, browser_lang=""):
+        def on_dup(cid, browser_lang=""):   # 1.8.5: shared action col_duplicate
             lang2 = self._lang(browser_lang)
-            if not cid:
-                out = self._err(lang2, "no_collection")
-                a, b, c, d = refresh_mgr("", browser_lang)
-                return a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                col = storage.duplicate_collection(cid, copy_suffix=tr(lang2, "copy_suffix"))
-                out = self._ok(lang2, "duplicated_col", name=col["name"], _cid=col["id"])
-            except storage.StorageError:
-                out = self._err(lang2, "not_found")
-                col = None
-            a, b, c, d = refresh_mgr((col or {}).get("id"), browser_lang)
+            out = _actions.call("col_duplicate", {"collection_id": cid, "copy_suffix": tr(lang2, "copy_suffix"), "meta": False}, self._actx(lang2))
+            a, b, c, d = refresh_mgr((out.get("collection") or {}).get("id") or ("" if not out.get("ok") else cid), browser_lang)
             return a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False)
 
         def on_delete(cid, armed_raw, browser_lang=""):
@@ -2767,17 +2798,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 return (a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False),
                         gr.update(value=tr(lang2, "mgr_delete"), variant="secondary"), json.dumps({"cid": None, "until": 0}))
             if armed.get("cid") == cid and now < float(armed.get("until") or 0):
-                try:
-                    col = storage.soft_delete(cid)
-                    token = uuid.uuid4().hex
-                    self._delete_undo[token] = {"id": col["id"], "name": col["name"], "time": now}
-                    out = {
-                        **self._ok(lang2, "deleted_undo_toast", name=col["name"], _cid=col["id"]),
-                        "undo_token": token,
-                        "undo_label": tr(lang2, "undo"),
-                    }
-                except storage.StorageError:
-                    out = self._err(lang2, "not_found")
+                out = _actions.call("col_delete", {"collection_id": cid, "meta": False}, self._actx(lang2))   # 1.8.5 shared
                 a, b, c, d = refresh_mgr("", browser_lang)
                 return (a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False),
                         gr.update(value=tr(lang2, "mgr_delete"), variant="secondary"), json.dumps({"cid": None, "until": 0}))
@@ -2799,31 +2820,15 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 return gr.skip(), gr.skip()
             return gr.update(value=tr(lang2, "mgr_delete"), variant="secondary"), json.dumps({"cid": None, "until": 0})
 
-        def on_undo_delete(raw, browser_lang=""):
+        def on_undo_delete(raw, browser_lang=""):   # 1.8.5: shared action col_undo_delete
             lang2 = self._lang(browser_lang)
             try:
                 req = json.loads(raw or "{}")
             except Exception:
                 req = {}
             token = req.get("undo_token") if isinstance(req, dict) else None
-            info = self._delete_undo.pop(token, None) if token else None
-            if not info or info.get("kind") == "video" or time.time() - info["time"] > 5 * 60:
-                out = self._err(lang2, "undo_expired")
-                a, b, c, d = refresh_mgr("", browser_lang)
-                return a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                col = storage.restore_soft_deleted(info["id"])
-                merged = imagestore.merge_after_restore(col["id"])
-                if merged:
-                    col = storage.get_collection(col["id"])
-                    out = self._ok(lang2, "restored_merged", name=col["name"], added=merged["added"], merged=merged["merged_name"],
-                                   _cid=col["id"])
-                else:
-                    out = self._ok(lang2, "restored_col", name=col["name"], _cid=col["id"])
-                a, b, c, d = refresh_mgr(col["id"], browser_lang)
-            except storage.StorageError:
-                out = self._err(lang2, "undo_expired")
-                a, b, c, d = refresh_mgr("", browser_lang)
+            out = _actions.call("col_undo_delete", {"undo_token": token, "meta": False}, self._actx(lang2))
+            a, b, c, d = refresh_mgr((out.get("collection") or {}).get("id") or "", browser_lang)
             return a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False)
 
         def on_add(cid, files, browser_lang=""):
@@ -2881,14 +2886,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not cid:
                 out = self._err(lang2, "no_collection")
             else:
-                try:
-                    col = storage.move_image(cid, sel, delta)
-                    out = {"ok": True, "message": "", "changed": {"reason": "images", "id": cid}}
-                    # keep selection on moved item
-                    new_sel = sel + delta if 0 <= sel + delta < len(col["images"]) else sel
-                except storage.StorageError as e:
-                    out = {"ok": False, "error": storage_error_text(lang2, e)}
-                    new_sel = sel
+                out = _actions.call("col_move", {"collection_id": cid, "index": sel, "delta": delta}, self._actx(lang2))   # 1.8.5 shared
+                new_sel = out.get("index", sel)
             a, b, c, d = refresh_mgr(cid, browser_lang)
             return a, b, c, gr.update(value=new_sel if out.get("ok") else -1), out.get("message") or out.get("error") or "", json.dumps(out, ensure_ascii=False)
 
@@ -2898,11 +2897,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not cid:
                 out = self._err(lang2, "no_collection")
             else:
-                try:
-                    storage.set_cover(cid, sel)
-                    out = self._ok(lang2, "cover_set", _cid=cid)
-                except storage.StorageError as e:
-                    out = {"ok": False, "error": storage_error_text(lang2, e)}
+                out = _actions.call("col_cover", {"collection_id": cid, "index": sel, "meta": False}, self._actx(lang2))   # 1.8.5 shared
             a, b, c, d = refresh_mgr(cid, browser_lang)
             return a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False)
 
@@ -3717,6 +3712,10 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             return {"ok": False, "error": tr(lang, "virt_bad", e=msg)}
         return self._err(lang, "bad_request")
 
+    def _actx(self, lang, request=None):
+        """Context for shared actions: this plugin's texts, meta payload and undo store."""
+        return _actions.Ctx(lang, ok=self._ok, err=self._err, payload=self._ilib_payload, state=self._delete_undo, request=request)
+
     def ilib(self, raw, request: gr.Request = None):
         try:
             req = json.loads(raw or "{}")
@@ -3740,6 +3739,16 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 return json.dumps({"ok": True, "id": req.get("id"), "path": p})
             except Exception as e:
                 return json.dumps({"ok": False, "id": req.get("id"), "error": str(e)[:200]})
+        if _actions.has(action):   # 1.8.5: shared actions (reflib_core/actions.py) - same code for both UIs
+            try:
+                if isinstance(req.get("selection"), dict):
+                    req["hashes"] = imagelib.resolve_selection(req["selection"])
+                out = _actions.call(action, req, self._actx(lang, request))
+            except Exception as e:
+                print(f"[Reference Library] action {action} failed: {e}")
+                out = {"ok": False, "error": str(e)[:300]}
+            out["id"] = req.get("id")
+            return json.dumps(out, ensure_ascii=False)
         hashes = req.get("hashes") if isinstance(req.get("hashes"), list) else []
         try:
             if isinstance(req.get("selection"), dict):   # 1.4.4: "all N matching" without sending N hashes
@@ -3750,7 +3759,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out["page"] = imagelib.query(req.get("f"), 0, int(req.get("limit") or 120), int(req.get("tz") or 0))
             elif action == "query":
                 out = {"ok": True, "page": imagelib.query(req.get("f"), int(req.get("offset") or 0), int(req.get("limit") or 120),
-                                                         int(req.get("tz") or 0))}
+                                                         int(req.get("tz") or 0), sections=bool(req.get("sections")))}
+                out["v"] = PLUGIN_VERSION   # 1.8.4: lets an old open tab notice the server runs another version (reload)
                 if req.get("meta"):
                     out.update({k: v for k, v in self._ilib_payload(lang).items() if k != "ok"})
             elif action == "ui_pref":   # 1.5.5 browser UI preferences
@@ -4045,7 +4055,10 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not isinstance(e, (storage.StorageError, ValueError)):
                 traceback.print_exc()
             out = {"ok": False, "error": storage_error_text(lang, e)}
-        if action not in self.ILIB_READONLY:
+        # 1.8.3: tag / add / remove patch the cached catalog themselves (the index-file key still catches any other
+        # change), so they skip the blanket rebuild that made a favorite take seconds at 15k items
+        incremental = action in ("tag", "remove_from") or (action == "add" and req.get("new_name") is None)
+        if action not in self.ILIB_READONLY and not (incremental and out.get("ok")):
             imagelib.invalidate()
         out["id"] = req.get("id")
         out["ilib"] = True
@@ -4200,7 +4213,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek"):
+        if not isinstance(req, dict) or (req.get("action") not in _actions.FAST and req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek")):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

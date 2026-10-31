@@ -56,6 +56,7 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Borrar de la librería** works for every entry. For files from watched folders, videos/audios linked from disk and entries whose file is gone, it removes only the library entry: metadata, tags, thumbnails/cache, collection copies, masks and virtual copies. **The file on disk is not deleted or moved.** The confirmation lists what goes and offers Undo. The folder remembers the removed files, so rescans skip them: **⊘n** on the folder in the tree → **Mostrar excluidos** → **Restaurar** / **Restaurar todos**.
 - **Video Library videos (1.7.3)** (the **🎬 Librería de vídeos** folder: webcam recordings, crops, resizes, saved inputs) can be deleted here too. Their Video Library entry goes, with its masks and virtual copies (listed in the confirmation); **Undo** brings everything back for 15 min. After that the video file goes to the **Recycle Bin** (never a permanent delete; if it can't be recycled it is kept).
 - **Collection preview (1.7.3):** in the collection dropdown above the inputs, hover a collection to see up to 8 of its thumbnails (+N), its name and count; empty collections say *Empty*. Clicks and keyboard work as usual.
+- **Galería (1.8.0):** a second, very visual web UI on the same library at `http://localhost:7860/reflib/gallery/` (models, tags, favorites, zoom viewer, full editing). Favorites are the tag `favorita`, models the tags `modelo:<Name>`. See `gallery/README.md`.
 - **Sorting (1.7.4):** the sort menu in the explorer header orders any folder, collection, filter or search by date modified (newest first by default, or oldest first) or by file name (A–Z / Z–A). It is remembered for the session; set the default in the plugin settings (**Default sort order in the media browser**).
 - **Navigation history (1.7.4):** ◀ / ▶ in the explorer header (or Alt+←/Alt+→, or the mouse back/forward buttons) step back and forward through the places you visited (folder, collection, filters, search, sort, scroll). 🕘 lists the last 50 states; click one to jump. Kept for the browser session.
 - Toasts (including the Undo toasts) appear **top-right**, above the explorer, its dialogs and the full-screen viewer, so they no longer cover the action bar.
@@ -393,6 +394,36 @@ Ids are `uuid4().hex` and survive renames. Reference Library consumes `sys.modul
 
 `window.referenceLibrary.version` gives the plugin version.
 
+## Shared action API (1.8.6)
+
+Every library feature both UIs use is an **action**: a function in `reflib_core` registered with
+`@actions.action(name, fast=False, doc="")` and listed once in `reflib_core/actions_all.py`. The WanGP tab calls it
+through `plugin.ilib`, the Galería through `POST /reflib/api` (`{"action": name, ...}`), so a feature is written once and
+neither UI holds business logic. `actions_list` returns the registry (names, docs, fast flag).
+
+- Request: JSON with `action`, the item `hashes` (or `selection: {f, ...}` for "all matching"), `lang`, and the action's
+  fields. Add `meta: false` to skip the library meta block in the reply.
+- Reply: `{ok, message, toast, kind?, ...}`; writes also carry the meta block (collections, tags, counts, `rev`) so a UI
+  updates incrementally. Errors: `{ok: false, error}` from `ActionError(key, **params)` (translated by the host).
+- Undo: destructive actions return `undo_token`; the matching undo action takes `{undo_token}` (5 min).
+- Long jobs: a `*_start` / `*_status` / `*_cancel` trio (see `resize_*`, `at_*`); status actions are `fast`.
+
+| Action | Fields | Notes |
+|---|---|---|
+| `tag_info` | `tag` | items carrying it (fast) |
+| `tag_rename` | `tag`, `to` | everywhere; merges into `to` if it exists. Personas are tags `persona:<name>` |
+| `tag_merge` | `tags[]`, `to` | |
+| `tag_delete` / `tag_undo_delete` | `tag` / `undo_token` | removes it from every item |
+| `col_rename`, `col_duplicate`, `col_cover`, `col_move` | `collection_id`, ... | |
+| `col_delete` / `col_undo_delete` | `collection_id` / `undo_token` | soft delete |
+| `forget_plan` → `forget` / `forget_undo` | `hashes`, `delete_files` | "Borrar de la librería": watched-folder / Video Library entries; `delete_files` sends files to the Recycle Bin. Both UIs show the same dialog from the plan |
+| `delete_all` / `undo_remove` | `hashes` / `token` | the library's own copies (collections + pool) |
+| `at_*`, `mask_*`, `hist_*`, `virt_*`, `resize_*`, `folder_*` | | auto-tagger, masks, history, virtual copies, resize, folders |
+
+Cross-plugin media (1.8.5): the library registers in the process-wide `wan2gp_media_hooks.video_sources` registry
+(no import between plugins) the files it streams, so Vidosser 1.4.25+ can capture frames / GIFs of watched-folder videos;
+frames come back as new library items (`imagelib.pool_add_bytes`).
+
 ## Data layout
 
 ```
@@ -444,3 +475,6 @@ Works alongside [Dragger](https://github.com/sweetyshots123/wan2gp-dragger), [Vi
 ## Hard rule
 
 Plugin only — never modifies Wan2GP core files.
+
+## Galería 1.8.2
+Ver gallery/README.md y CHANGELOG.md: Personas, búsqueda universal, índice lateral, botones de tipo, reproductor Vidosser, favoritos incrementales. Requiere reiniciar WanGP.

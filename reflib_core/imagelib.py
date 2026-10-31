@@ -310,8 +310,127 @@ def set_tags(hashes: Iterable[str], add: Iterable[str] = (), remove: Iterable[st
                 else:
                     tags.pop(h, None)
         if changed:
+            with _cat_lock:
+                fresh = _cat["data"] is not None and _cat["key"] == _index_key()   # cache current before this write
             save_tags(tags)
+            if fresh:
+                _patch_tags({h: tags.get(h, []) for h in hashes})
         return {"changed": changed, "add": add_tags, "remove": sorted(rem)}
+
+
+def tag_users(tag: str) -> List[str]:
+    """1.8.6: hashes that carry `tag` (case/accent-insensitive)."""
+    f = _fold(clean_tag(tag))
+    return [h for h, lst in load_tags().items() if any(_fold(t) == f for t in lst)]
+
+
+def rename_tag(old: str, new: str) -> Dict[str, Any]:
+    """1.8.6: rename a manual tag everywhere. If `new` already exists (any spelling) the two are merged into that
+    spelling. Order on each item is kept. Returns {changed, tag, merged}. Raises storage.StorageError."""
+    of, nt = _fold(clean_tag(old)), clean_tag(new)
+    if not of or not nt:
+        raise storage.StorageError("no tags given")
+    with storage._lock:
+        tags = load_tags()
+        known = {}
+        for lst in tags.values():
+            for t in lst:
+                known.setdefault(_fold(t), t)
+        if of not in known:
+            raise storage.StorageError("tag not found")
+        merged = _fold(nt) in known and _fold(nt) != of
+        target = known[_fold(nt)] if merged else nt
+        changed: Dict[str, List[str]] = {}
+        for h, cur in tags.items():
+            if not any(_fold(t) in (of, _fold(nt)) for t in cur):
+                continue
+            new_l, seen = [], set()
+            for t in cur:
+                t2 = target if _fold(t) in (of, _fold(nt)) else t
+                if _fold(t2) not in seen:
+                    seen.add(_fold(t2)); new_l.append(t2)
+            if new_l != cur:
+                changed[h] = new_l
+        if changed:
+            with _cat_lock:
+                fresh = _cat["data"] is not None and _cat["key"] == _index_key()
+            tags.update(changed)
+            save_tags(tags)
+            if fresh:
+                _patch_tags(changed)
+        return {"changed": len(changed), "tag": target, "merged": merged, "hashes": sorted(changed)}
+
+
+def delete_tag(tag: str) -> Dict[str, Any]:
+    """1.8.6: remove a manual tag from every item. Returns {changed, tag, hashes} (hashes = the undo set: re-adding the
+    tag to them with set_tags restores it)."""
+    t = clean_tag(tag)
+    users = tag_users(t)
+    if not users:
+        raise storage.StorageError("tag not found")
+    spelled = next((x for x in load_tags().get(users[0], []) if _fold(x) == _fold(t)), t)
+    res = set_tags(users, remove=[t])
+    return {"changed": res["changed"], "tag": spelled, "hashes": users}
+
+
+def _patch_tags(new_tags: Dict[str, List[str]]) -> None:
+    """1.8.2: a tag-only edit (favorite, persona, tags) patches the cached catalog in place instead of rebuilding it from
+    every index (seconds at 15k items): only the changed items, the tag counts and the revision. Falls back to the full
+    rebuild on any surprise."""
+    try:
+        with _cat_lock:
+            data = _cat["data"]
+            if data is None:
+                return
+            for h, t in new_tags.items():
+                i = data["by_hash"].get(h)
+                if i is not None:
+                    i["tags"] = tuple(t)
+                    i["tagf"] = frozenset(_fold(x) for x in t)
+            tagc: Dict[str, Dict[str, Any]] = {}
+            for i in data["items"]:
+                for tg in i["tags"]:
+                    tagc.setdefault(_fold(tg), {"tag": tg, "count": 0})["count"] += 1
+            data["tags"] = sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"])))
+            _cat["rev"] = _cat.get("rev", 0) + 1
+            data["rev"] = _cat["rev"]
+            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[])
+    except Exception as e:
+        print(f"[Reference Library] tag patch failed, full rebuild: {e}")
+        invalidate()
+
+
+def _cat_fresh() -> bool:
+    with _cat_lock:
+        return _cat["data"] is not None and _cat["key"] == _index_key()
+
+
+def _patch_cols(changes: Dict[str, Any]) -> None:
+    """1.8.3: {hash: (collection_id, added, now_in_pool)} after an add/remove, patched into the cached catalog (membership,
+    collection counts, unassigned count, revision) instead of a full rebuild. Any item whose cached path no longer exists
+    (its copy was the one removed) triggers the full rebuild."""
+    try:
+        with _cat_lock:
+            data = _cat["data"]
+            if data is None:
+                return
+            for h, (cid, add, pooled) in changes.items():
+                i = data["by_hash"].get(h)
+                if i is None:
+                    raise KeyError(h)
+                i["colids"] = frozenset(i["colids"] | {cid}) if add else frozenset(i["colids"] - {cid})
+                if pooled:
+                    i["in_pool"] = True
+                if not add and not os.path.isfile(i["path"]):
+                    raise FileNotFoundError(i["path"])
+            data["collections"] = [{"id": c["id"], "name": c["name"], "count": len(c["images"])} for c in storage.list_collections()]
+            data["n_unassigned"] = sum(1 for i in data["items"] if i["in_pool"] and not i["colids"])
+            _cat["rev"] = _cat.get("rev", 0) + 1
+            data["rev"] = _cat["rev"]
+            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[])
+    except Exception as e:
+        print(f"[Reference Library] collection patch -> full rebuild: {e!r}")
+        invalidate()
 
 
 def add_to_collection(hashes: Iterable[str], collection_id: str) -> Dict[str, Any]:
@@ -323,7 +442,8 @@ def add_to_collection(hashes: Iterable[str], collection_id: str) -> Dict[str, An
     with storage._lock:
         target = storage.get_collection(collection_id)
         have = {i.get("hash") for i in target["images"]}
-        by_hash = {img["hash"]: img for img in list_images()}
+        fresh = _cat_fresh()   # 1.8.3: reuse the cached catalog instead of re-listing every index (15k items)
+        by_hash = _cat["data"]["by_hash"] if fresh else {img["hash"]: img for img in list_images()}
         sources, skipped = [], 0
         for h in hashes:
             img = by_hash.get(h)
@@ -334,6 +454,9 @@ def add_to_collection(hashes: Iterable[str], collection_id: str) -> Dict[str, An
         col = storage.add_images(collection_id, sources) if sources else target
         added = col.get("_added", 0) if sources else 0
         skipped += len(sources) - added
+        if fresh and added:
+            now = {i.get("hash") for i in col.get("images", [])}
+            _patch_cols({h: (col["id"], True, None) for h in hashes if h in now and h not in have})
         return {"collection": col, "added": added, "skipped": skipped}
 
 
@@ -750,6 +873,29 @@ def pool_add(src: str, name: Optional[str] = None, source: str = "import", skip_
                       "added": time.time(), "source": str(source or "")[:40]})
         _save_pool(items)
         return {"hash": digest, "created": True, "where": "pool"}
+
+
+def pool_add_bytes(data: bytes, name: str, source: str = "frame") -> Dict[str, Any]:
+    """1.8.5: add in-memory media (e.g. a frame captured from a library video) to the pool, the same way an import does.
+    Returns pool_add's dict plus "name". Raises storage.StorageError."""
+    import tempfile
+    base = os.path.basename(str(name or "frame.png"))[:120] or "frame.png"
+    if os.path.splitext(base)[1].lower() not in MEDIA_EXTS:
+        raise storage.StorageError("not an image file")
+    tmpdir = tempfile.mkdtemp(prefix="reflib_frame_")
+    tmp = os.path.join(tmpdir, base)
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(bytes(data))
+        res = pool_add(tmp, name=base, source=source)
+    finally:
+        try:
+            os.remove(tmp)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+    invalidate()
+    return {**res, "name": base}
 
 
 def keep_orphans(items, exclude_cid=None) -> None:
@@ -1473,8 +1619,13 @@ def remove_from_collection(hashes: Iterable[str], collection_id: str) -> Dict[st
         token = uuid.uuid4().hex
         stash = os.path.join(_undo_root(), token)
         pool_before = {it["hash"] for it in load_pool()}
+        fresh = _cat_fresh()   # 1.8.3: before the write
         rec = _stash_and_remove(storage.load_index(), hashes, {col["id"]}, stash, keep_orphans_in_pool=True)
         rec.update({"kind": "remove", "pool": [], "pooled_new": sorted({it["hash"] for it in load_pool()} - pool_before)})
+        if fresh:   # 1.8.3: patch just these items (falls back to the full rebuild when an item's file moved)
+            gone = {r["entry"]["hash"] for r in rec["items"]}
+            pooled = set(rec["pooled_new"])
+            _patch_cols({h: (col["id"], False, h in pooled) for h in gone})
         os.makedirs(stash, exist_ok=True)
         storage._atomic_write_json(os.path.join(stash, "undo.json"), rec)
         return {"token": token, "removed": len({r["entry"]["hash"] for r in rec["items"]}), "collection": col}
@@ -1716,6 +1867,7 @@ def _clean_filter(f) -> Dict[str, Any]:
     return {"cols": sorted(str(c) for c in (f.get("cols") or []))[:200], "none": bool(f.get("none")),
             "tags": sorted({_fold(clean_tag(t)) for t in (f.get("tags") or []) if clean_tag(t)})[:50],
             "q": _fold(str(f.get("q") or "").strip())[:200],
+            "qall": [t for t in dict.fromkeys(_fold(str(t)).strip()[:100] for t in (f.get("qall") or []) if str(t).strip())][:10],   # 1.8.2: every term must match (Galería search)
             "atags": sorted({str(t) for t in (f.get("atags") or [])})[:50],
             "xtags": sorted({str(t) for t in (f.get("xtags") or [])})[:50],
             "jst": str(f.get("jst") or "") if str(f.get("jst") or "") in JST_KEYS else "",
@@ -1724,6 +1876,8 @@ def _clean_filter(f) -> Dict[str, Any]:
             "sub": f.get("sub", True) is not False, "recent": bool(f.get("recent")) and not f.get("used"), "used": bool(f.get("used")),
             "recent_pages": max(1, min(100, int(f.get("recent_pages") or 1))),
             "kind": str(f.get("kind") or "") if str(f.get("kind") or "") in KINDS + ("mask",) else "",
+            # 1.8.2 Galería: several types at once (photo / video / audio toggles); a mask counts as a video
+            "kinds": sorted({str(k) for k in (f.get("kinds") or []) if str(k) in KINDS}) if isinstance(f.get("kinds"), list) else [],
             "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing")),
             "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else ""}
 
@@ -1797,7 +1951,9 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     if q:   # 1.5.5: images whose folder path (watched folder or any subfolder) contains the term
         qnodes = {k for k, fs in (cat.get("nodefold") or {}).items() if q in fs}
 
+    qall = [(t, {k for k, fs in (cat.get("nodefold") or {}).items() if t in fs}) for t in f.get("qall") or []]   # 1.8.2
     kind = f["kind"]
+    kinds = f.get("kinds") or []
     mcount = cat.get("mcount") or {} if f.get("hasmask") else None
 
     def ok(i):
@@ -1805,6 +1961,8 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
             if not i["mask"]:
                 return False
         elif kind and i["kind"] != kind:
+            return False
+        if kinds and ("video" if i["kind"] == "mask" else i["kind"]) not in kinds:
             return False
         if f.get("missing") and not i.get("missing"):   # 1.7.1 "archivo no encontrado"
             return False
@@ -1834,6 +1992,9 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
                 return False
         for tset in bterms:
             if not (tset & i["auto"]):
+                return False
+        for t, tn in qall:   # 1.8.2: AND of free-text terms: name / path, a manual tag, or a folder on the path
+            if not (t in i["fold"] or any(t in x for x in i["tagf"]) or (tn and any(l in tn for l in i["locs"]))):
                 return False
         return not q or q in i["fold"] or bool(qnodes and any(l in qnodes for l in i["locs"])) or any(q in t for t in i["tagf"]) or bool(qx and qx & i["auto"])
     out = [i for i in cat["items"] if ok(i)]
@@ -1897,7 +2058,7 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
 
 def kind_counts(f) -> Dict[str, int]:
     """1.6.0: images / videos / audio over the current filter without its type (the Todo/Fotos/Vídeos/Audios chips)."""
-    base = dict(f if isinstance(f, dict) else {}, kind="")
+    base = dict(f if isinstance(f, dict) else {}, kind="", kinds=[])
     c = {k: 0 for k in KINDS + ("mask",)}
     for i in filtered(base)["items"]:
         c[i["kind"]] += 1
@@ -1924,7 +2085,30 @@ def _groups(items: List[Dict[str, Any]], tz_min: int, now: float, ts=None) -> Li
     return out
 
 
-def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0) -> Dict[str, Any]:
+def _section_runs(items, sort: str = "", tz_min: int = 0) -> List[List[Any]]:
+    """1.8.2 (Galería scrubber): consecutive runs [[key, count], ...] of the list in its order. Date sorts: "YYYY-MM" of
+    the item date ("added": the import date, else the file's modification time) in the browser's time zone; name sorts:
+    the first letter A-Z of the file name (accents folded), "#" for digits / symbols; other orders: no runs."""
+    runs: List[List[Any]] = []
+    off = int(tz_min or 0) * 60
+    if sort.startswith("date"):
+        key = lambda i: time.strftime("%Y-%m", time.gmtime((i["added"] or 0) + off)) if (i["added"] or 0) > 0 else "0000-00"
+    elif sort.startswith("name"):
+        def key(i):
+            c = _fold(i["name"] or "")[:1].upper()
+            return c if "A" <= c <= "Z" else "#"
+    else:
+        return runs
+    for i in items:
+        k = key(i)
+        if runs and runs[-1][0] == k:
+            runs[-1][1] += 1
+        else:
+            runs.append([k, 1])
+    return runs
+
+
+def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0, sections: bool = False) -> Dict[str, Any]:
     """One page of the filtered list: {total, offset, items: [light], recent_more, groups (recent only)}."""
     now = time.time()
     res = filtered(f, now)
@@ -1943,6 +2127,8 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0) -> Dict[str, An
         if st:
             x["js"] = st
     out = {"total": len(items), "offset": offset, "items": page, "recent_more": res["recent_more"], "jrev": jrev, "kinds": kind_counts(f)}
+    if sections:
+        out["sections"] = _section_runs(items, str((f or {}).get("sort") or "") if isinstance(f, dict) else "", tz_min)
     if res["recent"]:
         out["groups"] = _groups(items, tz_min, now)
     if res.get("used"):

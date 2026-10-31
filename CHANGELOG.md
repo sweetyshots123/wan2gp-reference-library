@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.8.6
+
+- **Acciones compartidas** (`reflib_core/actions.py`, registro + despacho en `ilib`): la gestión de colecciones (renombrar, duplicar, borrar con Deshacer, portada, mover) sale de los callbacks de Gradio a `reflib_core/colactions.py`; la pestaña de WanGP y la Galería llaman al mismo código. Documentado en el README («Shared action API»).
+- **Etiquetas y personas: renombrar, fusionar y borrar en toda la librería** (`imagelib.rename_tag` / `delete_tag`, acciones `tag_rename`, `tag_merge`, `tag_delete` + `tag_undo_delete`). Solo etiquetas manuales; actualización incremental del catálogo.
+- **Galería:** clic en una etiqueta o persona del panel de edición = renombrarla en toda la librería (la × sigue quitándola del elemento). En Etiquetas, Personas y Colecciones, botón «Gestionar»: lista con recuentos, renombrar, borrar (con confirmación y Deshacer) y fusionar varias. Interfaz optimista.
+- **Galería · Borrar:** la misma confirmación que la Media Library (plan del servidor `forget_plan`: qué se quita, carpetas, Video Library, «También borrar el archivo del disco» → Papelera) y las mismas acciones (`forget` / `delete_all`) para uno o varios elementos. Ya no sale «Las imágenes de carpetas vigiladas nunca se borran del disco (1 omitidas)».
+- Requiere reiniciar WanGP.
+
+## 1.8.5
+
+- **Arreglado: capturar un fotograma con Vidosser de un vídeo de una carpeta vigilada** (fuera de las carpetas de WanGP) fallaba con «vídeo fuera de las carpetas de WanGP». La librería avala ante Vidosser exactamente los archivos que ya sirve al navegador (registro `wan2gp_media_hooks`, sin importar un plugin desde otro; Vidosser sigue comprobando la ruta real y solo lee). Requiere Vidosser 1.4.25.
+- El fotograma capturado de un vídeo de la librería se guarda **en la propia Media Library** (como una importación, `imagelib.pool_add_bytes`), así aparece en la pestaña de WanGP y en la Galería.
+- Recortes/clips desde la Galería ya usaban las copias virtuales de la librería (por hash), sin este problema.
+- Requiere reiniciar WanGP.
+
+## 1.8.4
+
+- **Explorador clásico: nunca más una cuadrícula en blanco.** Mientras llega la primera página de una consulta se ve «Cargando…»; si tarda más de 8 s aparece un aviso con botón «Recargar página», y si el servidor no responde o devuelve un error se muestra el motivo en vez de dejar la rejilla vacía.
+- **Detección de pestaña desfasada.** Las respuestas de `query` incluyen la versión del servidor (`v`); si la pestaña ejecuta otra versión del JS (abierta antes de actualizar o reiniciar WanGP) aparece un aviso «recarga la página (F5)». Causa del fallo de 1.8.3 con la carpeta «img»: la pestaña seguía con el JS de 1.7.3 (sin menú de orden ni historial) contra un servidor más nuevo; la 1.7.4 estaba instalada y no se perdió nada.
+- **Galería · interruptores foto/vídeo/audio:** clic = solo ese tipo (otro clic sobre el mismo = todos); Ctrl/Cmd+clic = añadir o quitar para combinar. Con todos los tipos no aparece ninguno pulsado; con filtro solo los activos. Tooltips «Clic: solo fotos · Ctrl+clic: combinar».
+- Requiere reiniciar WanGP (y recargar la pestaña del navegador).
+
+## 1.8.3
+
+- **Galería · Carpetas** (nuevo, `#/carpetas`): árbol plegable a la izquierda con exactamente las mismas carpetas vigiladas que la Media Library (y las pseudo-carpetas Vídeos / Copias virtuales / Máscaras, sin acciones). Contadores por nodo, subcarpetas que se despliegan bajo demanda, clic = filtra la cuadrícula (índice lateral, tipos, orden y buscador siguen funcionando), migas de pan.
+- Mismas acciones y mismo backend que la Media Library: añadir carpeta (pegar ruta o «Explorar…» con el explorador del servidor, «Incluir subcarpetas»), volver a escanear una / todas, activar/desactivar subcarpetas, ver y restaurar elementos quitados (⊘n), dejar de vigilar (con confirmación), pausa/seguir del indexado con progreso. Los cambios se ven en ambas interfaces.
+- Añadir/quitar de una colección es instantáneo: en la Galería la casilla cambia al momento (se deshace si falla) y el servidor actualiza en caché solo los elementos afectados (pertenencia, recuentos de colecciones y "sin colección") en vez de reconstruir el catálogo completo; "Añadir" reutiliza el catálogo en caché en vez de volver a listar todos los índices. Formato de datos sin cambios (mismo index.json y copias). Si el archivo de un elemento se movió al quitarlo, se reconstruye como antes.
+- El servidor ya no invalida el catálogo entero tras "tag", "add" y "remove_from" (lo hacía tras cualquier escritura y anulaba el parche incremental de 1.8.2 de favoritos y etiquetas).
+- Requiere reiniciar WanGP.
+
+## 1.8.2 — 2026-10-31
+
+- **Galería: "Modelos" is now "Personas".** New tag prefix `persona:<Nombre>`; existing `modelo:` tags keep working everywhere (nothing is migrated or lost; adding a person reuses the existing spelling). Old links `#/modelos` / `#/modelo/…` still open. / **Galería: «Modelos» pasa a «Personas»** (`persona:<Nombre>`; las etiquetas `modelo:` siguen valiendo).
+- **Galería: universal search** in the header (any page, `/`): grouped suggestions as you type (Personas, Colecciones, Etiquetas, Archivos) with thumbnail and count, a live preview of matching media, keyboard navigation; Enter opens a results page. Each pick becomes a filter chip; all chips combine with AND. Accent/case-insensitive. Server: new filter key `qall` (every term must match a name, manual tag or folder). / **Búsqueda universal** con sugerencias agrupadas, vista previa en vivo y filtros combinados (Y).
+- **Galería: virtualized grid with a right-edge scrubber** (iCloud / Google Photos style) that follows the sort: date = years/months with month headers; name = A–Z (# = digits/symbols) with letter headers. Hover label, click/drag to jump, current position highlighted. Smooth at 15k+ items (only visible rows are rendered, pages are fetched on demand). Date used: the import date into the library, else the file modification time (no EXIF). Server: `query` accepts `sections: true` and returns `page.sections`. / **Rejilla virtual con índice lateral** por fecha o por letra.
+- **Galería: photo / video / audio toggles** replace the type menu (several at once; all on = everything; counts; audio disabled with "Sin audio" when the library has none). Server: new filter key `kinds` (list). / **Interruptores foto / vídeo / audio** en lugar del menú de tipo.
+- **Galería: videos play with Vidosser** when that plugin (≥ 1.4.24) is installed: the viewer loads `/vidosser/vidosser.js` from the installed plugin at runtime (no copy: edits to Vidosser apply here on reload); without it, a normal `<video>`. Vidosser's keys win on a video (e.g. `l`, `e`); arrows, F, Esc still work. Clip in/out editing unchanged. / **Los vídeos usan Vidosser** si está instalado.
+- **Faster favorites / tags / personas.** The heart flips instantly (optimistic, reverted on error), and a tag-only edit now patches the cached catalog in place instead of rebuilding it from every index. / **Favoritas y etiquetas al instante.**
+- **Restart WanGP after updating** (server changes). / **Reinicia WanGP tras actualizar.**
+
+## 1.8.1 — 2026-10-31
+
+- **Galería viewer: click to zoom, wheel to browse.** Click the photo to zoom toward that point, click again to fit (dragging to pan never counts as a click). Mouse wheel without zoom = previous/next photo (one notch = one photo; trackpad inertia is damped); while zoomed the wheel pans. Ctrl+wheel zooms (the browser page zoom is blocked inside the viewer). Double-click no longer zooms. On-screen hint updated. / **Visor de la Galería: clic para zoom, rueda para pasar fotos.** Clic = zoom hacia ese punto, otro clic = ajustar (arrastrar no cuenta como clic); rueda sin zoom = anterior/siguiente; con zoom la rueda desplaza; Ctrl+rueda = zoom. Solo cambia `gallery/dist`: basta con recargar la página, sin reiniciar WanGP.
+
+## 1.8.0 — 2026-10-31
+
+- **New: Galería, a second, very visual web UI on the same library** at `http://localhost:7860/reflib/gallery/` (served by WanGP itself, behind its login when enabled). Big masonry grids, browse by **model/person** and by **tag**, collections, favorites, videos; a full-screen viewer with zoom (wheel / pinch / double-click / + − 0), pan, keyboard navigation (← → F E Esc, Space), a filmstrip; an edit panel (favorite, models, tags, collections, virtual copies with crop and video/audio in-out, send to Video Library, remove from the library / delete everywhere with undo); bulk edits on a selection; drag-and-drop import. / **Nuevo: Galería**, una segunda interfaz web muy visual sobre la misma librería, en `/reflib/gallery/`: rejillas grandes, modelos, etiquetas, colecciones, favoritas, vídeos, visor a pantalla completa con zoom y teclado, panel de edición completo, edición en bloque e importación arrastrando.
+- **Same data, both ways, no sync step.** The Galería calls the exact same handler as the Media browser (`POST /reflib/api` → the plugin's `ilib` actions), so whatever changes in one is what the other reads next; the Galería also reloads by itself when the library revision changes. / **Mismos datos en los dos sentidos**, sin sincronización: la Galería usa el mismo manejador que el explorador.
+- **No schema change.** A favorite is the manual tag `favorita`; a model/person is a manual tag `modelo:<Nombre>`. Both are ordinary tags, so the Media browser shows, filters and edits them as usual. / **Sin cambios de esquema**: favorita = etiqueta `favorita`; modelo = etiqueta `modelo:<Nombre>`.
+- New file `gallery_routes.py` (routes, installed like WanGP's own Deepy routes) and `gallery/` (Vite + React + TypeScript source, prebuilt in `gallery/dist`). Dev server: `cd gallery && npm install && npm run dev` → `http://localhost:5174/reflib/gallery/` (proxies to WanGP on 7860; `WANGP=http://host:port` to change). **Restart WanGP after updating.**
+
 ## 1.7.4 — 2026-10-31
 
 - **New: sort the explorer.** A sort menu in the explorer header orders whatever is shown — any folder you click, watched folders, collections, filters, search and the photo/video/audio type filter — by **date modified, newest first** (default), **oldest first**, **file name A–Z** or **Z–A** (natural order: img2 before img10; accents ignored). The choice is remembered for the browser session. / **Nuevo: ordenar el explorador.** Un menú en la cabecera ordena lo que se muestra (carpetas, colecciones, filtros, búsqueda y filtro de tipo) por fecha de modificación (más recientes primero, por defecto, o más antiguos primero) o por nombre de archivo (A–Z / Z–A). Se recuerda durante la sesión.
