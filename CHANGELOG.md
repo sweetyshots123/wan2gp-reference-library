@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.11.0
+- Galería: la ayuda del visor («Clic: zoom · Rueda…») aparece ~3 s solo la primera vez que se abre el visor y se desvanece; después no vuelve a salir nunca (localStorage). No bloquea clics.
 - Duplicados (`reflib_core/dupes.py`, acciones `dup_scan` / `dup_status` / `dup_groups` / `dup_resolve`, ver DUPES_API.md): idénticos por hash de contenido (mismo elemento en varios archivos) y casi iguales por pHash + dHash con umbral ajustable (0–16). Análisis en segundo plano, incremental, con caché `dupes.json`.
 - Por copia: ancho×alto, MP, tamaño, formato, fecha, carpeta/ruta y origen IA/Real; sugerencia: conservar la de mayor resolución y, a igualdad, mayor tamaño.
 - Resolver usa el flujo de borrado existente (forget_plan → diálogo / delete_all); copias idénticas del mismo elemento → Papelera + re‑escaneo, siempre queda una. Opcional: pasar etiquetas/favoritos/personas a la copia conservada.

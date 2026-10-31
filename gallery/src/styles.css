@@ -86,7 +86,8 @@ main { padding:18px 22px 80px; }
 @media (max-width:900px) { .top { flex-wrap:wrap; } .top nav { order:3; width:100%; overflow:auto; } .vside, .bulk { width:100%; } .vside { position:absolute; bottom:70px; max-height:50vh; } }
 
 .stage:not(.zoomed):not(.cropping) img { cursor:zoom-in; } .stage.zoomed img { cursor:zoom-out; } .stage.zoomed:active img { cursor:grabbing; }
-.vhint { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); background:rgba(0,0,0,.55); color:#ddd; font-size:12px; padding:4px 10px; border-radius:12px; pointer-events:none; opacity:.75; white-space:nowrap; }
+.vhint { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); background:rgba(0,0,0,.55); color:#ddd; font-size:12px; padding:4px 10px; border-radius:12px; pointer-events:none; opacity:.75; white-space:nowrap; transition:opacity .6s; }
+.vhint.off { opacity:0; }
 /* 1.8.2: tipo de medio (interruptores) */
 .kinds { display:inline-flex; gap:2px; background:var(--bg3); border:1px solid #33333d; border-radius:10px; padding:2px; }
 .kt { display:inline-flex; align-items:center; gap:4px; border:0; background:none; padding:4px 8px; border-radius:8px; color:var(--mut); }

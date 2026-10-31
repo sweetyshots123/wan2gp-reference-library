@@ -300,7 +300,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           {src && kind === "audio" && <audio ref={media as any} src={src} controls autoPlay />}
           {ve && rectStyle && <div className="croprect" style={rectStyle} />}
           {vid && kind !== "image" && kind !== "audio" && <span className="vidbadge" title="Reproductor Vidosser (cargado desde el plugin instalado)">Vidosser {vid}</span>}
-          {!ve && kind === "image" && <div className="vhint">{z.s > 1 ? "Clic: ajustar · Arrastrar o rueda: mover · Ctrl+rueda: zoom" : "Clic: zoom · Rueda: anterior / siguiente · Ctrl+rueda: zoom"}</div>}
+          {!ve && kind === "image" && <ViewerHint>{z.s > 1 ? "Clic: ajustar · Arrastrar o rueda: mover · Ctrl+rueda: zoom" : "Clic: zoom · Rueda: anterior / siguiente · Ctrl+rueda: zoom"}</ViewerHint>}
           {!ve && index > 0 && <button className="nav prev" onClick={() => go(-1)} title="Anterior (← o rueda arriba)">‹</button>}
           {!ve && index < total - 1 && <button className="nav next" onClick={() => go(1)} title="Siguiente (→ o rueda abajo)">›</button>}
         </div>
@@ -381,4 +381,16 @@ function useVidosser() {
 function vidKeys(): Set<string> {
   const k = (window as any).vidosser?.settings?.keys || {};
   return new Set(Object.values(k).filter((x) => typeof x === "string").map((x: any) => x.toLowerCase()));
+}
+
+// 1.11.0: la ayuda del visor se ve ~3 s solo la primera vez (localStorage, para siempre) y se desvanece; nunca bloquea clics.
+function ViewerHint({ children }: { children: import("react").ReactNode }) {
+  const [on, setOn] = useState(() => { try { return !localStorage.getItem("gal.vhint"); } catch { return false; } });
+  useEffect(() => {
+    if (!on) return;
+    try { localStorage.setItem("gal.vhint", "1"); } catch { /* */ }
+    const t = setTimeout(() => setOn(false), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  return <div className={"vhint" + (on ? "" : " off")} aria-hidden={!on}>{children}</div>;
 }
