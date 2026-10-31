@@ -180,6 +180,15 @@ class Face:
         else:
             self.rec = ort.InferenceSession(rec, providers=_providers(ort, gpu))
             self._rec_in = self.rec.get_inputs()[0].name
+            # buffalo_l ArcFace accepts dynamic input batch but declares a fixed output [1,512];
+            # feeding B>1 works (ORT warns) but is slower on CPU than serial B=1. Only batch when
+            # both ends look dynamic (None / symbolic).
+            out0 = self.rec.get_outputs()[0].shape
+            in0 = self.rec.get_inputs()[0].shape
+            self._batch_ok = (
+                bool(out0) and not isinstance(out0[0], int)
+                and bool(in0) and not isinstance(in0[0], int)
+            )
 
     def _align(self, img, f):
         import cv2
@@ -197,8 +206,8 @@ class Face:
         return np.asarray(self.rec.run(None, {self._rec_in: x.transpose(2, 0, 1)[None]})[0]).reshape(-1)
 
     def embed_batch(self, img, faces):
-        """Batched ArcFace/AdaFace/glintr (dynamic batch). SFace stays serial (OpenCV API)."""
-        if self.kind == "sface" or not faces:
+        """Batched ArcFace/AdaFace/glintr when the ONNX graph is truly dynamic-batch. SFace serial."""
+        if self.kind == "sface" or not faces or not getattr(self, "_batch_ok", False):
             return [self.embed(img, f) for f in faces]
         if len(faces) == 1:
             return [self.embed(img, faces[0])]
