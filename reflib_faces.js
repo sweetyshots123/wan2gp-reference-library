@@ -12,14 +12,16 @@
               running: "Grouping {d} / {t}…", name_ph: "Name…", name: "Name", merge: "Merge selected ({n})", back: "← Back", faces_n: "{n} faces", items_n: "{n} photos",
               ask: "Is this also {x}?", yes: "Yes", no: "No", no_more: "No more suggestions for {x}.", rename: "Rename", del: "Forget person", del_ok: "Forgot {x} (photos are kept)", undo: "Undo",
               cover: "Use as cover", remove: "Not {x}", split: "Move to new group ({n})", assign_to: "Assign selected to…", show: "Show photos", merge_into: "Merge into…",
-              assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", rv_title: "Suggestions for {x} ({n})", rv_tip: "Click to discard · Shift+click discards a range", rv_cut: "Discard below", rv_ok: "Add the remaining {n}", rv_none: "Discard all", rv_none_q: "Discard all {n} suggestions? They will not be suggested again.", rv_done: "{a} added · {r} discarded", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
+              assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", rv_title: "Suggestions for {x} ({n})", rv_tip: "Click to discard · Shift+click discards a range", rv_cut: "Discard below", rv_ok: "Add the remaining {n}", rv_none: "Discard all", rv_none_q: "Discard all {n} suggestions? They will not be suggested again.", rv_done: "{a} added · {r} discarded", rv_open: "Open photo", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
+              video: "Video", at: "at {t}", seg: "{a}–{b}", open_at: "Open at {t}",
               close: "Close", del_q: "Forget {x}? Photos are never deleted; the persona tag is removed.", rename_q: "New name for {x}:", err: "Error: {e}", unknown: "?" },
         es: { open: "Personas", title: "Personas", persons: "Personas", none_p: "Aún no hay nadie con nombre: pon nombre a un grupo de caras de abajo.", clusters: "Caras sin nombre", none_c: "Aún no hay grupos. Calcula las caras (Buscar similares → Calcular caras) y pulsa «Agrupar caras».", none_c2: "Ahora no hay grupos sin nombre de {m} o más caras ({a} caras sueltas). Pulsa «Reagrupar todo» o baja la «Exigencia al agrupar».",
               run: "Agrupar caras", regroup: "Reagrupar todo", thr: "Exigencia al agrupar", thr_tip: "Más alto = solo se juntan caras muy parecidas (más grupos, más pequeños)", status: "{f} caras · {u} sin nombre · {c} grupos · {p} personas",
               running: "Agrupando {d} / {t}…", name_ph: "Nombre…", name: "Nombrar", merge: "Unir seleccionados ({n})", back: "← Volver", faces_n: "{n} caras", items_n: "{n} fotos",
               ask: "¿Es esta también {x}?", yes: "Sí", no: "No", no_more: "No hay más sugerencias para {x}.", rename: "Renombrar", del: "Olvidar persona", del_ok: "{x} olvidada (las fotos se conservan)", undo: "Deshacer",
               cover: "Usar como portada", remove: "No es {x}", split: "Mover a un grupo nuevo ({n})", assign_to: "Asignar seleccionadas a…", show: "Ver fotos", merge_into: "Unir con…",
-              assigned: "{n} caras asignadas a {x}", rejected: "Vale, no es {x}", rv_title: "Sugerencias para {x} ({n})", rv_tip: "Clic para descartar · Mayús+clic descarta un rango", rv_cut: "Descartar por debajo de", rv_ok: "Añadir las {n} restantes", rv_none: "Descartar todas", rv_none_q: "¿Descartar las {n} sugerencias? No se volverán a sugerir.", rv_done: "{a} añadida(s) · {r} descartada(s)", faces_btn: "Caras", faces_tip: "Muestra las caras detectadas y de quién son", no_index: "Aún no hay caras calculadas con este modelo de caras.",
+              assigned: "{n} caras asignadas a {x}", rejected: "Vale, no es {x}", rv_title: "Sugerencias para {x} ({n})", rv_tip: "Clic para descartar · Mayús+clic descarta un rango", rv_cut: "Descartar por debajo de", rv_ok: "Añadir las {n} restantes", rv_none: "Descartar todas", rv_none_q: "¿Descartar las {n} sugerencias? No se volverán a sugerir.", rv_done: "{a} añadida(s) · {r} descartada(s)", rv_open: "Abrir foto", faces_btn: "Caras", faces_tip: "Muestra las caras detectadas y de quién son", no_index: "Aún no hay caras calculadas con este modelo de caras.",
+              video: "Vídeo", at: "en {t}", seg: "{a}–{b}", open_at: "Abrir en {t}",
               close: "Cerrar", del_q: "¿Olvidar a {x}? Las fotos nunca se borran; se quita la etiqueta de persona.", rename_q: "Nuevo nombre para {x}:", err: "Error: {e}", unknown: "?" },
     };
     const lang = () => (RL.lang && RL.lang() === "es" ? "es" : "en");
@@ -36,9 +38,28 @@
     }
     const thumb = h => thumbs.get(h) || (ilib().thumbs && ilib().thumbs.get(h)) || "";
     // a face tile: thumbnail cropped to the bbox (CSS background), or the whole thumbnail when no bbox is known
+    const fmtT = (t) => { const s = Math.max(0, Number(t) || 0), m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + String(r).padStart(2, "0"); };
+    function faceChips(f) {
+        if ((f.kind || "image") !== "video") return "";
+        const chips = [];
+        chips.push(`<span class="reflib-fc-vbadge" title="${esc(ft("video"))}">🎬</span>`);
+        const segs = f.segments || [];
+        if (segs.length) segs.slice(0, 4).forEach(sg => {
+            const a = fmtT(sg.t0), b = fmtT(sg.t1);
+            chips.push(`<span class="reflib-fc-tchip" data-f="openat" data-hash="${esc(f.hash)}" data-t="${sg.t0}" title="${esc(ft("open_at", { t: a }))}">${a === b ? a : ft("seg", { a, b })}</span>`);
+        });
+        else if (f.best_t != null || f.t != null) {
+            const t = f.best_t != null ? f.best_t : f.t;
+            chips.push(`<span class="reflib-fc-tchip" data-f="openat" data-hash="${esc(f.hash)}" data-t="${t}" title="${esc(ft("open_at", { t: fmtT(t) }))}">${fmtT(t)}</span>`);
+        }
+        return `<div class="reflib-fc-vmeta">${chips.join("")}</div>`;
+    }
     function face(f, cls = "", extra = "") {
         // shared face_thumb route (same URL as the Galería): server-side square crop, whole image when no bbox
-        if (f.thumb) return `<div class="reflib-fc-face ${cls}" data-face="${esc(f.id)}" style="background-image:url('${esc(f.thumb)}')" ${extra}></div>`;
+        const meta = faceChips(f);
+        const open = (f.kind === "video" && (f.best_t != null || f.t != null))
+            ? ` data-f="openat" data-hash="${esc(f.hash)}" data-t="${f.best_t != null ? f.best_t : f.t}"` : "";
+        if (f.thumb) return `<div class="reflib-fc-face ${cls}${f.kind === "video" ? " vid" : ""}" data-face="${esc(f.id)}" style="background-image:url('${esc(f.thumb)}')" ${extra}${open}>${meta}</div>`;
         const src = thumb(f.hash);
         let st = `background-image:url('${src}')`;
         if (f.bbox && f.w && f.h) {
@@ -46,7 +67,25 @@
             const bx = Math.max(0, Math.min(f.w - s, cx - s / 2)), by = Math.max(0, Math.min(f.h - s, cy - s / 2));
             st += `;background-size:${(f.w / s) * 100}% ${(f.h / s) * 100}%;background-position:${f.w > s ? (bx / (f.w - s)) * 100 : 50}% ${f.h > s ? (by / (f.h - s)) * 100 : 50}%`;
         }
-        return `<div class="reflib-fc-face ${cls}" data-face="${esc(f.id)}" style="${st}" ${extra}></div>`;
+        return `<div class="reflib-fc-face ${cls}${f.kind === "video" ? " vid" : ""}" data-face="${esc(f.id)}" style="${st}" ${extra}${open}>${meta}</div>`;
+    }
+    function openAt(hash, t) {
+        try {
+            const st = RL.ilibState && RL.ilibState();
+            if (!st || !st.root) return;
+            const card = st.root.querySelector(`.reflib-ib-card[data-hash="${CSS.escape(hash)}"]`);
+            if (card) card.click();
+            const seek = () => {
+                const v = st.root.querySelector(".reflib-ib-pvmedia");
+                if (v && typeof v.currentTime === "number") {
+                    const go = () => { try { v.currentTime = Math.max(0, Number(t) || 0); } catch (e) {} };
+                    if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
+                    return true;
+                }
+                return false;
+            };
+            if (!seek()) { let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }
+        } catch (e) {}
     }
     let pan = null, view = { p: "home" }, sel = new Set(), poll = null;
     function open() {
@@ -57,6 +96,16 @@
         (root || document.body).appendChild(pan);
         pan.addEventListener("click", onClick);
         pan.addEventListener("change", onChange);
+        pan.addEventListener("keydown", e => {   // 1.12.0: suggestions grid keys (shared ReflibReview.key: arrows, x/Delete, Enter)
+            const c = e.target.closest && e.target.closest(".reflib-fc-rvc");
+            if (!c || !rv) return;
+            const cells = [...c.parentNode.children], i = cells.indexOf(c), cols = Math.max(1, cells.filter(x => x.offsetTop === cells[0].offsetTop).length);
+            const r = window.ReflibReview.key(e.key, i, cells.length, cols); if (!r) return;
+            e.preventDefault(); e.stopPropagation();
+            if (r.op === "move") cells[r.to].focus();
+            else if (r.op === "discard") { window.ReflibReview.click(rv, rv.faces.map(f => f.id), i, { shift: e.shiftKey }); rv.focus = i; draw(); }
+            else if (r.op === "confirm") review(false);
+        });
         pan.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset.f === "nm") { e.preventDefault(); nameCluster(e.target.dataset.c, e.target.value); } });
         view = { p: "home" }; sel.clear(); draw();
     }
@@ -116,6 +165,7 @@
           ${sel.size ? `<div class="reflib-fc-bar"><button type="button" class="reflib-ib-btn" data-f="unassign">${esc(ft("remove", { x: p.name }))} (${sel.size})</button><button type="button" class="reflib-ib-btn" data-f="split">${esc(ft("split", { n: sel.size }))}</button>${sel.size === 1 ? `<button type="button" class="reflib-ib-btn" data-f="cover">${esc(ft("cover"))}</button>` : ""}</div>` : ""}
           <div class="reflib-fc-grid">${r.faces.map(f => face(f, (sel.has(f.id) ? "on " : "") + (p.cover && p.cover.id === f.id ? "cov" : ""), `data-f="fsel"`)).join("")}</div>`, p.name);
         view.name = p.name; view.tag = p.tag;
+        if (rv && rv.focus != null) { const c = pan.querySelectorAll(".reflib-fc-rvc")[rv.focus]; if (c) c.focus(); rv.focus = null; }
     }
     let rv = null;
     function reviewHtml(p) {
@@ -124,7 +174,8 @@
             <label>${esc(ft("rv_cut"))} <input type="range" min="0" max="100" value="${rv.cut}" data-f="rvcut"> ${rv.cut}%</label>
             <button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="rvok" ${pl.accept.length ? "" : "disabled"}>${esc(ft("rv_ok", { n: pl.accept.length }))}</button>
             <button type="button" class="reflib-ib-btn" data-f="rvnone">${esc(ft("rv_none"))}</button></div>
-          <div class="reflib-fc-grid">${rv.faces.map((f, i) => `<div class="reflib-fc-rvc ${rv.discard.has(f.id) || low.has(f.id) ? "off" : ""}" data-f="rvt" data-i="${i}">${face(f)}<span>${Math.round((f.score || 0) * 100)}%</span></div>`).join("")}</div></div>`;
+          <div class="reflib-fc-grid">${rv.faces.map((f, i) => `<div class="reflib-fc-rvc ${rv.discard.has(f.id) || low.has(f.id) ? "off" : ""}" tabindex="0" data-f="rvt" data-i="${i}">${face(f).replace(/ data-f="openat" data-hash="[^"]*" data-t="[^"]*"/, "")}<span>${Math.round((f.score || 0) * 100)}%</span>
+            <button type="button" class="reflib-fc-rvx" data-f="rvt" data-i="${i}" title="×">×</button><button type="button" class="reflib-fc-rvo" data-f="openat" data-hash="${esc(f.hash)}" data-t="${f.best_t ?? f.t ?? 0}" title="${esc(ft("rv_open"))}">↗</button></div>`).join("")}</div></div>`;
     }
     function review(all) {
         const pl = all ? { accept: [], reject: rv.faces.map(f => f.id) } : window.ReflibReview.plan(rv.faces, rv.discard, rv.cut), pid = rv.pid;
@@ -163,12 +214,11 @@
         else if (k === "rvt" && rv) { window.ReflibReview.click(rv, rv.faces.map(f => f.id), +b.dataset.i, { shift: e.shiftKey }); draw(); }
         else if (k === "rvok" && rv) review(false);
         else if (k === "rvnone" && rv) { if (confirm(ft("rv_none_q", { n: rv.faces.length }))) review(true); }
-        else if (k === "yes") call({ action: "face_confirm", person: view.id, faces: [b.dataset.face] }).then(r => { if (r && r.toast) RL.toast(r.toast, "ok"); draw(); }).catch(() => {});
-        else if (k === "no") call({ action: "face_reject", person: view.id, faces: [b.dataset.face] }).then(() => { RL.toast(ft("rejected", { x: view.name }), "info"); draw(); }).catch(() => {});
         else if (k === "rename") { const n = prompt(ft("rename_q", { x: view.name }), view.name); if (n && n.trim()) call({ action: "person_rename", person: view.id, name: n.trim() }).then(r => { view = { p: "person", id: r.person.id }; draw(); }).catch(() => {}); }
         else if (k === "pdel") { if (!confirm(ft("del_q", { x: view.name }))) return; const nm = view.name;
             call({ action: "person_delete", person: view.id }).then(r => { RL.toast(ft("del_ok", { x: nm }), "ok", [{ label: ft("undo"), onClick: () => call({ action: "person_undo_delete", undo_token: r.undo_token }).then(x => { if (pan) { view = { p: "person", id: x.person.id }; draw(); } }).catch(() => {}) }], 15000); view = { p: "home" }; draw(); }).catch(() => {}); }
         else if (k === "show") { const f = ilib().f, tag = view.tag; close(); f.tags.clear(); f.tags.add(tag); RL.ilibRefresh(); }
+        else if (k === "openat") { openAt(b.dataset.hash, b.dataset.t); }
     }
     // bbox overlay on the explorer preview ("Faces" button in the details panel)
     function overlay(h) {
@@ -214,7 +264,7 @@
         if (r) Object.assign(ov.style, { left: r.left + "%", top: r.top + "%", width: r.width + "%", height: r.height + "%" });
     };
     RL.facesRect = facesRect;
-    const isImg = it => !it.kind || it.kind === "image";
+    const isImg = it => !it.kind || it.kind === "image" || it.kind === "video";  // 1.12.0: videos have faces too
     const itemOf = h => (ilib().q.items || []).find(x => x && x.hash === h) || {};
     RL.extend({
         details: (h) => isImg(itemOf(h)) ? `<button type="button" class="reflib-ib-btn" data-act="facesov" data-hash="${esc(h)}" title="${esc(ft("faces_tip"))}">☺ ${esc(ft("faces_btn"))}</button>` : "",
@@ -264,6 +314,9 @@
 .reflib-fc-ask b { font-size: 15px; }
 .reflib-fc-yn { display: flex; gap: 8px; margin-top: 8px; }
 .reflib-fc-rvc { position: relative; cursor: pointer; text-align: center; font-size: 12px; transition: opacity .2s; }
+.reflib-fc-rvc:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.reflib-fc-rvc .reflib-fc-rvx, .reflib-fc-rvc .reflib-fc-rvo { position: absolute; top: 2px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 12px; line-height: 20px; }
+.reflib-fc-rvc .reflib-fc-rvx { right: 2px; } .reflib-fc-rvc .reflib-fc-rvo { left: 2px; }
 .reflib-fc-rvc.off { opacity: .4; } .reflib-fc-rvc.off .reflib-fc-face { outline: 3px solid #e5484d; filter: grayscale(1); }
 .reflib-fc-rvc.off::after { content: "✕"; position: absolute; left: 50%; top: 20%; transform: translateX(-50%); font-size: 30px; color: #e5484d; pointer-events: none; }
 .reflib-fc-danger { color: #dc2626; }
@@ -272,7 +325,16 @@
 .reflib-fc-bb { position: absolute; border: 2px solid #facc15; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
 .reflib-fc-bb span { position: absolute; left: -2px; top: 100%; background: #facc15; color: #111; font-size: 11px; padding: 0 4px; border-radius: 0 0 4px 4px; white-space: nowrap; }
 .reflib-fc-ovlist { position: absolute; left: 4px; bottom: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
-.reflib-fc-ovlist span { background: rgba(0,0,0,.7); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 4px; }`;
+.reflib-fc-ovlist span { background: rgba(0,0,0,.7); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.reflib-fc-face.vid { position: relative; }
+.reflib-fc-vmeta { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex; flex-wrap: wrap; gap: 3px; pointer-events: auto; z-index: 2; }
+.reflib-fc-vbadge { background: rgba(0,0,0,.65); color: #fff; font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.reflib-fc-tchip { background: rgba(0,0,0,.65); color: #fff; font-size: 10px; line-height: 1.2; padding: 2px 5px; border-radius: 4px; cursor: pointer; }
+.reflib-fc-tchip:hover { background: rgba(30,90,200,.85); }
+@media (prefers-color-scheme: dark) {
+  .reflib-fc-vbadge, .reflib-fc-tchip { background: rgba(0,0,0,.75); }
+}
+`;
     document.head.appendChild(css);
     document.addEventListener("keydown", e => { if (pan && e.key === "Escape") { e.stopPropagation(); close(); } }, true);
 })();

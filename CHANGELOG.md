@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.0
+- Caras y poses dentro de vídeos (rama videofaces f8d087d, ver «Video» en FACES_API.md y SIMILARITY_API.md), integrada con 1.11.1.
+- Galería: los vídeos en Buscar similares, Personas y la cuadrícula de sugerencias llevan distintivo 🎬/⏱; la miniatura es la de face_thumb en best_t; al abrir, el visor salta a best_t y muestra los segmentos como chips de tiempo pulsables. La barra de cálculo muestra el progreso de vídeos (videos_done / library_videos); ajustes de vídeo (index_videos, intervalo, máx. fotogramas) junto a los de caras.
+- Media Library, cuadrícula de sugerencias: flechas, X/Supr y Enter (ReflibReview.key compartido), botones × y ↗ (abrir foto / vídeo en su instante); quitados los manejadores Sí/No que ya no se usaban.
+
 ## 1.11.1
 - Personas: las sugerencias ya no se responden una a una (Sí/No). Se muestran todas en una cuadrícula ordenada por parecido con su %; clic (o ×) descarta, Mayús+clic descarta un rango, «Descartar por debajo de X%», «Añadir las N restantes», «Descartar todas» (con confirmación) y «Cargar más». Las aceptadas se asignan y las descartadas quedan como negativas; «Deshacer» en el aviso. Galería: flechas, X/Supr y Enter, botón para abrir la foto. Media Library: misma lógica (review_rules.js) y misma acción. Nueva acción `person_review`.
 - Duplicados: vídeos solo como «Idénticos» (mismo contenido, comprobado byte a byte con sha256 completo aunque el hash de la biblioteca sea muestreado); nunca en «Casi iguales». Fila con duración, códec, fps y resolución (ffprobe en caché, vacío si no hay ffprobe) y distintivo «Vídeo» en Galería y Media Library. Las copias virtuales siguen excluidas.

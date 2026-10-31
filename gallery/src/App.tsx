@@ -1,3 +1,4 @@
+import { OPEN_EVENT, fmtT } from "./videoT";
 import { useSelection } from "./Selection";
 import { AutoTagBar } from "./AutoTag";
 import Folders, { folderLabel, nodeHref } from "./Folders";
@@ -77,6 +78,7 @@ export default function App() {
   useEffect(() => { loadTax().then(() => setTaxOk(true)); }, []);   // 1.9.2: nombres de las etiquetas automáticas
   const [viewer, setViewer] = useState<number | null>(null);
   const [solo, setSolo] = useState<{ list: Item[]; i: number } | null>(null);   // visor abierto desde la búsqueda
+  useEffect(() => { const h = (e: any) => setSolo({ list: [e.detail], i: 0 }); window.addEventListener(OPEN_EVENT, h); return () => window.removeEventListener(OPEN_EVENT, h); }, []);   // 1.12.0 caras de vídeo -> visor en best_t
   const [selMode, setSelMode] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [editOpen, setEditOpen] = useState(false);   // 1.11.0: el panel de edición solo se abre a petición
@@ -405,6 +407,7 @@ function Tile({ it, sel, selMode, onOpen, onSel, onFav }: { it: Item; sel: boole
     <figure className={`tile ${sel ? "sel" : ""} ${selMode ? "selmode" : ""}`} onClick={(e) => { if (e.shiftKey) e.preventDefault(); onOpen(e); }} onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}>
       <Thumb hash={it.hash} alt={it.name} />
       {it.kind && it.kind !== "image" && <span className="badge">▶ {fmtDur(it.dur)}</span>}
+      {it.best_t != null && <span className="badge tbest" title="Mejor coincidencia en el vídeo (el visor abre ahí)">⏱ {fmtT(it.best_t)}</span>}
       {it.virtual && <span className="badge v" title="Copia virtual">✂</span>}
       {it.missing && <span className="badge warn">archivo no encontrado</span>}
       {it.origin === "ai" && <span className="badge ia" title="Generada con IA">IA</span>}

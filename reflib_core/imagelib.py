@@ -1750,6 +1750,7 @@ AUTOTAG_STORE = None   # 1.7.1: the host's TagStore (pop / restore when an entry
 # 1.5.4: the host sets JOBSTATUS = callable -> (rev, {hash: queued|processing|done|failed|local})
 JOBSTATUS = None
 SIMILARITY = None   # 1.8.4: similarity.service() sets it: sid -> {hash: score} (the {"sim": sid} result-set filter)
+SIMILARITY_ROW = None   # 1.12.0-videofaces: sid, hash -> full search row (best_t, segments, kind)
 JST_KEYS = ("queued", "processing", "done", "failed", "local", "never")
 
 
@@ -2203,10 +2204,17 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0, sections: bool 
         mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image" and not i.get("virtual")), front=True)
     except Exception:
         pass
-    sc = (SIMILARITY(str(f.get("sim") or "")) or {}) if SIMILARITY and isinstance(f, dict) and f.get("sim") else None
+    sid = str(f.get("sim") or "") if isinstance(f, dict) else ""
+    sc = (SIMILARITY(sid) or {}) if SIMILARITY and sid else None
     for x in page:
         if sc is not None and x["hash"] in sc:
             x["sim"] = sc[x["hash"]]   # 1.8.4
+            if SIMILARITY_ROW:
+                row = SIMILARITY_ROW(sid, x["hash"]) or {}
+                if row.get("best_t") is not None:
+                    x["best_t"] = row["best_t"]
+                if row.get("segments"):
+                    x["segments"] = row["segments"]
         st = jmap.get(x["hash"])
         if st:
             x["js"] = st

@@ -2,12 +2,13 @@
 // FACES_API.md), las mismas que usa la Media Library (reflib_faces.js). Aquí no hay lógica de caras propia: solo vista.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { call, fold, mediaUrl } from "./api";
+import { openAt, segChips } from "./videoT";
 import "../../selection_rules.js";
 import "../../review_rules.js";
 import { act } from "./actions";
 import { toast, Thumb } from "./ui";
 
-export interface Face { id: string; hash: string; n: number; model: string; box?: number[] | null; bbox: number[] | null; det?: number | null; w: number; h: number; score?: number; person?: string; cluster?: string; thumb?: string }
+export interface Face { id: string; hash: string; n: number; model: string; box?: number[] | null; bbox: number[] | null; det?: number | null; w: number; h: number; score?: number; person?: string; cluster?: string; thumb?: string; kind?: string; t?: number | null; best_t?: number | null; segments?: { t0: number; t1: number }[] }
 export interface Person { id: string; name: string; tag: string; count: number; items: number; cover: Face | null; seeded?: boolean }
 
 // ---------------------------------------------------------------- recorte de cara
@@ -16,8 +17,14 @@ const sized = (u: string, size: number) => u.replace(/([?&])size=\d+/, `$1size=$
 export function FaceImg({ f, size = 160, className }: { f: Face | null; size?: number; className?: string }) {
   const [bad, setBad] = useState(false);
   if (!f) return <div className={`face none ${className || ""}`}>👤</div>;
-  if (!f.thumb || bad) return <Thumb hash={f.hash} className={`face ${className || ""}`} />;
-  return <img className={`face ${className || ""}`} src={sized(f.thumb, size)} alt="" loading="lazy" decoding="async" onError={() => setBad(true)} />;
+  const img = (!f.thumb || bad) ? <Thumb hash={f.hash} className={`face ${className || ""}`} />
+    : <img className={`face ${className || ""}`} src={sized(f.thumb, size)} alt="" loading="lazy" decoding="async" onError={() => setBad(true)} />;
+  if (f.kind !== "video") return img;
+  // 1.12.0: cara de vídeo (face_thumb ya viene en best_t): distintivo + chips de tiempo; clic en un chip = visor en ese instante
+  const t = f.best_t ?? f.t;
+  return <span className="fvid">{img}<span className="badge video" title="Vídeo">🎬</span>
+    <span className="fchips">{segChips({ best_t: t, segments: f.segments }).map((c) =>
+      <button key={c.t} className="tchip" title={`Abrir en ${c.label}`} onClick={(e) => { e.stopPropagation(); openAt({ hash: f.hash, best_t: t, segments: f.segments }, c.t); }}>{c.label}</button>)}</span></span>;
 }
 
 // ---------------------------------------------------------------- datos compartidos
@@ -201,7 +208,7 @@ function SuggestReview({ person, faces, more, onMore, done }: { person: Person; 
           <FaceImg f={f} size={96} className="round" />
           <span className="pct">{f.score != null ? `${Math.round(f.score * 100)}%` : ""}</span>
           <button className="x" title={off ? "Recuperar" : "Descartar"} onClick={(e) => { e.stopPropagation(); click(i, { shiftKey: false }); }}>×</button>
-          <button className="op" title="Abrir la foto" onClick={async (e) => { e.stopPropagation(); const u = await mediaUrl(f.hash); if (u.url) window.open(u.url, "_blank"); }}>↗</button>
+          <button className="op" title="Abrir la foto" onClick={async (e) => { e.stopPropagation(); if (f.kind === "video") { openAt({ hash: f.hash, best_t: f.best_t ?? f.t, segments: f.segments }, f.best_t ?? f.t); return; } const u = await mediaUrl(f.hash); if (u.url) window.open(u.url, "_blank"); }}>↗</button>
         </div>); })}</div>
       {more && <a href="#" className="srmore" onClick={(e) => { e.preventDefault(); onMore(); }}>Cargar más</a>}
     </div>
@@ -237,6 +244,22 @@ export function ItemFaces({ hash, onChanged }: { hash: string; onChanged: () => 
 }
 
 // ---------------------------------------------------------------- ajustes (face_auto_cluster / face_min_size, compartidos con la Media Library)
+function VideoSimSettings() {
+  // 1.12.0: ajustes de vídeo de similarity/settings.json (sim_settings, compartidos con la Media Library)
+  const [s, setS] = useState<any>(null);
+  useEffect(() => { call("sim_settings").then((r) => r.ok && setS(r.settings)).catch(() => {}); }, []);
+  if (!s) return null;
+  const save = (patch: any) => { setS({ ...s, ...patch }); act("sim_settings", { settings: patch }, () => {}, { quiet: true }).then((r: any) => r?.settings && setS(r.settings)); };
+  const num = (k: string, def: number, min: number, max: number, step: number) => <input type="number" min={min} max={max} step={step} defaultValue={s[k] ?? def}
+    onBlur={(e) => { const v = Math.max(min, Math.min(max, parseFloat(e.target.value) || def)); if (v !== s[k]) save({ [k]: v }); }} />;
+  return (
+    <span className="fset vset">
+      <label title="Incluir los vídeos al calcular poses y caras"><input type="checkbox" checked={s.index_videos !== false} onChange={(e) => save({ index_videos: e.target.checked })} /> Vídeos</label>
+      <label title="Un fotograma cada N segundos">cada {num("video_interval_s", 2, 0.25, 60, 0.25)} s</label>
+      <label title="Máximo de fotogramas por vídeo">máx {num("video_max_frames", 60, 1, 1000, 1)} fot.</label>
+    </span>
+  );
+}
 function FaceSettings() {
   const [s, setS] = useState<any>(null);
   useEffect(() => { call("face_settings").then((r) => r.ok && setS(r.settings)).catch(() => {}); }, []);
@@ -247,6 +270,7 @@ function FaceSettings() {
       <label title="Agrupa automáticamente las caras nuevas al indexar"><input type="checkbox" checked={s.face_auto_cluster !== false} onChange={(e) => save({ face_auto_cluster: e.target.checked })} /> Auto</label>
       <label title="Ignora caras más pequeñas (px)">mín <input type="number" min={0} max={1024} step={8} defaultValue={s.face_min_size ?? 40}
         onBlur={(e) => { const v = Math.max(0, Math.min(1024, parseInt(e.target.value) || 0)); if (v !== s.face_min_size) save({ face_min_size: v }); }} /> px</label>
+      <VideoSimSettings />
     </span>
   );
 }

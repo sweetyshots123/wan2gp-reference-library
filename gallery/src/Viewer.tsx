@@ -1,3 +1,4 @@
+import { takeSeek, segChips } from "./videoT";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from "./api";
 import { WheelStepper, normDelta, medium, loadFull } from "./viewerNav";
@@ -294,8 +295,12 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           )}
           {src && (kind === "video" || kind === "mask") && (
             <div className="vidhost" key={src} ref={(el) => { tgt.current = el; }} style={{ transform: xf(z) }}>
-              <video ref={media} src={src} controls autoPlay loop playsInline onLoadedMetadata={() => setDraft((d) => d && [...d] as Rect)} />
+              <video ref={media} src={src} controls autoPlay loop playsInline onLoadedMetadata={(e) => { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; setDraft((d) => d && [...d] as Rect); }} />
             </div>
+          )}
+          {src && kind === "video" && segChips(it).length > 0 && (
+            <div className="vsegs" onPointerDown={(e) => e.stopPropagation()}>{segChips(it).map((c) =>
+              <button key={c.t} className="tchip" title={`Ir a ${c.label}`} onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { v.currentTime = c.t; v.play?.(); } }}>⏱ {c.label}</button>)}</div>
           )}
           {src && kind === "audio" && <audio ref={media as any} src={src} controls autoPlay />}
           {ve && rectStyle && <div className="croprect" style={rectStyle} />}

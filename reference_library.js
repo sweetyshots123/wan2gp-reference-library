@@ -1080,7 +1080,8 @@
                 ${img.folders.length ? `<span class="reflib-ib-fbadge" title="${esc(it("from_folder"))}">📁</span>` : ""}
                 ${img.origin === "ai" ? `<span class="reflib-og-badge" title="${esc(ogt("badge_tip"))}">${esc(ogt("ai"))}</span>` : ""}
                 ${img.missing ? `<span class="reflib-fg-missing" title="${esc(fgt("missing_tip"))}">⚠ ${esc(fgt("missing"))}</span>` : ""}
-                ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}</div>
+                ${img.js ? `<span class="reflib-ib-jst jst-${esc(img.js)}" data-js="${esc(img.js)}" title="${esc(it("jst_tip"))}">${esc(it("jst_" + img.js))}</span>` : ""}
+                ${img.best_t != null ? `<span class="reflib-sim-cardt" title="t=${esc(String(img.best_t))}"><span>⏱ ${esc((function(t){t=Math.max(0,+t||0);return Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0");})(img.best_t))}</span></span>` : ""}</div>
               <div class="reflib-ib-name" title="${esc(img.names.join(" · "))}">${esc(img.name)}</div>
               ${img.uses ? `<div class="reflib-ib-uses" title="${esc(it("used_last", { when: whenText(img.used_at) }))}">${esc(it("used_n", { n: img.uses, when: whenText(img.used_at) }))}</div>` : ""}
               <div class="reflib-ib-tags">${img.tags.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>`;
@@ -2596,7 +2597,17 @@
         for (const c of ilib.cards.values()) c.classList.toggle("cur", c.dataset.hash === hh);
         renderPreview();
         if (!viewPref().details) return Promise.resolve();   // 1.5.9: a click only selects; details load when the panel is on
-        return sendIlib({ action: "preview", hash: hh }).then(r => { if (r && r.image && ilib.preview === hh) { ilib.pvSrc = Object.assign({}, r.image, { hash: hh }); renderPreview(); } }).catch(() => {});
+        return sendIlib({ action: "preview", hash: hh }).then(r => { if (r && r.image && ilib.preview === hh) { ilib.pvSrc = Object.assign({}, r.image, { hash: hh }); renderPreview();
+            // 1.12.0-videofaces: jump to best matching frame when the row carries best_t
+            const bt = (ilib.pvItem && ilib.pvItem.best_t != null) ? Number(ilib.pvItem.best_t) : NaN;
+            if (isFinite(bt) && (ilib.pvItem.kind === "video")) {
+                const v = ilib.root && ilib.root.querySelector(".reflib-ib-pvmedia");
+                if (v) {
+                    const go = () => { try { v.currentTime = Math.max(0, bt); } catch (e) {} };
+                    if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
+                }
+            }
+        } }).catch(() => {});
     }
     // 1.5.2 large preview (double-click): the full image over the browser; ←/→ step through the results, Esc / click closes
     // 1.5.9 full-screen viewer: fixed over the whole window; ←/→ previous/next in the filtered results, Esc closes,

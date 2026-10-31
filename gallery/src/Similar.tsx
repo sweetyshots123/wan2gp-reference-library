@@ -71,7 +71,7 @@ export function SimBar() {
         const busy = !!x && x.running;
         if (was.current && !busy) {
           if (x.error) toast(x.env_missing ? simErr(x.error, true) : `Cálculo de poses y caras detenido: ${x.error}`, "err");
-          else toast(`Poses y caras calculadas: ${x.index?.images || 0} de ${x.library || 0} imágenes · ${x.index?.persons || 0} personas · ${x.index?.faces || 0} caras${x.failed ? ` · ${x.failed} fallidas` : ""}`);
+          else toast(`Poses y caras calculadas: ${x.index?.images || 0} de ${x.library || 0} imágenes${x.library_videos ? ` · ${x.index?.videos || 0} de ${x.library_videos} vídeos` : ""} · ${x.index?.persons || 0} personas · ${x.index?.faces || 0} caras${x.failed ? ` · ${x.failed} fallidas` : ""}`);
         }
         was.current = busy;
         timer = setTimeout(poll, busy ? 1500 : 20000);
@@ -88,7 +88,7 @@ export function SimBar() {
   const dl = s.download;
   return (
     <div className="atbar simbar" role="status">
-      <span>⧉ Calculando poses y caras {s.done}/{s.total}{s.per_image_ms ? ` · ${s.per_image_ms} ms por imagen` : ""}{wait ? ` · ${wait}` : ""}
+      <span>⧉ Calculando poses y caras {s.done}/{s.total}{s.per_image_ms ? ` · ${s.per_image_ms} ms por imagen` : ""}{s.library_videos ? ` · vídeos ${s.videos_done || 0}/${s.library_videos}${s.per_video_ms ? ` (${Math.round(s.per_video_ms / 100) / 10} s por vídeo)` : ""}` : ""}{wait ? ` · ${wait}` : ""}
         {dl ? ` · descargando ${dl.file}: ${Math.round(dl.done / 1e6)} / ${Math.round(dl.total / 1e6)} MB` : ""}</span>
       <div className="atprog"><div style={{ width: pct + "%" }} /></div>
       <button onClick={async () => setS((await call("sim_pause", { paused: !s.paused })).sim)}>{s.paused ? "▶ Reanudar" : "⏸ Pausar"}</button>

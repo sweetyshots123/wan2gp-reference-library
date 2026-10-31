@@ -4,6 +4,7 @@ export interface Item {
   hash: string; name: string; names?: string[]; cols: string[]; pool: boolean; folders: string[];
   tags: string[]; added: number; kind?: Kind; virtual?: { orig: string; broken: boolean }; missing?: boolean;
   dur?: number; vl?: boolean; vcopies?: number; origin?: "ai";
+  best_t?: number | null; segments?: { t0: number; t1: number }[];   // 1.12.0: vídeo en resultados de similares
 }
 export interface Collection { id: string; name: string; count: number }
 export interface TagCount { tag: string; count: number }

@@ -1,4 +1,4 @@
-# Personas / face clustering API (1.10.0, draft contract)
+# Personas / face clustering API (1.12.0-videofaces)
 
 Module: `reflib_core/faces.py` (numpy only), registered in `actions_all.py`. UIs: Media Library `reflib_faces.js`,
 Galería "Personas" page (gg). Both call the same actions through `ilib` / `POST /reflib/api` (`{"action": ..., lang, ...}`).
@@ -75,6 +75,41 @@ Cache: `data/faces/thumbs/<hash>_<n>_<model>_<size>_<margin×100>_<source mtime>
 makes a new file and removes older variants for that face and size. The cache can be deleted at any time.
 Built by `faces.thumb_url(fid, size, margin)`; the file comes from `faces.face_thumb_path(...)`.
 PERSON = `{id, name, tag, count (faces, active model), items, cover:FACE|null, seeded?:bool}`.
+
+
+
+## Video (1.12.0-videofaces)
+
+Face search and Personas also cover library items with `kind=video`. Indexing samples frames
+(see SIMILARITY_API.md "Video"); each detected face is stored with the same pack shape as stills
+plus an optional timestamp.
+
+### Face id / record
+* Face id stays `"<video_hash>:<face_i>@<model>"`. `face_i` is unique across all sampled frames of that
+  video (row order in the face npz for that hash), not reset per frame.
+* FACE gains optional fields when the source is a video:
+  * `kind: "video"` (stills keep `"image"` / omit for legacy)
+  * `t: float` — seconds of the sampled frame where this face was detected
+  * On list endpoints that dedupe per video: `best_t` (timestamp of the best-scoring face) and
+    `segments: [{t0, t1}, …]` (nearby match times merged with gap `video_merge_gap_s`, default 4 s)
+
+Image FACE records are unchanged; older clients that ignore unknown keys stay compatible.
+
+### Deduped list endpoints
+`face_suggest`, `face_clusters` (preview faces), `face_cluster_faces`, and `person_get` return **at most
+one FACE per video hash**. Multiple frame hits become `best_t` + `segments`. Still images are never
+merged. Assign / confirm / reject still take individual face ids (including video faces); the
+`persona:<Nombre>` tag is applied to the **video item** hash, same as images.
+
+### Face thumbnails for video faces
+`face_thumb` seeks the source video to `t` (cv2, ffmpeg fallback), crops the bbox (+ margin) from that
+frame, and caches under
+`data/faces/thumbs/<hash>_<n>_<model>_<size>_<margin×100>_<mtime>_t<t>.jpg`. Stills keep the previous
+key (no `_t…` suffix).
+
+### UI
+Media Library (`reflib_faces.js`): video faces show a 🎬 badge and timestamp chip(s); click opens the
+library preview and seeks to `best_t` / the chip's `t`. EN + ES strings; chips readable in dark mode.
 
 ### Examples
 ```json
