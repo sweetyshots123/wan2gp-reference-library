@@ -1,10 +1,20 @@
 # Changelog
 
+## 1.12.3
+- Joint release: 1.12.2 (Galería fixes) + 1.12.2-faces (face quality, Personas video fixes).
+
 ## 1.12.2-faces
 - Face quality (merged facequality): umeyama alignment, per-face quality (detector score, size, blur, yaw, truncation) in every face record (`quality`, `aligned`); low-quality faces are not clustered, not used as person references and not suggested, but stay searchable and are flagged. Strict clustering without chaining; suggestions ranked by margin against the person's rejected faces and other people. `face_recompute` re-indexes faces keeping people.
 - Personas, videos: a video suggestion stands for all its frames; accepting or discarding it (and Undo) applies to every frame. Videos already accepted or discarded for a person are not suggested again.
 - Personas: ↗ hides the Personas panel and shows the preview; "← Personas" (or closing the preview) brings it back. Items not on the current page open directly.
 - Personas: one toast when confirming suggestions; the person header counts "N fotos · M vídeos".
+
+## 1.12.2
+- Galería clip editor: I / O work with Vidosser loaded (own capture listener for just those two keys; every other key, zoom and wheel unchanged).
+- Versiones: opening a clip no longer seeks to its in point on top of the already-cut clip; each row says what it is (⧉ Copia · size, ✂ Clip in–out (duration), ⬚ Encuadre w×h); × uses the normal delete confirmation / dialog.
+- Video thumbnails (shared, both UIs): poster at ~10% / at least ~1 s in, skipping black frames; old cached posters are retaken once.
+- Videos the browser can't play (e.g. mp4v): notice with «Abrir en reproductor externo» (new same-PC `open_file`, like «Mostrar en carpeta») and «Mostrar en carpeta». No transcoding.
+- ⏱ best-match chip moved under the duration badge. Duplicados counters say "X fotos · Y vídeos" (both UIs).
 
 ## 1.12.1
 - Virtual copies / clips are now shared actions (`reflib_core/virtactions.py`: virt_src, virt_create, virt_update, virt_status, plus the new virt_list); the Media Library and the Galería call the same code. The logic was moved out of plugin.py unchanged (outputs checked identical against the 1.12.0 code).

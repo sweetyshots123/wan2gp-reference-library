@@ -197,6 +197,8 @@ def status() -> Dict[str, Any]:
     with _lock:
         s = dict(_state)
     s["hashed"] = len(ents)
+    s["hashed_videos"] = sum(1 for e in ents.values() if e.get("v"))   # 1.12.2: counters say photos · videos
+    s["hashed_images"] = s["hashed"] - s["hashed_videos"]
     return s
 
 

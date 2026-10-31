@@ -554,7 +554,11 @@ def _media_thumb(src: str, cache: str, kind: str) -> Optional[str]:
     """1.6.0: poster frame (video) / waveform (audio), cached as .thumbs/<hash>.jpg like image thumbnails."""
     from . import mediainfo
     try:
-        if not (os.path.isfile(cache) and os.path.getsize(cache) > 0 and os.path.getmtime(cache) >= os.path.getmtime(src)):
+        from . import media as _md
+        fresh = os.path.isfile(cache) and os.path.getsize(cache) > 0 and os.path.getmtime(cache) >= os.path.getmtime(src)
+        if fresh and kind == "video" and os.path.getmtime(cache) < _md.POSTER_V2_EPOCH:
+            fresh = False   # 1.12.2: retake the old frame-0 posters once (cache only)
+        if not fresh:
             os.makedirs(os.path.dirname(cache), exist_ok=True)
             if not (mediainfo.video_thumb(src, cache) if kind == "video" else mediainfo.audio_thumb(src, cache)):
                 return None
