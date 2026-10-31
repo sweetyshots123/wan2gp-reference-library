@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.2-faces
+- Face quality (merged facequality): umeyama alignment, per-face quality (detector score, size, blur, yaw, truncation) in every face record (`quality`, `aligned`); low-quality faces are not clustered, not used as person references and not suggested, but stay searchable and are flagged. Strict clustering without chaining; suggestions ranked by margin against the person's rejected faces and other people. `face_recompute` re-indexes faces keeping people.
+- Personas, videos: a video suggestion stands for all its frames; accepting or discarding it (and Undo) applies to every frame. Videos already accepted or discarded for a person are not suggested again.
+- Personas: ↗ hides the Personas panel and shows the preview; "← Personas" (or closing the preview) brings it back. Items not on the current page open directly.
+- Personas: one toast when confirming suggestions; the person header counts "N fotos · M vídeos".
+
 ## 1.12.1
 - Virtual copies / clips are now shared actions (`reflib_core/virtactions.py`: virt_src, virt_create, virt_update, virt_status, plus the new virt_list); the Media Library and the Galería call the same code. The logic was moved out of plugin.py unchanged (outputs checked identical against the 1.12.0 code).
 - Galería viewer editor: I / O keys set the clip's in / out points, "✂ Crear recorte" (in/out + crop) and "⧉ Copia virtual" (whole item, no changes).

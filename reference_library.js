@@ -5084,7 +5084,13 @@
         extend: (x) => { EXT.push(x); }, ilibRefresh: () => { newQuery(); render(); }, esc, it,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs, done) => fgOpen(false, hs, done), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
+        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs, done) => fgOpen(false, hs, done), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibShowPreview: (h, item) => {   // 1.12.2: open any item in the details preview, even when its card is not on the current page
+            if (!viewPref().details) setView({ details: true });
+            const i = ilib.q.items.findIndex(x => x && x.hash === h);
+            const r = showPreview(h, i);
+            if (i < 0 && item) { ilib.pvItem = Object.assign({ hash: h }, item); }
+            return r;
+        }, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

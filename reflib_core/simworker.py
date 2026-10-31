@@ -169,6 +169,44 @@ class Pose:
         return out
 
 
+ALIGN_VERSION = 2   # 1 = cv2 LMEDS partial affine (<= 1.11.0), 2 = least-squares similarity (insightface norm_crop / umeyama)
+
+
+def _umeyama(src, dst):
+    """Least-squares similarity transform src -> dst (2x3), as insightface face_align.norm_crop (skimage umeyama)."""
+    src = np.asarray(src, np.float64); dst = np.asarray(dst, np.float64)
+    n = src.shape[0]
+    ms, md = src.mean(0), dst.mean(0)
+    sc, dc = src - ms, dst - md
+    A = dc.T @ sc / n
+    d = np.ones(2)
+    if np.linalg.det(A) < 0:
+        d[1] = -1
+    U, S, Vt = np.linalg.svd(A)
+    R = U @ np.diag(d) @ Vt
+    var = (sc ** 2).sum() / n
+    k = (S * d).sum() / var if var > 0 else 1.0
+    M = np.zeros((2, 3), np.float32)
+    M[:, :2] = k * R
+    M[:, 2] = md - k * R @ ms
+    return M
+
+
+def face_quality(img, f):
+    """[blur, yaw, trunc] for one YuNet row: Laplacian variance of the aligned 112 crop (grey), |yaw| proxy from the
+    nose position between the eyes (0 frontal .. 1 profile), 1.0 when the bbox touches the image border."""
+    import cv2
+    h, w = img.shape[:2]
+    lm = np.asarray(f[4:14], np.float32).reshape(5, 2)
+    crop = cv2.warpAffine(img, _umeyama(lm, ARC_SRC), (112, 112), borderValue=0)
+    blur = float(cv2.Laplacian(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+    eyes = float(lm[1, 0] - lm[0, 0])
+    yaw = min(1.0, abs((float(lm[2, 0] - lm[0, 0]) / eyes - 0.5) * 2)) if eyes > 1e-3 else 1.0
+    m = 2.0
+    trunc = float(f[0] < m or f[1] < m or f[0] + f[2] > w - m or f[1] + f[3] > h - m)
+    return [round(blur, 1), round(yaw, 3), trunc]
+
+
 class Face:
     def __init__(self, yunet, rec, kind="arcface", gpu=True):
         import cv2, onnxruntime as ort
@@ -193,8 +231,7 @@ class Face:
     def _align(self, img, f):
         import cv2
         lm = f[4:14].reshape(5, 2).astype(np.float32)
-        M, _ = cv2.estimateAffinePartial2D(lm, ARC_SRC, method=cv2.LMEDS)
-        crop = cv2.warpAffine(img, M, (112, 112), borderValue=0)
+        crop = cv2.warpAffine(img, _umeyama(lm, ARC_SRC), (112, 112), borderValue=0)
         px = crop if self.kind == "adaface" else cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         return (px.astype(np.float32) - 127.5) / 127.5
 
@@ -233,7 +270,8 @@ class Face:
             e = np.asarray(e, np.float32)
             e /= (np.linalg.norm(e) + 1e-9)
             out.append({"emb": base64.b64encode(e.astype(np.float16).tobytes()).decode("ascii"),
-                        "box": [round(float(v) / scale, 1) for v in f[:4]], "det": round(float(f[14]), 3)})
+                        "box": [round(float(v) / scale, 1) for v in f[:4]], "det": round(float(f[14]), 3),
+                        "q": face_quality(img, f), "al": ALIGN_VERSION if self.kind != "sface" else 0})
         return out
 
 

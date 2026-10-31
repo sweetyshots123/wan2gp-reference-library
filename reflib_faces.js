@@ -9,7 +9,7 @@
     const S = {
         en: { open: "People", title: "People", persons: "People", none_p: "Nobody named yet: name a group of faces below.", clusters: "Unnamed faces", none_c: "No groups yet. Compute faces (Find similar → Compute faces) and press «Group faces».", none_c2: "No unnamed groups of {m}+ faces right now ({a} single faces). Press «Regroup all» or lower «Grouping strictness».",
               run: "Group faces", regroup: "Regroup all", thr: "Grouping strictness", thr_tip: "Higher = only very similar faces go together (more, smaller groups)", status: "{f} faces · {u} unnamed · {c} groups · {p} people",
-              running: "Grouping {d} / {t}…", name_ph: "Name…", name: "Name", merge: "Merge selected ({n})", back: "← Back", faces_n: "{n} faces", items_n: "{n} photos",
+              running: "Grouping {d} / {t}…", name_ph: "Name…", name: "Name", merge: "Merge selected ({n})", back: "← Back", faces_n: "{n} faces", items_n: "{n} photos", vids_n: "{n} videos", back_personas: "← People",
               ask: "Is this also {x}?", yes: "Yes", no: "No", no_more: "No more suggestions for {x}.", rename: "Rename", del: "Forget person", del_ok: "Forgot {x} (photos are kept)", undo: "Undo",
               cover: "Use as cover", remove: "Not {x}", split: "Move to new group ({n})", assign_to: "Assign selected to…", show: "Show photos", merge_into: "Merge into…",
               assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", rv_title: "Suggestions for {x} ({n})", rv_tip: "Click to discard · Shift+click discards a range", rv_cut: "Discard below", rv_ok: "Add the remaining {n}", rv_none: "Discard all", rv_none_q: "Discard all {n} suggestions? They will not be suggested again.", rv_done: "{a} added · {r} discarded", rv_open: "Open photo", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
@@ -17,7 +17,7 @@
               close: "Close", del_q: "Forget {x}? Photos are never deleted; the persona tag is removed.", rename_q: "New name for {x}:", err: "Error: {e}", unknown: "?" },
         es: { open: "Personas", title: "Personas", persons: "Personas", none_p: "Aún no hay nadie con nombre: pon nombre a un grupo de caras de abajo.", clusters: "Caras sin nombre", none_c: "Aún no hay grupos. Calcula las caras (Buscar similares → Calcular caras) y pulsa «Agrupar caras».", none_c2: "Ahora no hay grupos sin nombre de {m} o más caras ({a} caras sueltas). Pulsa «Reagrupar todo» o baja la «Exigencia al agrupar».",
               run: "Agrupar caras", regroup: "Reagrupar todo", thr: "Exigencia al agrupar", thr_tip: "Más alto = solo se juntan caras muy parecidas (más grupos, más pequeños)", status: "{f} caras · {u} sin nombre · {c} grupos · {p} personas",
-              running: "Agrupando {d} / {t}…", name_ph: "Nombre…", name: "Nombrar", merge: "Unir seleccionados ({n})", back: "← Volver", faces_n: "{n} caras", items_n: "{n} fotos",
+              running: "Agrupando {d} / {t}…", name_ph: "Nombre…", name: "Nombrar", merge: "Unir seleccionados ({n})", back: "← Volver", faces_n: "{n} caras", items_n: "{n} fotos", vids_n: "{n} vídeos", back_personas: "← Personas",
               ask: "¿Es esta también {x}?", yes: "Sí", no: "No", no_more: "No hay más sugerencias para {x}.", rename: "Renombrar", del: "Olvidar persona", del_ok: "{x} olvidada (las fotos se conservan)", undo: "Deshacer",
               cover: "Usar como portada", remove: "No es {x}", split: "Mover a un grupo nuevo ({n})", assign_to: "Asignar seleccionadas a…", show: "Ver fotos", merge_into: "Unir con…",
               assigned: "{n} caras asignadas a {x}", rejected: "Vale, no es {x}", rv_title: "Sugerencias para {x} ({n})", rv_tip: "Clic para descartar · Mayús+clic descarta un rango", rv_cut: "Descartar por debajo de", rv_ok: "Añadir las {n} restantes", rv_none: "Descartar todas", rv_none_q: "¿Descartar las {n} sugerencias? No se volverán a sugerir.", rv_done: "{a} añadida(s) · {r} descartada(s)", rv_open: "Abrir foto", faces_btn: "Caras", faces_tip: "Muestra las caras detectadas y de quién son", no_index: "Aún no hay caras calculadas con este modelo de caras.",
@@ -69,12 +69,16 @@
         }
         return `<div class="reflib-fc-face ${cls}${f.kind === "video" ? " vid" : ""}" data-face="${esc(f.id)}" style="${st}" ${extra}${open}>${meta}</div>`;
     }
-    function openAt(hash, t) {
+    function openAt(hash, t, kind) {
+        // 1.12.2: hide the Personas panel while the preview is shown; "← Personas" (or the preview ×) brings it back.
+        // Cards not on the current explorer page open directly through RL.ilibShowPreview.
         try {
             const st = RL.ilibState && RL.ilibState();
             if (!st || !st.root) return;
+            if (pan) { pan.style.display = "none"; backBtn(st.root); }
             const card = st.root.querySelector(`.reflib-ib-card[data-hash="${CSS.escape(hash)}"]`);
             if (card) card.click();
+            if (RL.ilibShowPreview) RL.ilibShowPreview(hash, { kind: kind || "video", best_t: t != null ? Number(t) : null });
             const seek = () => {
                 const v = st.root.querySelector(".reflib-ib-pvmedia");
                 if (v && typeof v.currentTime === "number") {
@@ -84,8 +88,22 @@
                 }
                 return false;
             };
-            if (!seek()) { let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }
+            if (t != null && !seek()) { let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }
         } catch (e) {}
+    }
+    function showPan() {
+        const b = document.querySelector(".reflib-fc-back"); if (b) b.remove();
+        if (pan) pan.style.display = "";
+    }
+    function backBtn(root) {
+        const modal = root.querySelector(".reflib-ib-modal") || root;
+        if (modal.querySelector(".reflib-fc-back")) return;
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "reflib-ib-btn reflib-fc-back"; b.textContent = ft("back_personas");
+        b.addEventListener("click", showPan);
+        modal.appendChild(b);
+        const x = e => { if (e.target.closest && e.target.closest('[data-act="pvclose"]')) { modal.removeEventListener("click", x, true); showPan(); } };
+        modal.addEventListener("click", x, true);
     }
     let pan = null, view = { p: "home" }, sel = new Set(), poll = null;
     function open() {
@@ -109,7 +127,7 @@
         pan.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset.f === "nm") { e.preventDefault(); nameCluster(e.target.dataset.c, e.target.value); } });
         view = { p: "home" }; sel.clear(); draw();
     }
-    function close() { if (poll) clearInterval(poll); poll = null; if (pan) pan.remove(); pan = null; }
+    function close() { if (poll) clearInterval(poll); poll = null; const bb = document.querySelector(".reflib-fc-back"); if (bb) bb.remove(); if (pan) pan.remove(); pan = null; }
     const shell = (body, title) => `<div class="reflib-fc-box"><div class="reflib-fc-head">${view.p !== "home" ? `<button type="button" class="reflib-ib-btn" data-f="back">${esc(ft("back"))}</button>` : ""}<b>${esc(title)}</b><button type="button" class="reflib-fc-x" data-f="close" title="${esc(ft("close"))}">×</button></div>${body}</div>`;
     async function draw() {
         if (!pan) return;
@@ -157,7 +175,7 @@
         await needThumbs([...r.faces.map(f => f.hash), ...sug.map(f => f.hash)]);
         if (!pan) return;
         const others = (pl.persons || []).filter(x => x.id !== p.id);
-        pan.innerHTML = shell(`<div class="reflib-fc-bar"><span class="reflib-fc-muted">${esc(ft("faces_n", { n: p.count }))} · ${esc(ft("items_n", { n: p.items }))} · ${esc(p.tag)}</span>
+        pan.innerHTML = shell(`<div class="reflib-fc-bar"><span class="reflib-fc-muted">${esc(ft("faces_n", { n: p.count }))} · ${esc(p.photos != null ? ft("items_n", { n: p.photos }) + (p.videos ? " · " + ft("vids_n", { n: p.videos }) : "") : ft("items_n", { n: p.items }))} · ${esc(p.tag)}</span>
             <button type="button" class="reflib-ib-btn" data-f="show">${esc(ft("show"))}</button><button type="button" class="reflib-ib-btn" data-f="rename">${esc(ft("rename"))}</button>
             ${others.length ? `<select data-f="pmerge"><option value="">${esc(ft("merge_into"))}</option>${others.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select>` : ""}
             <button type="button" class="reflib-ib-btn reflib-fc-danger" data-f="pdel">${esc(ft("del"))}</button></div>
@@ -175,13 +193,14 @@
             <button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="rvok" ${pl.accept.length ? "" : "disabled"}>${esc(ft("rv_ok", { n: pl.accept.length }))}</button>
             <button type="button" class="reflib-ib-btn" data-f="rvnone">${esc(ft("rv_none"))}</button></div>
           <div class="reflib-fc-grid">${rv.faces.map((f, i) => `<div class="reflib-fc-rvc ${rv.discard.has(f.id) || low.has(f.id) ? "off" : ""}" tabindex="0" data-f="rvt" data-i="${i}">${face(f).replace(/ data-f="openat" data-hash="[^"]*" data-t="[^"]*"/, "")}<span>${Math.round((f.score || 0) * 100)}%</span>
-            <button type="button" class="reflib-fc-rvx" data-f="rvt" data-i="${i}" title="×">×</button><button type="button" class="reflib-fc-rvo" data-f="openat" data-hash="${esc(f.hash)}" data-t="${f.best_t ?? f.t ?? 0}" title="${esc(ft("rv_open"))}">↗</button></div>`).join("")}</div></div>`;
+            <button type="button" class="reflib-fc-rvx" data-f="rvt" data-i="${i}" title="×">×</button><button type="button" class="reflib-fc-rvo" data-f="openat" data-hash="${esc(f.hash)}" data-kind="${esc(f.kind || "image")}" data-t="${f.best_t ?? f.t ?? ""}" title="${esc(ft("rv_open"))}">↗</button></div>`).join("")}</div></div>`;
     }
     function review(all) {
         const pl = all ? { accept: [], reject: rv.faces.map(f => f.id) } : window.ReflibReview.plan(rv.faces, rv.discard, rv.cut), pid = rv.pid;
-        call({ action: "person_review", person: pid, accept: pl.accept, reject: pl.reject }).then(() => {
-            RL.toast(ft("rv_done", { a: pl.accept.length, r: pl.reject.length }), "ok", [{ label: ft("undo"), onClick: () => (pl.accept.length ? call({ action: "face_unassign", faces: pl.accept }) : Promise.resolve())
-                .then(() => pl.reject.length && call({ action: "face_unreject", person: pid, faces: pl.reject })).then(() => pan && draw()).catch(() => {}) }], 15000);
+        call({ action: "person_review", person: pid, accept: pl.accept, reject: pl.reject }).then(r => {
+            const ua = (r && r.accepted_all) || pl.accept, ur = (r && r.rejected_all) || pl.reject;   // 1.12.2: undo every frame of a video
+            RL.toast(ft("rv_done", { a: pl.accept.length, r: pl.reject.length }), "ok", [{ label: ft("undo"), onClick: () => (ua.length ? call({ action: "face_unassign", faces: ua }) : Promise.resolve())
+                .then(() => ur.length && call({ action: "face_unreject", person: pid, faces: ur })).then(() => pan && draw()).catch(() => {}) }], 15000);
             rv = null; draw();
         }).catch(() => {});
     }
@@ -218,7 +237,7 @@
         else if (k === "pdel") { if (!confirm(ft("del_q", { x: view.name }))) return; const nm = view.name;
             call({ action: "person_delete", person: view.id }).then(r => { RL.toast(ft("del_ok", { x: nm }), "ok", [{ label: ft("undo"), onClick: () => call({ action: "person_undo_delete", undo_token: r.undo_token }).then(x => { if (pan) { view = { p: "person", id: x.person.id }; draw(); } }).catch(() => {}) }], 15000); view = { p: "home" }; draw(); }).catch(() => {}); }
         else if (k === "show") { const f = ilib().f, tag = view.tag; close(); f.tags.clear(); f.tags.add(tag); RL.ilibRefresh(); }
-        else if (k === "openat") { openAt(b.dataset.hash, b.dataset.t); }
+        else if (k === "openat") { openAt(b.dataset.hash, b.dataset.t === "" ? null : b.dataset.t, b.dataset.kind); }
     }
     // bbox overlay on the explorer preview ("Faces" button in the details panel)
     function overlay(h) {
@@ -286,6 +305,7 @@
     RL.facesOpen = open;
     const css = document.createElement("style");
     css.textContent = `
+.reflib-fc-back { position: absolute; left: 12px; bottom: 12px; z-index: 61; }
 .reflib-fc-pan { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
 .reflib-fc-box { width: min(1100px, 96%); height: 92%; overflow: auto; box-sizing: border-box; padding: 14px 16px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px;
   background: var(--background-fill-primary, #fff); color: var(--body-text-color, #111); border: 1px solid var(--border-color-primary, #d1d5db); box-shadow: 0 10px 40px rgba(0,0,0,.35); font-size: 13px; }

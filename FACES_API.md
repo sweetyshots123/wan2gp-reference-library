@@ -27,6 +27,17 @@ Assignments, rejections and covers are stored **per model**. Switching `sim_sett
 debounced incremental run ~4 s after the last batch), `face_cluster_threshold` cosine 0..1 (default per model: arcface 0.42, glintr100 0.40, adaface 0.40, sface 0.50),
 `face_suggest_threshold` (default threshold − 0.05), `face_min_cluster` (default 2), `face_min_size` px (default 40;
 smaller faces are skipped when bbox is known). Change via `face_settings`.
+Quality gate (facequality): `face_q_min_det` 0.80, `face_q_min_blur` 25 (variance of Laplacian on the aligned crop),
+`face_q_max_yaw` 0.60 (landmark yaw proxy 0..1), `face_q_skip_trunc` true (bbox > 50 % outside the image).
+Strict clustering: `face_link_k` 3, `face_link_margin` 0.05. Suggestions: `face_proto_k` 4 prototypes,
+`face_suggest_margin` 0.05.
+
+### Face record fields (facequality)
+Every FACE object also carries `quality:{score 0..1, ok:bool, flags:[low_det|small|blurry|profile|truncated]}` and
+`aligned` (1 = legacy LMEDS partial-affine, 2 = umeyama similarity, null = unknown/indexed before facequality).
+Low-quality faces (`ok:false`) are NOT clustered, NOT used for centroids/prototypes and NOT suggested, but stay
+searchable, assignable by hand and visible (flagged). Faces indexed before facequality have unknown quality → ok.
+The sim index `face-<model>.npz` gains an optional `q` array (n×4: blur, yaw, trunc, aligned; NaN = unknown).
 
 ## Actions
 | action | request | response |
@@ -38,7 +49,8 @@ smaller faces are skipped when bbox is known). Change via `face_settings`.
 | `face_for_item` (fast) | `{hash}` or `{hashes:[≤200]}` | `{ok, items:{hash:{w, h, model, faces:[FACE]}}}` |
 | `face_assign` | `{person?:pid, name?:str, clusters?:[cid], faces?:[fid]}` | `{ok, person:PERSON, assigned:n, hashes:[…]}` + meta; creates the person when only `name` is given (or reuses one with the same folded name); adds `persona:<Nombre>` to items |
 | `face_unassign` | `{faces:[fid]}` | `{ok, n, hashes}`; removes the tag from items left with no face of that person (manual tags on items without detected faces are kept) |
-| `face_suggest` (fast) | `{person, method:"centroid"\|"nn"="nn", limit=40, threshold?}` | `{ok, person, faces:[FACE+{score}]}` best first; never rejected faces, never faces assigned to anyone |
+| `face_suggest` (fast) | `{person, method:"proto"\|"centroid"\|"nn"="proto", limit=40, threshold?}` | `{ok, person, faces:[FACE+{score, margin}]}` ranked by margin then score; only good-quality candidates; never rejected faces, never faces assigned to anyone |
+| `face_recompute` | `{hashes?:[hash]}` (default: whole library) | `{ok, remap_items, …enqueue result}` re-indexes faces (new alignment + quality) with `force, faces_only`; person assignments/rejections are carried to the new face rows by bbox IoU ≥ 0.5 |
 | `face_confirm` | `{person, faces:[fid]}` | = `face_assign` |
 | `face_reject` | `{person, faces:[fid]}` | `{ok, n}`; remembered per person+model, never suggested again |
 | `face_unreject` | `{person, faces?:[fid]}` | `{ok, n}`; all if `faces` omitted |
@@ -144,12 +156,27 @@ person_rename/delete/undo_delete/set_cover/face_settings — is refused instead 
 ## Re-index
 Face ids are row positions (`face_i`). When an item is re-indexed (`on_faces` batch), assignments/rejections whose
 `face_i` is past the new face count are dropped; the others are kept by position. Faces not yet seen are clustered by
-the next incremental run. (Re-matching moved rows by embedding is not done; a forced re-index that reorders faces can
-leave a wrong assignment, which `face_unassign` fixes.)
+the next incremental run. `face_recompute` snapshots the bbox of every assigned/rejected face in `persons.json`
+`remap:{model:{hash:{face_i:bbox}}}`; when the item comes back, old rows are matched to new rows by greedy bbox IoU ≥ 0.5
+(unmatched → assignment dropped) before the stale check.
 Items removed from the library drop their faces (tags go with the item).
 
 ## Algorithm
-Leader/centroid clustering, cosine on L2-normalised float32: each new unassigned face joins the closest cluster centroid
-if `cos ≥ threshold`, else starts a new cluster; after a pass, clusters whose centroids are ≥ threshold are merged.
-Incremental: only faces not in `seen`. Suggestions: `nn` = max cosine to the person's faces, `centroid` = cosine to
-the centroid; candidates below `face_suggest_threshold` are dropped.
+Strict (no-chaining) clustering, cosine on L2-normalised float32, good-quality faces only: a face joins the best
+cluster whose centroid is ≥ threshold AND which has min(`face_link_k`, size) members ≥ threshold − `face_link_margin`;
+else it starts a new cluster. Clusters then merge only by average linkage ≥ threshold (not centroid-to-centroid, so
+A–bridge–B chains do not form). Cluster ids are kept from the largest previous cluster a group contains.
+Incremental: only faces not in `seen`. Suggestions: `proto` = max cosine to the person's prototypes (centroid +
+k-means of confirmed good faces), `nn` = max cosine to confirmed faces, `centroid` = centroid only; margin = score −
+max(cosine to this person's rejected faces, to other persons' prototypes). Kept when score ≥ `face_suggest_threshold`
+and margin ≥ `face_suggest_margin`.
+Alignment: 5-point umeyama similarity to the ArcFace template (was cv2 estimateAffinePartial2D/LMEDS).
+
+## 1.12.2-faces: videos in suggestions / review
+* `face_suggest` / `person_get` video entries (deduped, one per video) carry `ids:[fid]` = every frame face merged
+  into the entry. `person_review`, `face_assign`, `face_confirm` and `face_reject` expand a video face id server-side
+  to the other still-unassigned faces of the same video with cos ≥ `face_suggest_threshold` to it (other people's
+  faces are never moved). `person_review` returns `accepted_all` / `rejected_all` (expanded ids, for undo), no
+  `toast` (the client shows one summary), and with `{next:true}` the refreshed `suggestions` (same ranking).
+* Suggestions skip every frame of a video already having a face assigned to / rejected for that person.
+* PERSON gains `photos` and `videos` (item counts by kind).

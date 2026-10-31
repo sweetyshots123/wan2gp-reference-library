@@ -291,6 +291,95 @@ def test_person_review_batch():
         F._F = old
 
 
+def test_facequality_helpers():
+    s = dict(F.DEFAULTS)
+    assert F.face_quality(0.95, 120, [200, 0.1, 0.0, 2], s)["ok"]
+    q = F.face_quality(0.5, 120, [5, 0.9, 1.0, 2], s)
+    assert not q["ok"] and {"low_det", "blurry", "profile", "truncated"} <= set(q["flags"]) and q["aligned"] == 2
+    assert F.face_quality(None, None, None, s)["ok"]           # legacy faces: unknown never fails
+    # strict clustering does not chain A - bridge - B
+    rng = np.random.default_rng(0)
+    a, b = F._norm(rng.normal(size=(1, 64))), F._norm(rng.normal(size=(1, 64)))
+    A = F._norm(a + 0.15 * rng.normal(size=(6, 64))); B = F._norm(b + 0.15 * rng.normal(size=(6, 64)))
+    br = F._norm((a + b))
+    M = F._norm(np.vstack([A, br, B]))
+    gs = F.strict_cluster(M, list(range(len(M))), [], 0.5, 3, 0.05)
+    assert not any(set(g) & set(range(6)) and set(g) & set(range(7, 13)) for g in gs), gs
+    # prototypes / suggest margin: a candidate closer to a rival person gets a negative margin
+    P = A; others = F.prototypes(B, 2)
+    sc, mg = F.suggest_scores(np.vstack([A[:1], B[:1]]), P, None, others, 2)
+    assert mg[0] > 0 > mg[1]
+    # remap by IoU
+    mp = F.remap_by_iou({0: [0.1, 0.1, 0.2, 0.2], 1: [0.6, 0.6, 0.2, 0.2], 2: [0.0, 0.9, 0.05, 0.05]},
+                        [[0.61, 0.6, 0.2, 0.2], [0.1, 0.11, 0.2, 0.2]])
+    assert mp == {0: 1, 1: 0, 2: None}, mp
+
+
+def test_recompute_keeps_assignments():
+    data, truth = synth(people=2, per=6)
+    f, _, d = mk(data)
+    f.run()
+    c = list(f.clusters()["clusters"])[0]
+    f.assign_faces(name="Ana", clusters=[c])
+    before = dict(f.assign("arcface"))
+    hs = f.recompute_plan()
+    assert set(hs) == {F.parse_fid(x)[0] for x in before} and f.db["remap"]["arcface"]
+    f._remap_pending(set(hs), "arcface")   # same boxes -> identity mapping
+    assert f.assign("arcface") == before and not f.db["remap"]["arcface"]
+
+
+class VSrc(Src):
+    """Src where hashes starting with 'v' are videos: one face row per sampled frame (t = row index)."""
+    def item(self, h, m):
+        it = Src.item(self, h, m)
+        if h.startswith("v"):
+            it.update(kind="video", t=[float(i) for i in range(it["n"])])
+        else:
+            it.update(kind="image", t=[None] * it["n"])
+        return it
+
+
+def test_video_suggestion_ids_review_expand_and_no_resuggest():
+    """1.12.2 A/B: a deduped video suggestion carries every merged face id; accepting / rejecting it via
+    person_review applies to all its frames; other frames of a decided video are never re-suggested."""
+    rng = np.random.default_rng(3)
+    A, B = F._norm(rng.normal(size=(2, 64)))
+    near = lambda c, k: (c + 0.25 * rng.normal(size=(k, 64)) / 8).astype(np.float32)
+    data = {"arcface": {**{"a%02d" % i: near(A, 1) for i in range(6)},
+                        "vA1": near(A, 5), "vA2": near(A, 4),
+                        "vMix": np.vstack([near(A, 2), near(B, 2)])}}
+    d = tempfile.mkdtemp(); t = Tags()
+    f = F.Faces(d, VSrc(data), tagger=t)
+    old = F._F; F._F = f
+    try:
+        class C: lang = "es"
+        pid = f.assign_faces(name="Ana", faces=[F.fid("a%02d" % i, 0, "arcface") for i in range(6)])["person"]["id"]
+        sug = f.suggest(pid, limit=20)
+        v1 = next(x for x in sug if x["hash"] == "vA1")
+        assert sorted(v1["ids"]) == [F.fid("vA1", i, "arcface") for i in range(5)], v1
+        assert sum(1 for x in sug if x["hash"] == "vA1") == 1
+        mix = next(x for x in sug if x["hash"] == "vMix")
+        assert set(mix["ids"]) == {F.fid("vMix", 0, "arcface"), F.fid("vMix", 1, "arcface")}, mix
+        # accept the representative only -> all 5 frames of vA1 assigned; reject vA2 rep -> all 4 rejected
+        r = F._actions.call("person_review", {"person": pid, "accept": [v1["id"]],
+                                              "reject": [next(x["id"] for x in sug if x["hash"] == "vA2")], "meta": False}, C())
+        assert r["ok"] and r["assigned"] == 5 and r["n_rejected"] == 4 and "toast" not in r, r
+        a = f.assign("arcface")
+        assert all(a.get(F.fid("vA1", i, "arcface")) == pid for i in range(5))
+        assert len(f.db["reject"]["arcface"][pid]) == 4
+        # face_assign / face_reject expand too; B's frames of vMix are never pulled in
+        F._actions.call("face_assign", {"person": pid, "faces": [mix["id"]], "meta": False}, C())
+        assert {F.fid("vMix", 0, "arcface"), F.fid("vMix", 1, "arcface")} <= set(f.assign("arcface"))
+        assert F.fid("vMix", 2, "arcface") not in f.assign("arcface") and F.fid("vMix", 3, "arcface") not in f.assign("arcface")
+        # B: decided videos are not re-suggested (even other frames left unassigned)
+        f.unassign([F.fid("vA1", 4, "arcface")])
+        f.db["reject"]["arcface"][pid] = f.db["reject"]["arcface"][pid][:2]
+        hs = {x["hash"] for x in f.suggest(pid, limit=20, threshold=-1)}
+        assert not hs & {"vA1", "vA2", "vMix"}, hs
+    finally:
+        F._F = old
+
+
 if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):
