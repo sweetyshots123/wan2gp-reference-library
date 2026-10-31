@@ -312,7 +312,7 @@ html{overflow-anchor:none}
 .fvid .badge.video { position: absolute; left: 2px; top: 2px; bottom: auto; padding: 0 4px; font-size: 11px; }
 .fvid .fchips { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
 .tchip { font-size: 11px; padding: 1px 5px; border-radius: 8px; border: 0; background: rgba(14,165,233,.9); color: #fff; cursor: pointer; }
-.badge.tbest { left: auto; right: 8px; top: 8px; background: #0ea5e9; color: #fff; }
+.badge.tbest { left: 8px; right: auto; top: 34px; background: #0ea5e9; color: #fff; }
 .vsegs { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; z-index: 5; }
 
 /* 1.12.1 versiones (clips / copias virtuales) */
@@ -321,3 +321,8 @@ html{overflow-anchor:none}
 .versions li.cur { font-weight: 600; }
 .versions button.link { background: none; border: 0; color: inherit; text-align: left; flex: 1; cursor: pointer; padding: 2px 0; }
 .versions button.x { padding: 0 6px; }
+
+/* 1.12.2 */
+.versions button.link { display: flex; flex-direction: column; }
+.versions .vsub { font-size: 12px; }
+.vbad { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.85); padding: 16px 20px; border-radius: 10px; max-width: 420px; text-align: center; z-index: 5; }

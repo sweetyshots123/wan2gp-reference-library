@@ -36,6 +36,25 @@ def reveal(path: str, platform: str = sys.platform, run: Callable = None) -> Lis
     return cmd
 
 
+def open_command(path: str, platform: str = sys.platform) -> List[str]:
+    """1.12.2: open the file itself with the system's default app (e.g. a video Chrome can't play: mp4v...)."""
+    if platform.startswith("win"):
+        return ["explorer.exe", os.path.normpath(path)]
+    if platform == "darwin":
+        return ["open", path]
+    return ["xdg-open", path]
+
+
+def open_file(path: str, platform: str = sys.platform, run: Callable = None) -> List[str]:
+    if not path or not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    cmd = open_command(path, platform)
+    run = run or (lambda c: subprocess.Popen(c, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                             creationflags=0x08000000 if platform.startswith("win") else 0))
+    run(cmd)
+    return cmd
+
+
 def known_path(h: str) -> Optional[str]:
     """The file the library itself holds for this hash: the stored copy for collection / pool images, the original
     for watched-folder images. None for unknown hashes."""

@@ -205,6 +205,7 @@ function OriginControl({ hashes, onChanged }: { hashes: string[]; onChanged: () 
 function Versions({ one, onChanged }: { one: Item; onChanged: () => void }) {
   const [v, setV] = useState<{ orig: string; copies: any[] } | null>(null);
   const [tick, setTick] = useState(0);
+  const [plan, setPlan] = useState<any>(null);
   const want = (one.kind || "image") !== "mask";
   useEffect(() => { const f = () => setTick((x) => x + 1); window.addEventListener("gal:versions", f); return () => window.removeEventListener("gal:versions", f); }, []);
   useEffect(() => {
@@ -215,7 +216,8 @@ function Versions({ one, onChanged }: { one: Item; onChanged: () => void }) {
   }, [one.hash, want, one.vcopies, tick]);
   if (!want || !v || (!v.copies.length && !one.virtual)) return null;
   const open = (h: string, name: string, kind: string, t?: number | null) => openAt({ hash: h, name, kind: (kind || "video") as any }, t);
-  const del = async (h: string) => { const r = await act("delete", { hashes: [h] }, onChanged); if (r?.ok) setTick((x) => x + 1); };
+  // mismo flujo que el botón Borrar (confirmación / diálogo); el original no se toca
+  const del = (h: string) => startDelete([h], (p) => setPlan({ p, h }), () => { onChanged(); setTick((x) => x + 1); });
   return (
     <section className="versions">
       <h4>Versiones</h4>
@@ -223,15 +225,29 @@ function Versions({ one, onChanged }: { one: Item; onChanged: () => void }) {
         {one.virtual && <li><button className="link" onClick={() => open(v.orig, "", one.kind || "video")}>↩ Original</button></li>}
         {v.copies.map((c) => (
           <li key={c.hash} className={c.hash === one.hash ? "cur" : ""}>
-            <button className="link" title="Abrir" onClick={() => open(c.hash, c.name, c.kind, c.params?.start)}>
-              {c.kind === "image" ? "🖼" : "✂"} {c.name}
-              <span className="muted"> {c.params?.end != null ? `${fmtT(c.params.start || 0)}–${fmtT(c.params.end)}` : ""}{c.params?.rect ? ` ${c.params.rect[2]}×${c.params.rect[3]}` : ""}{c.broken ? " · sin original" : ""}</span>
+            <button className="link" title="Abrir" onClick={() => open(c.hash, c.name, c.kind)}>
+              <span className="vname">{vIcon(c)} {c.name}</span>
+              <span className="muted vsub">{vSub(c)}{c.broken ? " · sin original" : ""}</span>
             </button>
             <button className="x" title="Borrar esta copia (el original no se toca)" onClick={() => del(c.hash)}>×</button>
           </li>
         ))}
         {!v.copies.length && <li className="muted">Sin copias</li>}
       </ul>
+      {plan && <DeleteDialog plan={plan.p} hashes={[plan.h]} close={() => setPlan(null)} after={() => { onChanged(); setTick((x) => x + 1); }} />}
     </section>
   );
+}
+
+/** 1.12.2: tipo de versión: ⧉ copia entera, ✂ clip (entrada–salida), ⬚ encuadre (recorte / resolución). */
+export function vIcon(c: any): string {
+  const p = c.params || {};
+  return p.end != null || p.start ? "✂" : p.rect ? "⬚" : "⧉";
+}
+export function vSub(c: any): string {
+  const p = c.params || {}, out: string[] = [];
+  if (p.end != null || p.start) out.push(`Clip ${fmtT(p.start || 0)}–${p.end != null ? fmtT(p.end) : "fin"} (${fmtT(c.dur || 0)})`);
+  if (p.rect) out.push(`Encuadre ${p.rect[2]}×${p.rect[3]} desde (${p.rect[0]}, ${p.rect[1]})`);
+  if (!out.length) out.push("Copia" + (c.width ? ` · ${c.width}×${c.height}` : ""));
+  return out.join(" · ");
 }

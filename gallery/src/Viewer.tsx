@@ -24,6 +24,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
   const [panel, setPanel] = useState(() => localStorage.getItem("gal.panel") === "1");
   const [ve, setVe] = useState<VEdit | null>(null);
+  const [vbad, setVbad] = useState(false);   // 1.12.2: el navegador no puede reproducir este vídeo (p. ej. mp4v)
   const [settled, setSettled] = useState<string | null>(null);
   const panelIt = useRef<Item | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
@@ -120,13 +121,21 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   })(live.current), commit);
   const zoomCenter = (f: number) => { const r = stage.current!.getBoundingClientRect(); animate(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
 
+  useEffect(() => setVbad(false), [it?.hash]);
+  useEffect(() => {   // también con el reproductor de Vidosser (su <video> no lleva nuestros onError)
+    const v = media.current as HTMLVideoElement | null;
+    if (!v || v.tagName !== "VIDEO") return;
+    const bad = () => setVbad(true);
+    const meta = () => { if (!v.videoWidth) setVbad(true); };
+    v.addEventListener("error", bad); v.addEventListener("loadedmetadata", meta);
+    if (v.error) setVbad(true);
+    return () => { v.removeEventListener("error", bad); v.removeEventListener("loadedmetadata", meta); };
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input,textarea,select")) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
       const k = e.key;
       if (e.defaultPrevented) return;
-      // 1.12.1: en el editor de clip, I/O marcan entrada/salida (como en la Media Library)
-      if (ve && ve.kind !== "image" && (k === "i" || k === "I" || k === "o" || k === "O")) { e.preventDefault(); setIO(k.toLowerCase() === "i" ? "start" : "end"); return; }
       // con Vidosser en un vídeo, sus teclas mandan (l = bucle, e = vídeo anterior…): aquí solo flechas, F, Esc, h
       if (vid && media.current?.tagName === "VIDEO" && k.length === 1 && vidKeys().has(k.toLowerCase()) && k.toLowerCase() !== "f") return;
       if (k === "Escape") { ve ? setVe(null) : close(); }
@@ -141,8 +150,17 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       else return;
       e.preventDefault();
     };
+    // 1.12.2: I/O del editor de clip en CAPTURA (antes que Vidosser, que también usa i/o y hacía defaultPrevented);
+    // solo esas dos teclas y solo con el editor abierto: el resto de teclas / zoom / rueda siguen igual.
+    const onIO = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (!ve || ve.kind === "image" || !(k === "i" || k === "I" || k === "o" || k === "O") || e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.target as HTMLElement)?.closest?.("input,textarea,select")) return;
+      e.preventDefault(); e.stopPropagation(); setIO(k.toLowerCase() === "i" ? "start" : "end");
+    };
+    window.addEventListener("keydown", onIO, true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onIO, true); window.removeEventListener("keydown", onKey); };
   }, [go, ve, isFav, it?.hash, vid]);
 
   // rueda: sin zoom = anterior/siguiente (una muesca = una foto); con zoom = desplazar; Ctrl+rueda = zoom
@@ -298,7 +316,17 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           )}
           {src && (kind === "video" || kind === "mask") && (
             <div className="vidhost" key={src} ref={(el) => { tgt.current = el; }} style={{ transform: xf(z) }}>
-              <video ref={media} src={src} controls autoPlay loop playsInline onLoadedMetadata={(e) => { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; setDraft((d) => d && [...d] as Rect); }} />
+              <video ref={media} src={src} controls autoPlay loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; setDraft((d) => d && [...d] as Rect); }} />
+            </div>
+          )}
+          {src && vbad && (kind === "video" || kind === "mask") && (
+            <div className="vbad" onPointerDown={(e) => e.stopPropagation()}>
+              <p>Este navegador no puede reproducir este vídeo (códec no compatible, p. ej. mp4v / MPEG-4 Part 2).</p>
+              <div className="row">
+                <button className="primary" onClick={() => act("open_file", { hash: it.hash }, () => {}, { quiet: true })}>▶ Abrir en reproductor externo</button>
+                <button onClick={() => act("reveal", { hash: it.hash }, () => {}, { quiet: true })}>📂 Mostrar en carpeta</button>
+              </div>
+              <p className="muted">Solo funciona en el mismo PC que WanGP.</p>
             </div>
           )}
           {src && kind === "video" && segChips(it).length > 0 && (

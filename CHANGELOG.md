@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.2
+- Galería clip editor: I / O work with Vidosser loaded (own capture listener for just those two keys; every other key, zoom and wheel unchanged).
+- Versiones: opening a clip no longer seeks to its in point on top of the already-cut clip; each row says what it is (⧉ Copia · size, ✂ Clip in–out (duration), ⬚ Encuadre w×h); × uses the normal delete confirmation / dialog.
+- Video thumbnails (shared, both UIs): poster at ~10% / at least ~1 s in, skipping black frames; old cached posters are retaken once.
+- Videos the browser can't play (e.g. mp4v): notice with «Abrir en reproductor externo» (new same-PC `open_file`, like «Mostrar en carpeta») and «Mostrar en carpeta». No transcoding.
+- ⏱ best-match chip moved under the duration badge. Duplicados counters say "X fotos · Y vídeos" (both UIs).
+
 ## 1.12.1
 - Virtual copies / clips are now shared actions (`reflib_core/virtactions.py`: virt_src, virt_create, virt_update, virt_status, plus the new virt_list); the Media Library and the Galería call the same code. The logic was moved out of plugin.py unchanged (outputs checked identical against the 1.12.0 code).
 - Galería viewer editor: I / O keys set the clip's in / out points, "✂ Crear recorte" (in/out + crop) and "⧉ Copia virtual" (whole item, no changes).

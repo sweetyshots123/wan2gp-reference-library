@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.1"
+PLUGIN_VERSION = "1.12.2"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3635,7 +3635,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         if req.get("lang") in LANGS:
             self._ui_lang = req["lang"]   # 1.7.0: quiet server-side events (mask auto-save) speak the UI language
         action = req.get("action")
-        if action == "reveal":   # 1.5.2 "Show in folder": same-PC requests only, library-known files only
+        if action in ("reveal", "open_file"):   # 1.5.2 "Show in folder" / 1.12.2 open in the default app: same-PC requests only, library-known files only
             from .reflib_core import reveal as _rv
             host = getattr(getattr(request, "client", None), "host", None) if request is not None else None
             if not _rv.is_local(host):
@@ -3644,7 +3644,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not p:
                 return json.dumps({"ok": False, "id": req.get("id"), "error": TEXT[lang]["reveal_missing"]})
             try:
-                _rv.reveal(p)
+                (_rv.open_file if action == "open_file" else _rv.reveal)(p)
                 return json.dumps({"ok": True, "id": req.get("id"), "path": p})
             except Exception as e:
                 return json.dumps({"ok": False, "id": req.get("id"), "error": str(e)[:200]})
