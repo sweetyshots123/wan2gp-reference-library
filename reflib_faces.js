@@ -77,8 +77,8 @@
             if (!st || !st.root) return;
             if (pan) { pan.style.display = "none"; backBtn(st.root); }
             const card = st.root.querySelector(`.reflib-ib-card[data-hash="${CSS.escape(hash)}"]`);
-            if (card) card.click();
             if (RL.ilibShowPreview) RL.ilibShowPreview(hash, { kind: kind || "video", best_t: t != null ? Number(t) : null });
+            else if (card) card.click();
             const seek = () => {
                 const v = st.root.querySelector(".reflib-ib-pvmedia");
                 if (v && typeof v.currentTime === "number") {
@@ -88,7 +88,7 @@
                 }
                 return false;
             };
-            if (t != null && !seek()) { let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }
+            if (t != null) setTimeout(() => { if (seek()) return; let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }, 350);
         } catch (e) {}
     }
     function showPan() {
