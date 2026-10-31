@@ -241,6 +241,30 @@ def test_real_source_face_matrix_bbox_and_on_faces():
     f.close(); assert not idx.cbs
 
 
+def test_status_counts_shown_groups_and_last_threshold():
+    data, _ = synth(people=3, per=6)
+    rng = np.random.default_rng(7)
+    for k in range(5):   # 5 unrelated faces -> singletons, never shown in the panel
+        data["arcface"]["solo%d" % k] = F._norm(rng.normal(size=(1, 64))).astype(np.float32)
+    f, _, d = mk(data)
+    f.run()
+    s = f.status()
+    assert s["clusters"] == 3 == f.list_clusters()["total"], s
+    assert s["clusters_all"] >= 8 and s["min_cluster"] == 2
+    assert abs(s["threshold"] - s["threshold_setting"]) < 1e-9
+    # explicit threshold on a run is what status reports (and it persists)
+    f.run(full=True, threshold=0.2)
+    s = f.status()
+    assert abs(s["threshold"] - 0.2) < 1e-9 and abs(s["threshold_setting"] - 0.2) > 1e-6, s
+    assert abs(F.Faces(d, f.src).status()["threshold"] - 0.2) < 1e-9
+    # naming a group removes it from the count
+    f.run(full=True)
+    c = f.list_clusters()["clusters"][0]["id"]
+    f.assign_faces(name="Ana", clusters=[c])
+    s = f.status()
+    assert s["clusters"] == 2 == f.list_clusters()["total"] and s["persons"] == 1, s
+
+
 if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):

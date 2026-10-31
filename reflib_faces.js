@@ -7,14 +7,14 @@
     if (!RL || !RL.extend || RL.facesLoaded) return;
     RL.facesLoaded = true;
     const S = {
-        en: { open: "People", title: "People", persons: "People", none_p: "Nobody named yet: name a group of faces below.", clusters: "Unnamed faces", none_c: "No groups yet. Compute faces (Find similar → Compute faces) and press «Group faces».",
+        en: { open: "People", title: "People", persons: "People", none_p: "Nobody named yet: name a group of faces below.", clusters: "Unnamed faces", none_c: "No groups yet. Compute faces (Find similar → Compute faces) and press «Group faces».", none_c2: "No unnamed groups of {m}+ faces right now ({a} single faces). Press «Regroup all» or lower «Grouping strictness».",
               run: "Group faces", regroup: "Regroup all", thr: "Grouping strictness", thr_tip: "Higher = only very similar faces go together (more, smaller groups)", status: "{f} faces · {u} unnamed · {c} groups · {p} people",
               running: "Grouping {d} / {t}…", name_ph: "Name…", name: "Name", merge: "Merge selected ({n})", back: "← Back", faces_n: "{n} faces", items_n: "{n} photos",
               ask: "Is this also {x}?", yes: "Yes", no: "No", no_more: "No more suggestions for {x}.", rename: "Rename", del: "Forget person", del_ok: "Forgot {x} (photos are kept)", undo: "Undo",
               cover: "Use as cover", remove: "Not {x}", split: "Move to new group ({n})", assign_to: "Assign selected to…", show: "Show photos", merge_into: "Merge into…",
               assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
               close: "Close", del_q: "Forget {x}? Photos are never deleted; the persona tag is removed.", rename_q: "New name for {x}:", err: "Error: {e}", unknown: "?" },
-        es: { open: "Personas", title: "Personas", persons: "Personas", none_p: "Aún no hay nadie con nombre: pon nombre a un grupo de caras de abajo.", clusters: "Caras sin nombre", none_c: "Aún no hay grupos. Calcula las caras (Buscar similares → Calcular caras) y pulsa «Agrupar caras».",
+        es: { open: "Personas", title: "Personas", persons: "Personas", none_p: "Aún no hay nadie con nombre: pon nombre a un grupo de caras de abajo.", clusters: "Caras sin nombre", none_c: "Aún no hay grupos. Calcula las caras (Buscar similares → Calcular caras) y pulsa «Agrupar caras».", none_c2: "Ahora no hay grupos sin nombre de {m} o más caras ({a} caras sueltas). Pulsa «Reagrupar todo» o baja la «Exigencia al agrupar».",
               run: "Agrupar caras", regroup: "Reagrupar todo", thr: "Exigencia al agrupar", thr_tip: "Más alto = solo se juntan caras muy parecidas (más grupos, más pequeños)", status: "{f} caras · {u} sin nombre · {c} grupos · {p} personas",
               running: "Agrupando {d} / {t}…", name_ph: "Nombre…", name: "Nombrar", merge: "Unir seleccionados ({n})", back: "← Volver", faces_n: "{n} caras", items_n: "{n} fotos",
               ask: "¿Es esta también {x}?", yes: "Sí", no: "No", no_more: "No hay más sugerencias para {x}.", rename: "Renombrar", del: "Olvidar persona", del_ok: "{x} olvidada (las fotos se conservan)", undo: "Deshacer",
@@ -86,7 +86,7 @@
           <div class="reflib-fc-clusters">${cs.length ? cs.map(c => `<div class="reflib-fc-cluster${sel.has(c.id) ? " on" : ""}" data-c="${esc(c.id)}">
               <input type="checkbox" data-f="csel" data-c="${esc(c.id)}" ${sel.has(c.id) ? "checked" : ""}>
               <button type="button" class="reflib-fc-open" data-f="cluster" data-c="${esc(c.id)}">${c.cover ? face(c.cover, "round") : ""}<i>${esc(ft("faces_n", { n: c.size }))}</i></button>
-              <span class="reflib-fc-nm"><input type="text" list="reflib-fc-names" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(c.id)}"><button type="button" class="reflib-ib-btn" data-f="name" data-c="${esc(c.id)}">${esc(ft("name"))}</button></span></div>`).join("") : `<div class="reflib-fc-muted">${esc(ft("none_c"))}</div>`}</div>
+              <span class="reflib-fc-nm"><input type="text" list="reflib-fc-names" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(c.id)}"><button type="button" class="reflib-ib-btn" data-f="name" data-c="${esc(c.id)}">${esc(ft("name"))}</button></span></div>`).join("") : `<div class="reflib-fc-muted">${esc(s.faces ? ft("none_c2", { m: s.min_cluster || 2, a: s.unassigned }) : ft("none_c"))}</div>`}</div>
           <datalist id="reflib-fc-names">${ps.map(p => `<option value="${esc(p.name)}">`).join("")}</datalist>`, ft("title"));
         if (s.running && !poll) poll = setInterval(() => call({ action: "face_status" }).then(r => { if (!r.faces.running) { clearInterval(poll); poll = null; draw(); } }).catch(() => {}), 1500);
     }
@@ -157,14 +157,42 @@
         Promise.all([call({ action: "face_for_item", hash: h }), call({ action: "person_list" })]).then(([r, pl]) => {
             const it = (r.items || {})[h]; if (!it) return;
             const names = new Map((pl.persons || []).map(p => [p.id, p.name]));
+            if (box.querySelector(".reflib-fc-ov")) return;
             const ov = document.createElement("div"); ov.className = "reflib-fc-ov";
-            const ir = img.getBoundingClientRect(), br = box.getBoundingClientRect();
-            Object.assign(ov.style, { left: (ir.left - br.left) + "px", top: (ir.top - br.top) + "px", width: ir.width + "px", height: ir.height + "px" });
             ov.innerHTML = it.faces.map(f => f.box ? `<div class="reflib-fc-bb" style="left:${100 * f.box[0]}%;top:${100 * f.box[1]}%;width:${100 * f.box[2]}%;height:${100 * f.box[3]}%"><span>${esc(names.get(f.person) || ft("unknown"))}</span></div>` : "").join("")
                 + `<div class="reflib-fc-ovlist">${it.faces.map((f, i) => `<span>${i + 1}: ${esc(names.get(f.person) || ft("unknown"))}</span>`).join("")}</div>`;
-            box.style.position = "relative"; box.appendChild(ov);
+            if (getComputedStyle(box).position === "static") box.style.position = "relative";
+            box.appendChild(ov);
+            RL.facesPlace(ov, img, box);
+            // keep aligned: image load, resize of image/box, window resize, fullscreen
+            const upd = () => { if (!ov.isConnected || !img.isConnected) return stop(); RL.facesPlace(ov, img, box); };
+            const ro = window.ResizeObserver ? new ResizeObserver(upd) : null;
+            if (ro) { ro.observe(img); ro.observe(box); }
+            const evs = [[img, "load"], [window, "resize"], [document, "fullscreenchange"]];
+            evs.forEach(([t, e]) => t.addEventListener(e, upd));
+            const stop = () => { if (ro) ro.disconnect(); evs.forEach(([t, e]) => t.removeEventListener(e, upd)); };
         }).catch(() => {});
     }
+    // Rendered picture rect inside <img> (object-fit contain/fill), as % of the container box.
+    function facesRect(img, box) {
+        const bw = box.clientWidth, bh = box.clientHeight, ew = img.clientWidth, eh = img.clientHeight;
+        if (!bw || !bh || !ew || !eh) return null;
+        const nw = img.naturalWidth, nh = img.naturalHeight, fit = getComputedStyle(img).objectFit;
+        let w = ew, h = eh;
+        if (nw && nh && (fit === "contain" || fit === "scale-down")) {
+            const k = Math.min(ew / nw, eh / nh, fit === "scale-down" ? 1 : Infinity); w = nw * k; h = nh * k;
+        }
+        const ir = img.getBoundingClientRect(), br = box.getBoundingClientRect();
+        const sx = br.width / bw || 1, sy = br.height / bh || 1;   // css transforms (zoom)
+        const x = (ir.left - br.left) / sx - box.clientLeft + (ew - w) / 2, y = (ir.top - br.top) / sy - box.clientTop + (eh - h) / 2;
+        return { left: 100 * x / bw, top: 100 * y / bh, width: 100 * w / bw, height: 100 * h / bh };
+    }
+    RL.facesPlace = (ov, img, box) => {
+        const r = (img.complete && img.naturalWidth) ? facesRect(img, box) : null;
+        ov.style.visibility = r ? "" : "hidden";   // not loaded yet: wait for the load event
+        if (r) Object.assign(ov.style, { left: r.left + "%", top: r.top + "%", width: r.width + "%", height: r.height + "%" });
+    };
+    RL.facesRect = facesRect;
     const isImg = it => !it.kind || it.kind === "image";
     const itemOf = h => (ilib().q.items || []).find(x => x && x.hash === h) || {};
     RL.extend({

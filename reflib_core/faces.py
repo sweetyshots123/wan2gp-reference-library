@@ -382,9 +382,16 @@ class Faces:
         c = self._mat(m)
         asg = self.assign(m)
         cl = self.clusters(m)
+        s = self.settings()
+        ms = int(s["face_min_cluster"])
+        # only groups the panel can show (>= face_min_cluster faces); singletons are reported apart
+        shown = sum(1 for v in cl["clusters"].values() if len(v["faces"]) >= ms)
+        th = cl.get("threshold")   # threshold of the last clustering run (may be an explicit one)
         return {"model": m, **self.st, "faces": len(c["ids"]), "unassigned": sum(1 for f in c["ids"] if f not in asg),
-                "clusters": len(cl["clusters"]), "persons": len(self.db["persons"]), "rev": self.rev,
-                "threshold": self.settings()["face_cluster_threshold"]}
+                "clusters": shown, "clusters_all": len(cl["clusters"]), "min_cluster": ms,
+                "persons": len(self.db["persons"]), "rev": self.rev,
+                "threshold": float(th) if th is not None else s["face_cluster_threshold"],
+                "threshold_setting": s["face_cluster_threshold"]}
 
     def _cover(self, faces: List[str], m: str) -> Optional[str]:
         """Face closest to the group centroid (most typical face)."""
