@@ -1,6 +1,8 @@
 # Changelog
 
 ## 1.10.0
+- Base: Media Library faces2 ea09020 (simperf 9b0ed21: caras múltiples por imagen con `box` 0..1 real, auto‑agrupado incremental, filtro de tamaño mínimo).
+- Galería Personas: ajustes compartidos `face_settings` (Auto‑agrupar = face_auto_cluster, tamaño mínimo = face_min_size px); recuadros de las caras sobre la imagen en el panel del elemento desde `box` (0..1), resaltado al pasar por cada cara; miniatura `face_thumb` por cara.
 - Galería: página Personas (personas con cara de portada, «Caras sin nombre» para nombrar/asignar/unir), cabecera de persona (renombrar, unir, olvidar con deshacer, rejilla de caras con separar/quitar/portada) y tarjeta «¿Es esta también X?» (Y/S = sí, N = no).
 - Panel del elemento: caras detectadas asignables a personas.
 - Origen IA / Real (reflib_core/origin.py, una lógica para ambas UIs): override por elemento o selección (IA / Real / Auto, con deshacer), marca por carpeta o subcarpeta heredada por todo su contenido y archivos nuevos (una subcarpeta o un elemento pueden anularla), y detección automática (carpetas de salida de WanGP, json de ajustes junto al archivo, nombres tipo …_seed123… / 2025-01-01-12h30m15s_…). Filtro IA / Real (clic = solo ese, Ctrl+clic = combinar), insignia IA en miniaturas, control en el panel de edición / barra de selección, botón «IA» por carpeta en el árbol, y búsqueda origin:ia / origin:real (o origen:) en ambas UIs. Las marcas se guardan en collections/origin.json; cambiarlas no reconstruye el catálogo (11 ms con 3k elementos).

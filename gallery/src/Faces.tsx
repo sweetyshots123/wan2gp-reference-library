@@ -5,7 +5,7 @@ import { call, fold } from "./api";
 import { act } from "./actions";
 import { toast, Thumb } from "./ui";
 
-export interface Face { id: string; hash: string; n: number; model: string; bbox: number[] | null; w: number; h: number; score?: number; person?: string; cluster?: string; thumb?: string }
+export interface Face { id: string; hash: string; n: number; model: string; box?: number[] | null; bbox: number[] | null; det?: number | null; w: number; h: number; score?: number; person?: string; cluster?: string; thumb?: string }
 export interface Person { id: string; name: string; tag: string; count: number; items: number; cover: Face | null; seeded?: boolean }
 
 // ---------------------------------------------------------------- recorte de cara
@@ -65,6 +65,7 @@ export function PersonasPage({ tq, rev, after }: { tq: string; rev: number; afte
       <div className="fstat muted">
         {st ? <>{st.faces ?? 0} caras · {st.persons ?? 0} personas · {st.unassigned ?? 0} sin nombre en {st.clusters ?? 0} grupos{st.running ? ` · agrupando ${st.done}/${st.total}…` : ""}</> : "…"}
         <button disabled={!!st?.running} onClick={() => act("face_cluster_run", {}, refresh, { quiet: true })} title="Agrupa las caras nuevas (incremental)">↻ Agrupar caras</button>
+        <FaceSettings />
         <button disabled={!!st?.running} onClick={() => window.confirm("¿Reagrupar todas las caras sin nombre? (los grupos sin nombre pueden cambiar)") && act("face_cluster_run", { full: true }, refresh, { quiet: true })}>Reagrupar todo</button>
       </div>
       <div className="pgrid">
@@ -176,6 +177,7 @@ export function PersonHeader({ name, rev, after }: { name: string; rev: number; 
 // ---------------------------------------------------------------- caras de un elemento (panel de edición)
 export function ItemFaces({ hash, onChanged }: { hash: string; onChanged: () => void }) {
   const [faces, setFaces] = useState<Face[] | null>(null);
+  const [hot, setHot] = useState("");
   const [tick, setTick] = useState(0);
   const { persons } = usePersons(tick);
   useEffect(() => { let live = true; call("face_for_item", { hash }).then((r) => live && setFaces(r.ok ? r.items?.[hash]?.faces || [] : [])).catch(() => live && setFaces([])); return () => { live = false; }; }, [hash, tick]);
@@ -184,9 +186,10 @@ export function ItemFaces({ hash, onChanged }: { hash: string; onChanged: () => 
   const byId = new Map(persons.map((p) => [p.id, p]));
   return (
     <div className="ifaces"><h4>Caras</h4>
+      <FaceBoxes hash={hash} faces={faces} hot={hot} />
       <datalist id="pnames-i">{persons.map((p) => <option key={p.id} value={p.name} />)}</datalist>
       {faces.map((f) => { const who = f.person ? byId.get(f.person) : null; return (
-        <div key={f.id} className="iface">
+        <div key={f.id} className="iface" onMouseEnter={() => setHot(f.id)} onMouseLeave={() => setHot("")}>
           <FaceImg f={f} size={64} className="round" />
           {who ? <><a href={`#/persona/${encodeURIComponent(who.name)}`}>{who.name}</a><button title="Quitar esta cara de la persona" onClick={() => act("face_unassign", { faces: [f.id] }, done, { quiet: true })}>×</button></>
             : <input className="namebox" list="pnames-i" placeholder="¿Quién es?" onKeyDown={(e) => {
@@ -195,6 +198,33 @@ export function ItemFaces({ hash, onChanged }: { hash: string; onChanged: () => 
                 act("face_assign", p ? { person: p.id, faces: [f.id] } : { name: v, faces: [f.id] }, done, { quiet: true });
               }} />}
         </div>); })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- ajustes (face_auto_cluster / face_min_size, compartidos con la Media Library)
+function FaceSettings() {
+  const [s, setS] = useState<any>(null);
+  useEffect(() => { call("face_settings").then((r) => r.ok && setS(r.settings)).catch(() => {}); }, []);
+  if (!s) return null;
+  const save = (patch: any) => { setS({ ...s, ...patch }); act("face_settings", { settings: patch }, () => {}, { quiet: true }).then((r: any) => r?.settings && setS(r.settings)); };
+  return (
+    <span className="fset">
+      <label title="Agrupa automáticamente las caras nuevas al indexar"><input type="checkbox" checked={s.face_auto_cluster !== false} onChange={(e) => save({ face_auto_cluster: e.target.checked })} /> Auto</label>
+      <label title="Ignora caras más pequeñas (px)">mín <input type="number" min={0} max={1024} step={8} defaultValue={s.face_min_size ?? 40}
+        onBlur={(e) => { const v = Math.max(0, Math.min(1024, parseInt(e.target.value) || 0)); if (v !== s.face_min_size) save({ face_min_size: v }); }} /> px</label>
+    </span>
+  );
+}
+
+// Recuadros de las caras sobre la imagen (box = fracción 0..1 del registro simperf; null = sin posición)
+function FaceBoxes({ hash, faces, hot }: { hash: string; faces: Face[]; hot: string }) {
+  const boxed = faces.filter((f) => f.box && f.box.length === 4);
+  if (!boxed.length) return null;
+  return (
+    <div className="fboxes"><Thumb hash={hash} className="fbimg" />
+      {boxed.map((f) => { const [x, y, w, h] = f.box!; return <div key={f.id} className={`fbox ${hot === f.id ? "hot" : ""}`}
+        style={{ left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` }} />; })}
     </div>
   );
 }
