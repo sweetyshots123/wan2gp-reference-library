@@ -1,4 +1,4 @@
-// Reference Library 1.9.6 - selection rules shared by the Media Library (reference_library.js, prepended by
+// Reference Library 1.9.6-simperf - selection rules shared by the Media Library (reference_library.js, prepended by
 // plugin.py) and the Galería (gallery/src/Selection.ts imports this same file). Pure functions, no DOM:
 // each returns what to do and the new anchor; the UI applies it to its own selection set.
 (function (root) {

@@ -25,12 +25,13 @@ BUSY: Callable[[], bool] = lambda: False   # set by the host (WanGP: "a generati
 
 VERSION = 1
 SAVE_EVERY = 50
-BATCH = 8
+BATCH = 24   # 1.9.6-simperf: larger IPC batches so decode prefetch has work to overlap
 IDLE_UNLOAD = 120.0
 SYNC_EVERY = 60.0
 RESULTS_KEEP = 30
+# workers: decode/prefetch threads inside simworker (0 = auto from CPU count, typically 2..4)
 DEFAULTS = {"python": "", "face_model": "arcface", "auto": True, "gpu": True, "models_dir": "", "w_pose": 0.5,
-            "threshold": 0.0, "mirror": True, "limit": 1000}
+            "threshold": 0.0, "mirror": True, "limit": 1000, "workers": 0}
 # Face recognisers the user can pick (Ajustes > Modelo de caras). Each keeps its own vectors (never mixed).
 FACE_MODELS = {   # id -> file, aliases, dim, label, licence
     "arcface": {"file": "w600k_r50.onnx", "alias": ["buffalo_l/w600k_r50.onnx"], "dim": 512, "label": "ArcFace w600k_r50 (buffalo_l)",
@@ -80,6 +81,11 @@ class SimIndex:
         self.active = "arcface"  # face model whose vectors are searched / counted; others are kept but never mixed
         self.rev = 0
         self._mat = None
+        # 1.9.6-simperf: only rewrite npz files that changed (rewriting every face-*.npz each SAVE_EVERY
+        # dominated wall time once the index grew past a few thousand images).
+        self._dirty_pose = False
+        self._dirty_faces: set = set()
+        self._dirty_meta = False
         self.load()
 
     @property
@@ -127,11 +133,30 @@ class SimIndex:
                             self.items[h]["faces"][fm] = vec[cuts[k]:cuts[k + 1]]
             self.rev += 1
 
-    def save(self):
+    def save(self, force: bool = False):
+        """Atomic incremental save. force=True rewrites every npz (final job save / migration).
+
+        Otherwise only pose.npz and face-<model>.npz that received new vectors since the last save are
+        rewritten, plus meta.json. Unused empty face-*.npz are left alone so a crash mid-job never loses
+        already-committed vectors, and a new build can resume from the current meta + npz without reindex.
+        """
         with self.lock:
             os.makedirs(self.dir, exist_ok=True)
             keys = list(self.items)
-            for name, fm, shape in [("pose.npz", None, (0, 17, 3))] + [("face-%s.npz" % m, m, (0, d)) for m, d in FACE_DIM.items()]:
+            todo = []
+            if force or self._dirty_pose:
+                todo.append(("pose.npz", None, (0, 17, 3)))
+            dirty_fm = set(FACE_DIM) if force else set(self._dirty_faces)
+            for m, d in FACE_DIM.items():
+                if m not in dirty_fm:
+                    continue
+                # Never create a brand-new empty face-*.npz for an unused model; rewrite if it has
+                # vectors or the file already exists (keeps resume / multi-model indexes intact).
+                has_any = any((self.items[h]["faces"].get(m) is not None and len(self.items[h]["faces"][m])) for h in keys)
+                path = os.path.join(self.dir, "face-%s.npz" % m)
+                if has_any or os.path.isfile(path):
+                    todo.append(("face-%s.npz" % m, m, (0, d)))
+            for name, fm, shape in todo:
                 vecs, own = [], []
                 for k, h in enumerate(keys):
                     v = self.items[h]["p"] if fm is None else self.items[h]["faces"].get(fm)
@@ -146,10 +171,14 @@ class SimIndex:
                 os.remove(os.path.join(self.dir, "face.npz"))   # legacy, now split per model
             except OSError:
                 pass
-            _atomic_json(self.meta_path, {"version": VERSION, "face_models": sorted(FACE_DIM), "pose_model": "dwpose-body17",
-                                          "items": {h: {"np": int(len(e["p"])), "nf": {m: int(len(v)) for m, v in e["faces"].items()},
-                                                        "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0)}
-                                                    for h, e in self.items.items()}})
+            if force or self._dirty_meta or todo:
+                _atomic_json(self.meta_path, {"version": VERSION, "face_models": sorted(FACE_DIM), "pose_model": "dwpose-body17",
+                                              "items": {h: {"np": int(len(e["p"])), "nf": {m: int(len(v)) for m, v in e["faces"].items()},
+                                                            "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0)}
+                                                        for h, e in self.items.items()}})
+            self._dirty_pose = False
+            self._dirty_faces.clear()
+            self._dirty_meta = False
 
     def put(self, h: str, res: Dict[str, Any], face_model: str):
         with self.lock:
@@ -169,6 +198,11 @@ class SimIndex:
                 e.update(w=res.get("w", 0), h=res.get("h", 0), err="", t=time.time())
             self.items[h] = e
             self.rev += 1
+            self._dirty_meta = True
+            if "persons" in res or not res.get("ok"):
+                self._dirty_pose = True
+            if "faces" in res and face_model:
+                self._dirty_faces.add(face_model)
 
     def face(self, h: str, fm: Optional[str] = None):
         e = self.items.get(h)
@@ -357,7 +391,13 @@ class SimService:
         s = self.settings()
         for k, v in (upd or {}).items():
             if k in DEFAULTS:
-                s[k] = type(DEFAULTS[k])(v) if not isinstance(DEFAULTS[k], bool) else bool(v)
+                if k == "workers":
+                    try:
+                        s[k] = max(0, min(16, int(v)))
+                    except (TypeError, ValueError):
+                        s[k] = 0
+                else:
+                    s[k] = type(DEFAULTS[k])(v) if not isinstance(DEFAULTS[k], bool) else bool(v)
         if s["face_model"] not in FACE_DIM:
             s["face_model"] = "arcface"
         old = self.settings()["face_model"]
@@ -434,6 +474,7 @@ class SimService:
         if self.worker is None:
             s = self.settings()
             self.worker = WorkerProc(self.python(), {"dirs": self.model_dirs(), "face_model": s["face_model"], "gpu": s["gpu"],
+                                                         "workers": int(s.get("workers") or 0),
                                                          "face_files": {k: [m["file"]] + m["alias"] for k, m in FACE_MODELS.items()}, "log": os.path.join(self.dir, "worker.log")}, self.log)
         self.last_used = time.time()
         return self.worker
@@ -583,8 +624,8 @@ class SimService:
                 if n_since >= SAVE_EVERY:
                     self.index.save(); n_since = 0
         finally:
-            if n_since:
-                self.index.save()
+            if n_since or self.index._dirty_meta or self.index._dirty_pose or self.index._dirty_faces:
+                self.index.save(force=True)
             self.st.update(running=False, waiting="")
             if not self.pending:
                 self.st.update(done=0, total=0, failed=0)
