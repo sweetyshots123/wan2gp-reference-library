@@ -182,19 +182,56 @@ def probe(path) -> dict:
     return _probe_ffprobe(path) or _probe_cv2(path) or empty
 
 
+POSTER_V2_EPOCH = 1793433600   # 1.12.2: posters older than this were taken at a fixed frame (often black) -> retaken once
+
+
+def poster_times(duration, at=0.1):
+    """1.12.2: where to look for a poster frame: ~10% of the clip but at least ~1 s in (never frame 0 unless the clip is
+    shorter), then later fallbacks; used to skip black frames."""
+    d = float(duration or 0)
+    if d <= 0:
+        return [0.0]
+    first = min(max(d * at, min(1.0, d * 0.5)), max(0.0, d - 0.05))
+    out = [first] + [d * f for f in (0.25, 0.5, 0.75) if d * f > first]
+    return [round(t, 3) for t in out]
+
+
+def _is_dark(frame) -> bool:
+    try:
+        import numpy as np
+        g = frame.mean(axis=2) if frame.ndim == 3 else frame
+        return float(np.mean(g)) < 18 or float(np.std(g)) < 5
+    except Exception:
+        return False
+
+
 def make_poster(path, dest, max_side=480, at=0.1) -> bool:
-    """Write a JPEG poster frame (frame at `at` of the duration, first frame as fallback). True when written."""
+    """Write a JPEG poster frame: ~10% / >=1 s in, skipping black frames (1.12.2); first frame as last resort.
+    True when written. Shared by both UIs (library thumbnails, Video Library posters, history)."""
     tmp = dest + ".part.jpg"
     try:
         import cv2
         cap = cv2.VideoCapture(path)
         try:
             frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-            ok, frame = False, None
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0)
+            ok, frame, best = False, None, None
             if frames > 1:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, min(frames - 1, int(frames * at))))
-                ok, frame = cap.read()
-            if not ok or frame is None:
+                dur = frames / fps if fps > 0 else 0
+                for t in (poster_times(dur, at) if dur else [None]):
+                    pos = int(t * fps) if t is not None else int(frames * at)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, min(frames - 1, pos)))
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        continue
+                    if best is None:
+                        best = frame
+                    if not _is_dark(frame):
+                        best = frame
+                        break
+            frame = best
+            ok = frame is not None
+            if not ok:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ok, frame = cap.read()
         finally:
@@ -217,9 +254,10 @@ def make_poster(path, dest, max_side=480, at=0.1) -> bool:
         return False
     try:
         info = probe(path)
-        ss = max(0.0, info["duration"] * at) if info["duration"] else 0.0
+        ss = poster_times(info.get("duration"), at)[0]
+        # thumbnail filter: most representative of the next frames (skips a black lead-in)
         cmd = [exe, "-v", "error", "-y", "-ss", f"{ss:.3f}", "-i", path, "-frames:v", "1",
-               "-vf", f"scale='min({max_side},iw)':-2", "-q:v", "4", tmp]
+               "-vf", f"thumbnail=25,scale='min({max_side},iw)':-2", "-q:v", "4", tmp]
         subprocess.run(cmd, capture_output=True, timeout=60, creationflags=_NO_WINDOW)
         if os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
             os.replace(tmp, dest)
