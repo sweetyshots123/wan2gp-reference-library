@@ -8,7 +8,7 @@ The similarity index (SIMILARITY_API.md) only has pose and face vectors, which m
 person/pose, so it is not used to decide duplicates.
 Hashes are computed in a background thread, incrementally (only new hashes), cached in COLLECTIONS_DIR/dupes.json
 ({version, entries:{hash:{p,d,w,h,fmt}}}); groups are cached per (catalog rev, threshold).
-Resolving never deletes by itself: dup_resolve only moves tags / favorites / personas to the kept copy and returns
+Resolving never deletes by itself: dup_resolve returns the tags to move (dup_transfer, after the delete) and
 the hashes to drop; the UIs then run the existing delete flow (forget_plan -> forget / delete_all, 1.9.7). The only
 exception is extra files of one same-content item (exact, same hash): those go to the Recycle Bin through the same
 forget.recycle() + folder rescan the delete flow uses, and only for files in user watched folders."""
@@ -270,8 +270,8 @@ def groups(threshold: Optional[int] = None) -> Dict[str, Any]:
                 used.update(ms)
                 rows = [rowc[m] for m in ms]
                 dmax = max(adj[c][m] for m in ms[1:])
-                same = dmax == 0 and all(x["w"] == rows[0]["w"] and x["h"] == rows[0]["h"] for x in rows)
-                out.append({"kind": "exact" if same else "near", "dist": int(dmax), "rows": rows})
+                # 'exact' only for the same content hash (handled above); equal pHash + size is still 'near'
+                out.append({"kind": "near", "dist": int(dmax), "rows": rows})
     for g in out:
         rs = g["rows"]
         order = sorted(range(len(rs)), key=lambda k: _rank(rs[k]), reverse=True)
@@ -289,26 +289,24 @@ def groups(threshold: Optional[int] = None) -> Dict[str, Any]:
 
 
 # ------------------------------------------------------------------------------------------------ resolve
-def resolve(keep: str, drop: Iterable[str], transfer: bool = True, paths: Iterable[str] = ()) -> Dict[str, Any]:
-    """Move tags (favorites, personas included: they are tags) from `drop` to `keep`; recycle extra same-content
-    `paths` of `keep` (watched-folder files only, one always stays). Returns {drop:[hashes for the delete flow]}."""
+def resolve(keep: str, drop: Iterable[str], transfer: bool = True, copies: Iterable[str] = ()) -> Dict[str, Any]:
+    """Plan for keeping one copy. Never touches tags: returns {drop:[hashes for the delete flow], tags:[to move]};
+    the UI calls dup_transfer only after its delete succeeded, so cancelling the dialog changes nothing.
+    Extra same-content `copies` (file paths) of `keep` (watched-folder files only, one always stays) are recycled
+    here: the caller confirms before calling."""
     from . import imagelib, forget as _fg
     by = imagelib.catalog()["by_hash"]
     if keep not in by:
         raise ActionError("dup_not_found", hash=str(keep))
     drop = [h for h in dict.fromkeys(str(x) for x in drop or ()) if h in by and h != keep]
-    moved = 0
-    if transfer and drop:
-        tags = sorted({t for h in drop for t in by[h].get("tags") or ()} - set(by[keep].get("tags") or ()))
-        if tags:
-            imagelib.set_tags([keep], add=tags); moved = len(tags)
+    tags = sorted({t for h in drop for t in by[h].get("tags") or ()} - set(by[keep].get("tags") or ())) if transfer else []
     recycled, errs = 0, {}
-    paths = [p for p in dict.fromkeys(str(x) for x in paths or ()) if p]
-    if paths:
+    copies = [p for p in dict.fromkeys(str(x) for x in copies or ()) if p]
+    if copies:
         fdata = imagelib.load_folders()
         managed = {f["id"] for f in fdata["folders"] if f.get("managed")}
         mine = [p for p, v in fdata["files"].items() if v["hash"] == keep and v["folder"] not in managed]
-        ok = [p for p in paths if p in mine]
+        ok = [p for p in copies if p in mine]
         if len(ok) >= len(mine):
             raise ActionError("dup_keep_one")
         errs = _fg.recycle(ok)
@@ -317,7 +315,19 @@ def resolve(keep: str, drop: Iterable[str], transfer: bool = True, paths: Iterab
         imagelib.rescan(sorted(fids))
     with _lock:
         _groups_cache["key"] = None
-    return {"ok": True, "keep": keep, "drop": drop, "tags_moved": moved, "recycled": recycled, "recycle_errors": sorted(errs)}
+    return {"ok": True, "keep": keep, "drop": drop, "tags": tags, "recycled": recycled, "recycle_errors": sorted(errs)}
+
+
+def transfer(keep: str, tags: Iterable[str]) -> Dict[str, Any]:
+    """Add `tags` (favorites / personas are tags) to `keep`; called after the delete of the other copies succeeded."""
+    from . import imagelib
+    by = imagelib.catalog()["by_hash"]
+    if keep not in by:
+        raise ActionError("dup_not_found", hash=str(keep))
+    tags = sorted({str(t) for t in tags or () if t} - set(by[keep].get("tags") or ()))
+    if tags:
+        imagelib.set_tags([keep], add=tags)
+    return {"ok": True, "keep": keep, "tags_moved": len(tags)}
 
 
 # ------------------------------------------------------------------------------------------------ actions
@@ -341,6 +351,12 @@ def a_groups(req, ctx):
     return dict(d, groups=gs[off:off + lim], count=len(gs), status=status())
 
 
-@action("dup_resolve", doc="Keep one copy {keep, drop[], transfer=true, paths[]} -> {drop} for the delete flow")
+@action("dup_resolve", doc="Keep one copy {keep, drop[], transfer=true, copies[]} -> {drop, tags} for the delete flow")
 def a_resolve(req, ctx):
-    return resolve(str(req.get("keep") or ""), req.get("drop") or [], req.get("transfer", True) is not False, req.get("paths") or [])
+    # `copies`, not `paths`: plugin.py strips client `paths` from every action (1.9.5)
+    return resolve(str(req.get("keep") or ""), req.get("drop") or [], req.get("transfer", True) is not False, req.get("copies") or [])
+
+
+@action("dup_transfer", doc="After a successful delete: move {keep, tags[]} to the kept copy")
+def a_transfer(req, ctx):
+    return transfer(str(req.get("keep") or ""), req.get("tags") or [])

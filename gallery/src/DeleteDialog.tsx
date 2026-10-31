@@ -26,11 +26,13 @@ const t = (k: keyof typeof T, p: Record<string, any> = {}) => T[k].replace(/\{(\
 
 // Igual que el botón "del" del explorador: con entradas "olvidables" (carpetas vigiladas, Video Library, faltan)
 // abre el diálogo; si todo son copias propias de la librería, delete_all directo con Deshacer.
-export async function startDelete(hashes: string[], open: (plan: any) => void, after: () => void) {
+// 1.11.0: el caso delete_all también pide confirmación; `ok` solo se llama si el borrado salió bien.
+export async function startDelete(hashes: string[], open: (plan: any) => void, after: () => void, ok?: () => void) {
   const r = await call("forget_plan", { hashes });
   const p = r?.plan;
-  if (p && p.n > 0) open(p);
-  else await optimistic("delete_all", { hashes }, hashes, after);
+  if (p && p.n > 0) { open(p); return; }
+  if (!window.confirm(`¿Quitar ${hashes.length} elemento(s) de la librería? Se puede deshacer.`)) return;
+  if ((await optimistic("delete_all", { hashes }, hashes, after))?.ok) ok?.();
 }
 
 // 1.9.7: desaparece al instante; se devuelve si el servidor falla. El paso lento (Papelera) va en segundo plano en el
@@ -38,18 +40,19 @@ export async function startDelete(hashes: string[], open: (plan: any) => void, a
 async function optimistic(action: string, body: Record<string, any>, hashes: string[], after: () => void) {
   const restore = removeLocal(hashes);
   const r = await act(action, body, after);
-  if (!r || !r.ok) { restore(); return; }
+  if (!r || !r.ok) { restore(); return r; }
   if (r.pending && r.undo_forget) {
     const s = await call("forget_status", { token: r.undo_forget, wait: 30 }).catch(() => null);
     if (s && s.recycle_errors && s.recycle_errors.length) { toast(s.toast || s.message || "Error", "err"); after(); }
   }
+  return r;
 }
 
-export default function DeleteDialog({ plan: p, hashes, close, after }: { plan: any; hashes: string[]; close: () => void; after: () => void }) {
+export default function DeleteDialog({ plan: p, hashes, close, after, ok }: { plan: any; hashes: string[]; close: () => void; after: () => void; ok?: () => void }) {
   const [disk, setDisk] = useState(false);
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") close(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [close]);
   const files: string[] = p.disk_files || [];
-  const go = () => { close(); optimistic("forget", { hashes, delete_files: disk }, hashes, after); };
+  const go = () => { close(); optimistic("forget", { hashes, delete_files: disk }, hashes, after).then((r) => { if (r?.ok) ok?.(); }); };
   return (
     <div className="dlgbg" onClick={close}>
       <div className={`dlg ${disk ? "disk" : ""}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>

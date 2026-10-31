@@ -2732,7 +2732,7 @@
     }
     function fgClose() { const d = ilib.root && ilib.root.querySelector(".reflib-fg-bg"); if (d) d.remove(); }
     function fgDialogHost() { return (ilib.root.querySelector(".reflib-ib-modal") || ilib.root); }
-    function fgOpen(missingOnly, only) {   // 1.11.0: `only` = explicit hashes (Duplicados) instead of the selection
+    function fgOpen(missingOnly, only, done) {   // done: after a successful forget (Duplicados: move tags)   // 1.11.0: `only` = explicit hashes (Duplicados) instead of the selection
         fgClose();
         const pl = missingOnly ? {} : only ? { hashes: only } : ilib.sel.payload(), sel = missingOnly ? { all: false, hashes: [] } : { all: !!ilib.sel.all, hashes: pl.hashes };
         const bg = document.createElement("div");
@@ -2776,7 +2776,7 @@
             fgClose();
             if (b.dataset.fg !== "ok") return;
             const back = optHide(sel);   // 1.9.7: instant; back if the server fails
-            sendIlib(Object.assign({ action: missingOnly ? "forget_missing" : "forget", delete_files: del }, pl)).then(r => { if (!r || r.ok === false) back(); fgUndoToast(r, sel); ilibApply(r); fgStatus(r); }).catch(() => { back(); toast("Error", "error"); });
+            sendIlib(Object.assign({ action: missingOnly ? "forget_missing" : "forget", delete_files: del }, pl)).then(r => { if (!r || r.ok === false) back(); else if (done) Promise.resolve(done()).catch(() => {}); fgUndoToast(r, sel); ilibApply(r); fgStatus(r); }).catch(() => { back(); toast("Error", "error"); });
         });
     }
     // 1.9.7 (same as the Galería's optimistic delete): cards vanish at once and come back if the server fails; the slow
@@ -5073,7 +5073,7 @@
         extend: (x) => { EXT.push(x); }, ilibRefresh: () => { newQuery(); render(); }, esc, it,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs) => fgOpen(false, hs), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
+        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs, done) => fgOpen(false, hs, done), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
         applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,

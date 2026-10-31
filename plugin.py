@@ -358,6 +358,8 @@ TEXT = {
         "need_vname": "Enter a name for the video",
         "reveal_remote": "Only available when the browser runs on the same PC as WanGP",
         "reveal_missing": "The file is not on disk",
+        "dup_not_found": "That copy is no longer in the library (refresh Duplicates)",
+        "dup_keep_one": "At least one copy must stay",
     },
     "es": {
         "intro": "Guarda las imágenes de **Referencias** como colecciones con nombre y cárgalas de nuevo con un clic. "
@@ -626,6 +628,8 @@ TEXT = {
         "need_vname": "Escribe un nombre para el vídeo",
         "reveal_remote": "Solo disponible cuando el navegador está en el mismo PC que WanGP",
         "reveal_missing": "El archivo no está en el disco",
+        "dup_not_found": "Esa copia ya no está en la librería (actualiza Duplicados)",
+        "dup_keep_one": "Tiene que quedar al menos una copia",
     },
 }
 

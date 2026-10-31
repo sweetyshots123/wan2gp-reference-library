@@ -12,14 +12,14 @@
               transfer: "Move tags", transfer_tip: "Move tags, favorites and people to the copy that is kept", keepall: "Keep the largest in all groups", keep: "Keep marked",
               g_exact: "Identical", g_near: "Near-identical (difference {d})", copies: "{n} copies", rec: "{w} recoverable", big: "Largest", small: "Smallest", ia: "AI",
               k: "✓ Keep", l: "Remove", in_col: "in a collection", tags: "{n} tag(s)", none: "No duplicates at this similarity.", first: "Press «Find duplicates» to analyse your photos.",
-              q_all: "Keep the largest copy in {g} group(s) and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_tr: "\nTags, favorites and people move to the kept copy.",
+              q_all: "Keep the largest copy in {g} group(s) and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_tr: "\nTags, favorites and people move to the kept copy.", q_one: "Keep the selected copy and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_del: "Remove {n} item(s) from the library? You can undo it.",
               recycled: "{n} identical copies sent to the Recycle Bin", more: "More groups", close: "Close", err: "Error: {e}" },
         es: { open: "Duplicados", title: "Duplicados", scan: "Buscar duplicados", status: "{h} fotos analizadas · {g} grupos · {w} recuperables", running: "Analizando {d} / {t}…",
               thr: "Parecido", thr_tip: "Diferencia permitida (bits de pHash): 0 = solo idénticas, más alto = también recortes / recompresiones", all: "Todos", exact: "Idénticos", near: "Casi iguales",
               transfer: "Pasar etiquetas", transfer_tip: "Mueve etiquetas, favoritos y personas a la copia que se conserva", keepall: "Conservar la más grande en todos", keep: "Conservar la marcada",
               g_exact: "Idénticos", g_near: "Casi iguales (diferencia {d})", copies: "{n} copias", rec: "{w} recuperables", big: "Más grande", small: "Más pequeña", ia: "IA",
               k: "✓ Conservar", l: "Quitar", in_col: "en colección", tags: "{n} etiqueta(s)", none: "No hay duplicados con este parecido.", first: "Pulsa «Buscar duplicados» para analizar las fotos.",
-              q_all: "¿Conservar la copia más grande en {g} grupo(s) y quitar las otras {n}?\n\nLas copias idénticas del mismo archivo van a la Papelera; para el resto se abre el diálogo de borrado de siempre.", q_tr: "\nLas etiquetas, favoritos y personas pasan a la copia que se conserva.",
+              q_all: "¿Conservar la copia más grande en {g} grupo(s) y quitar las otras {n}?\n\nLas copias idénticas del mismo archivo van a la Papelera; para el resto se abre el diálogo de borrado de siempre.", q_tr: "\nLas etiquetas, favoritos y personas pasan a la copia que se conserva.", q_one: "¿Conservar la copia elegida y quitar las otras {n}?\n\nLas copias idénticas del mismo archivo van a la Papelera; para el resto se abre el diálogo de borrado de siempre.", q_del: "¿Quitar {n} elemento(s) de la librería? Se puede deshacer.",
               recycled: "{n} copia(s) idénticas enviadas a la Papelera", more: "Ver más grupos", close: "Cerrar", err: "Error: {e}" },
     };
     const lang = () => (RL.lang && RL.lang() === "es" ? "es" : "en");
@@ -39,8 +39,8 @@
     const V = { thr: Number(localStorage.getItem("reflib.dupthr") || 6), kind: "", limit: 30, transfer: true, keep: {} };
     function planOf(g, k) {
         const keep = g.rows[k];
-        if (g.same_item) return { keep: keep.hash, drop: [], paths: g.rows.filter((_, i) => i !== k).map(r => r.path) };
-        return { keep: keep.hash, drop: [...new Set(g.rows.filter(r => r.hash !== keep.hash).map(r => r.hash))], paths: [] };
+        if (g.same_item) return { keep: keep.hash, drop: [], copies: g.rows.filter((_, i) => i !== k).map(r => r.path) };
+        return { keep: keep.hash, drop: [...new Set(g.rows.filter(r => r.hash !== keep.hash).map(r => r.hash))], copies: [] };
     }
     function open() {
         close();
@@ -82,15 +82,21 @@
         if (st && st.running) poll = setTimeout(refresh, 1200);
     }
     async function apply(gs, pick) {
-        const drop = []; let rec = 0;
+        // 1.11.0: tags move (dup_transfer) only after the delete succeeded; cancelling leaves everything as it was
+        const drop = [], moves = []; let rec = 0;
         for (const g of gs) {
-            try { const r = await call(Object.assign({ action: "dup_resolve", transfer: V.transfer }, planOf(g, pick(g)))); drop.push(...(r.drop || [])); rec += r.recycled || 0; } catch (e) {}
+            try { const r = await call(Object.assign({ action: "dup_resolve", transfer: V.transfer }, planOf(g, pick(g)))); drop.push(...(r.drop || [])); rec += r.recycled || 0; if (r.tags && r.tags.length) moves.push({ keep: r.keep, tags: r.tags }); }
+            catch (e) {}
         }
         if (rec) RL.toast(dt("recycled", { n: rec }), "info");
+        const done = async () => { for (const m of moves) await call(Object.assign({ action: "dup_transfer" }, m)).catch(() => null); if (RL.ilibRefresh) try { RL.ilibRefresh(); } catch (e) {} refresh(); };
         if (drop.length) {
             const p = await RL.sendIlib({ action: "forget_plan", hashes: drop }).catch(() => null);
-            if (p && p.plan && p.plan.n > 0 && RL.forgetOpen) { close(); RL.forgetOpen(drop); return; }
-            await RL.sendIlib({ action: "delete_all", hashes: drop }).catch(() => null);
+            if (p && p.plan && p.plan.n > 0 && RL.forgetOpen) { close(); RL.forgetOpen(drop, done); return; }
+            if (!window.confirm(dt("q_del", { n: drop.length }))) { refresh(); return; }
+            const r = await RL.sendIlib({ action: "delete_all", hashes: drop }).catch(() => null);
+            if (r && r.ok !== false) await done(); else refresh();
+            return;
         }
         if (RL.ilibRefresh) try { RL.ilibRefresh(); } catch (e) {}
         refresh();
@@ -104,7 +110,7 @@
         else if (a === "kind") { V.kind = b.dataset.k; refresh(); }
         else if (a === "more") { V.limit += 30; refresh(); }
         else if (a === "pick") { V.keep[b.dataset.g] = +b.dataset.i; draw(); }
-        else if (a === "keep1") { const g = groupById(b.dataset.g); if (g) apply([g], () => V.keep[g.id] ?? g.keep); }
+        else if (a === "keep1") { const g = groupById(b.dataset.g); if (g && window.confirm(dt("q_one", { n: g.rows.length - 1 }) + (V.transfer ? dt("q_tr") : ""))) apply([g], () => V.keep[g.id] ?? g.keep); }
         else if (a === "keepall") {
             const gs = (data && data.groups) || []; if (!gs.length) return;
             const n = gs.reduce((s, g) => s + g.rows.length - 1, 0);

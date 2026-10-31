@@ -16,8 +16,8 @@ const fmtD = (t: number) => t ? new Date(t * 1000).toLocaleString("es-ES", { dat
 /** Plan for a group keeping row k: hashes for the delete flow + extra same-content files for the Papelera. */
 function planOf(g: DupGroup, k: number) {
   const keep = g.rows[k];
-  if (g.same_item) return { keep: keep.hash, drop: [] as string[], paths: g.rows.filter((_, i) => i !== k).map((r) => r.path) };
-  return { keep: keep.hash, drop: [...new Set(g.rows.filter((r) => r.hash !== keep.hash).map((r) => r.hash))], paths: [] as string[] };
+  if (g.same_item) return { keep: keep.hash, drop: [] as string[], copies: g.rows.filter((_, i) => i !== k).map((r) => r.path) };
+  return { keep: keep.hash, drop: [...new Set(g.rows.filter((r) => r.hash !== keep.hash).map((r) => r.hash))], copies: [] as string[] };
 }
 
 export function DupesPage({ after }: { after: () => void }) {
@@ -29,7 +29,7 @@ export function DupesPage({ after }: { after: () => void }) {
   const [tick, setTick] = useState(0);
   const [transfer, setTransfer] = useState(true);
   const [keepSel, setKeepSel] = useState<Record<string, number>>({});
-  const [del, setDel] = useState<{ plan: any; hashes: string[] } | null>(null);
+  const [del, setDel] = useState<{ plan: any; hashes: string[]; ok?: () => void } | null>(null);
   const refresh = () => { setTick((t) => t + 1); after(); };
   useEffect(() => {
     let dead = false, t: any;
@@ -44,15 +44,17 @@ export function DupesPage({ after }: { after: () => void }) {
 
   const apply = async (gs: DupGroup[], pick: (g: DupGroup) => number) => {
     const drop: string[] = [];
+    const moves: { keep: string; tags: string[] }[] = [];   // 1.11.0: solo tras borrar con éxito
     let recycled = 0;
     for (const g of gs) {
       const p = planOf(g, pick(g));
       const r = await call("dup_resolve", { ...p, transfer }).catch(() => null);
       if (!r || !r.ok) { toast(r?.error || "Error", "err"); continue; }
-      drop.push(...(r.drop || [])); recycled += r.recycled || 0;
+      drop.push(...(r.drop || [])); recycled += r.recycled || 0; if (r.tags?.length) moves.push({ keep: r.keep, tags: r.tags });
     }
     if (recycled) toast(`${recycled} copia(s) idénticas enviadas a la Papelera`, "ok");
-    if (drop.length) await startDelete(drop, (plan) => setDel({ plan, hashes: drop }), refresh);
+    const ok = async () => { for (const m of moves) await call("dup_transfer", m).catch(() => null); refresh(); };
+    if (drop.length) await startDelete(drop, (plan) => setDel({ plan, hashes: drop, ok }), refresh, ok);
     else refresh();
   };
   const keepAll = () => {
@@ -78,7 +80,7 @@ export function DupesPage({ after }: { after: () => void }) {
       {groups.map((g) => { const k = keepSel[g.id] ?? g.keep; return (
         <div key={g.id} className="dgroup">
           <div className="dhead"><b>{g.kind === "exact" ? "Idénticos" : `Casi iguales (diferencia ${g.dist})`}</b> · {g.rows.length} copias · {fmtB(g.waste)} recuperables
-            <button onClick={() => apply([g], () => k)}>Conservar la marcada</button></div>
+            <button onClick={() => { if (window.confirm(`¿Conservar la copia marcada y quitar las otras ${g.rows.length - 1}?${transfer ? "\nLas etiquetas, favoritos y personas pasan a la copia que se conserva (solo si el borrado se completa)." : ""}`)) apply([g], () => k); }}>Conservar la marcada</button></div>
           <div className="drows">
             {g.rows.map((r, i) => (
               <div key={r.hash + r.path} className={`drow ${i === k ? "keep" : "lose"}`} onClick={() => setKeepSel({ ...keepSel, [g.id]: i })}>
@@ -97,7 +99,7 @@ export function DupesPage({ after }: { after: () => void }) {
           </div>
         </div>); })}
       {data && groups.length < data.count && <button className="more" onClick={() => setLimit(limit + 30)}>Ver más grupos</button>}
-      {del && <DeleteDialog plan={del.plan} hashes={del.hashes} close={() => setDel(null)} after={refresh} />}
+      {del && <DeleteDialog plan={del.plan} hashes={del.hashes} close={() => setDel(null)} after={refresh} ok={del.ok} />}
     </div>
   );
 }
