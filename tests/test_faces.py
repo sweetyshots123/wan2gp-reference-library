@@ -265,6 +265,32 @@ def test_status_counts_shown_groups_and_last_threshold():
     assert s["clusters"] == 2 == f.list_clusters()["total"] and s["persons"] == 1, s
 
 
+
+
+def test_person_review_batch():
+    """1.11.1 person_review = face_confirm(accept) + face_reject(reject) in one call."""
+    data, truth = synth()
+    f, t, _ = mk(data)
+    old = F._F; F._F = f
+    try:
+        class C: lang = "es"
+        f.run()
+        cid = next(k for k, c in f.clusters()["clusters"].items() if truth[c["faces"][0]] == 0)
+        fs = list(f.clusters()["clusters"][cid]["faces"])
+        pid = f.assign_faces(name="Lucía", clusters=[cid])["person"]["id"]
+        f.unassign(fs[:4])
+        r = F._actions.call("person_review", {"person": pid, "accept": fs[:3], "reject": [fs[2], fs[3]], "meta": False}, C())
+        assert r["ok"] and r["assigned"] == 2 and r["rejected"] == [fs[2], fs[3]] and r["accepted"] == fs[:2], r
+        a = f.assign("arcface")
+        assert a[fs[0]] == pid and a[fs[1]] == pid and fs[2] not in a and fs[3] not in a
+        left = {s["id"] for s in f.suggest(pid, limit=50, threshold=-1)}
+        assert fs[2] not in left and fs[3] not in left
+        assert len(t.users("persona:Lucía")) == 13
+        assert F._actions.call("person_review", {"person": "", "accept": fs[:1]}, C())["code"] == "person_not_found"
+    finally:
+        F._F = old
+
+
 if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):

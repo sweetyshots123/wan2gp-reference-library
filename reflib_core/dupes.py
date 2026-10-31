@@ -101,14 +101,49 @@ def hashes_of(path: str) -> Dict[str, Any]:
     return {"p": f"{p:016x}", "d": f"{d:016x}", "w": int(w), "h": int(h), "fmt": fmt, "s": round(float(a.std()), 2)}
 
 
+VID_EXT = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
+
+
+def video_meta(path: str) -> Dict[str, Any]:
+    """1.11.1 videos: exact duplicates only (never perceptual). Cheap ffprobe metadata for the row; empty if unavailable."""
+    import json as _j, shutil as _sh, subprocess as _sp
+    out: Dict[str, Any] = {"v": 1, "w": 0, "h": 0, "fmt": os.path.splitext(path)[1].lstrip(".").upper(), "dur": None, "codec": "", "fps": None}
+    exe = _sh.which("ffprobe")
+    if not exe:
+        return out
+    try:
+        r = _sp.run([exe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,codec_name,avg_frame_rate:format=duration",
+                     "-of", "json", path], capture_output=True, timeout=15, **({"creationflags": 0x08000000} if os.name == "nt" else {}))
+        d = _j.loads(r.stdout or b"{}"); st = (d.get("streams") or [{}])[0]
+        out.update(w=int(st.get("width") or 0), h=int(st.get("height") or 0), codec=str(st.get("codec_name") or ""))
+        n, _, m = str(st.get("avg_frame_rate") or "").partition("/")
+        if n and m and float(m):
+            out["fps"] = round(float(n) / float(m), 2)
+        if (d.get("format") or {}).get("duration"):
+            out["dur"] = round(float(d["format"]["duration"]), 2)
+    except Exception:
+        pass
+    return out
+
+
+def _full_sha(path: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for c in iter(lambda: f.read(1 << 20), b""):
+            h.update(c)
+    return h.hexdigest()
+
+
 def _candidates() -> List[Dict[str, Any]]:
     from . import imagelib
     out = []
     for i in imagelib.catalog()["items"]:
-        if i.get("virtual") or i.get("kind") not in (None, "image") or i.get("missing"):
+        # virtual copies / clips are never duplicates; videos only for exact (same content) groups
+        if i.get("virtual") or i.get("kind") not in (None, "image", "video") or i.get("missing"):
             continue
         p = i.get("path") or ""
-        if os.path.splitext(p)[1].lower() in IMG_EXT:
+        if os.path.splitext(p)[1].lower() in (IMG_EXT | VID_EXT):
             out.append(i)
     return out
 
@@ -119,7 +154,7 @@ def _worker(full: bool) -> None:
         if full:
             with _lock:
                 ents.clear()
-        todo = [i for i in _candidates() if i["hash"] not in ents or "s" not in ents[i["hash"]]]   # 1.11.0 cache gained "s"
+        todo = [i for i in _candidates() if i["hash"] not in ents or ("s" not in ents[i["hash"]] and not ents[i["hash"]].get("v"))]   # 1.11.0 cache gained "s"
         with _lock:
             _state.update(total=len(todo), done=0, errors=0)
         for n, i in enumerate(todo):
@@ -127,7 +162,7 @@ def _worker(full: bool) -> None:
             for p in dict.fromkeys([i.get("path")] + list(i.get("files") or [])):
                 try:
                     if p and os.path.isfile(p):
-                        r = hashes_of(p); break
+                        r = video_meta(p) if os.path.splitext(p)[1].lower() in VID_EXT else hashes_of(p); break
                 except Exception:
                     continue
             with _lock:
@@ -214,7 +249,8 @@ def _row(i: Dict[str, Any], e: Dict[str, Any], path: Optional[str] = None, folde
     return {"hash": i["hash"], "name": os.path.basename(p) or i.get("name"), "path": p, "dir": os.path.dirname(p), "folder": fol,
             "w": w, "h": h, "mp": round(w * h / 1e6, 2), "bytes": size, "fmt": e.get("fmt") or os.path.splitext(p)[1].lstrip(".").upper(),
             "date": mt, "origin": i.get("origin") or "real", "tags": len(i.get("tags") or ()),
-            "in_library": bool(i.get("colids") or i.get("in_pool")), "on_disk": bool(i.get("folders"))}
+            "in_library": bool(i.get("colids") or i.get("in_pool")), "on_disk": bool(i.get("folders")),
+            "video": bool(e.get("v")), "dur": e.get("dur"), "codec": e.get("codec") or "", "fps": e.get("fps")}
 
 
 def _rank(r):
@@ -246,10 +282,25 @@ def groups(threshold: Optional[int] = None) -> Dict[str, Any]:
         i = by.get(h)
         if i is None or len(ps) < 2 or h not in ents:
             continue
+        if ents[h].get("v"):
+            # the library hash of big videos is sampled: confirm byte-for-byte with a full sha256 (cached per path/size/mtime)
+            fs = ents[h].setdefault("fs", {}); by_sha: Dict[str, List[str]] = {}
+            for p in ps:
+                try:
+                    st = os.stat(p); sig = [st.st_size, int(st.st_mtime)]
+                    if (fs.get(p) or [None])[:2] != sig:
+                        fs[p] = sig + [_full_sha(p)]; _db["dirty"] += 1
+                    by_sha.setdefault(fs[p][2], []).append(p)
+                except OSError:
+                    continue
+            for sps in by_sha.values():
+                if len(sps) > 1:
+                    out.append({"kind": "exact", "dist": 0, "video": True, "rows": [_row(i, ents[h], p, folders) for p in sorted(sps)]})
+            continue
         rows = [_row(i, ents[h], p, folders) for p in sorted(ps)]
         out.append({"kind": "exact", "dist": 0, "rows": rows})
     # near: pHash
-    keys = [i["hash"] for i in _candidates() if i["hash"] in ents and float(ents[i["hash"]].get("s", 99)) >= FLAT_STD]
+    keys = [i["hash"] for i in _candidates() if i["hash"] in ents and "p" in ents[i["hash"]] and float(ents[i["hash"]].get("s", 99)) >= FLAT_STD]
     if len(keys) > 1:
         ph = np.array([int(ents[k]["p"], 16) for k in keys], dtype=np.uint64)
         dh = np.array([int(ents[k]["d"], 16) for k in keys], dtype=np.uint64)
@@ -285,6 +336,8 @@ def groups(threshold: Optional[int] = None) -> Dict[str, Any]:
             "waste": sum(g["waste"] for g in out)}
     with _lock:
         _groups_cache.update(key=key, data=data)
+        if _db["dirty"]:
+            _save()
     return data
 
 

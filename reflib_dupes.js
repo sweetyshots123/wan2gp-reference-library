@@ -10,14 +10,14 @@
         en: { open: "Duplicates", title: "Duplicates", scan: "Find duplicates", status: "{h} photos analysed · {g} groups · {w} recoverable", running: "Analysing {d} / {t}…",
               thr: "Similarity", thr_tip: "Allowed difference (pHash bits): 0 = identical only, higher = also crops / recompressions", all: "All", exact: "Identical", near: "Near-identical",
               transfer: "Move tags", transfer_tip: "Move tags, favorites and people to the copy that is kept", keepall: "Keep the largest in all groups", keep: "Keep marked",
-              g_exact: "Identical", g_near: "Near-identical (difference {d})", copies: "{n} copies", rec: "{w} recoverable", big: "Largest", small: "Smallest", ia: "AI",
+              g_exact: "Identical", g_near: "Near-identical (difference {d})", copies: "{n} copies", rec: "{w} recoverable", big: "Largest", small: "Smallest", ia: "AI", video: "Video",
               k: "✓ Keep", l: "Remove", in_col: "in a collection", tags: "{n} tag(s)", none: "No duplicates at this similarity.", first: "Press «Find duplicates» to analyse your photos.",
               q_all: "Keep the largest copy in {g} group(s) and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_tr: "\nTags, favorites and people move to the kept copy.", q_one: "Keep the selected copy and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_del: "Remove {n} item(s) from the library? You can undo it.",
               recycled: "{n} identical copies sent to the Recycle Bin", more: "More groups", close: "Close", err: "Error: {e}" },
         es: { open: "Duplicados", title: "Duplicados", scan: "Buscar duplicados", status: "{h} fotos analizadas · {g} grupos · {w} recuperables", running: "Analizando {d} / {t}…",
               thr: "Parecido", thr_tip: "Diferencia permitida (bits de pHash): 0 = solo idénticas, más alto = también recortes / recompresiones", all: "Todos", exact: "Idénticos", near: "Casi iguales",
               transfer: "Pasar etiquetas", transfer_tip: "Mueve etiquetas, favoritos y personas a la copia que se conserva", keepall: "Conservar la más grande en todos", keep: "Conservar la marcada",
-              g_exact: "Idénticos", g_near: "Casi iguales (diferencia {d})", copies: "{n} copias", rec: "{w} recuperables", big: "Más grande", small: "Más pequeña", ia: "IA",
+              g_exact: "Idénticos", g_near: "Casi iguales (diferencia {d})", copies: "{n} copias", rec: "{w} recuperables", big: "Más grande", small: "Más pequeña", ia: "IA", video: "Vídeo",
               k: "✓ Conservar", l: "Quitar", in_col: "en colección", tags: "{n} etiqueta(s)", none: "No hay duplicados con este parecido.", first: "Pulsa «Buscar duplicados» para analizar las fotos.",
               q_all: "¿Conservar la copia más grande en {g} grupo(s) y quitar las otras {n}?\n\nLas copias idénticas del mismo archivo van a la Papelera; para el resto se abre el diálogo de borrado de siempre.", q_tr: "\nLas etiquetas, favoritos y personas pasan a la copia que se conserva.", q_one: "¿Conservar la copia elegida y quitar las otras {n}?\n\nLas copias idénticas del mismo archivo van a la Papelera; para el resto se abre el diálogo de borrado de siempre.", q_del: "¿Quitar {n} elemento(s) de la librería? Se puede deshacer.",
               recycled: "{n} copia(s) idénticas enviadas a la Papelera", more: "Ver más grupos", close: "Cerrar", err: "Error: {e}" },
@@ -66,8 +66,8 @@
         const grp = g => { const k = V.keep[g.id] ?? g.keep; return `<div class="reflib-dp-g"><div class="reflib-dp-gh"><b>${esc(g.kind === "exact" ? dt("g_exact") : dt("g_near", { d: g.dist }))}</b> · ${esc(dt("copies", { n: g.rows.length }))} · ${esc(dt("rec", { w: fmtB(g.waste) }))}
             <button type="button" class="reflib-ib-btn" data-dp="keep1" data-g="${esc(g.id)}">${esc(dt("keep"))}</button></div><div class="reflib-dp-rows">${g.rows.map((r, i) => `
             <div class="reflib-dp-r ${i === k ? "keep" : ""}" data-dp="pick" data-g="${esc(g.id)}" data-i="${i}"><div class="reflib-dp-img" style="background-image:url('${thumbs.get(r.hash) || ""}')">
-              <span class="reflib-dp-bd">${i === g.biggest ? `<i class="big">${esc(dt("big"))}</i>` : ""}${i === g.smallest && g.rows.length > 1 ? `<i class="small">${esc(dt("small"))}</i>` : ""}${r.origin === "ai" ? `<i class="ia">${esc(dt("ia"))}</i>` : ""}</span></div>
-              <div><b>${r.w} × ${r.h}</b> ${r.mp} MP<br>${fmtB(r.bytes)} · ${esc(r.fmt)}<br><span class="reflib-fc-muted">${esc(fmtD(r.date))}</span><br>
+              <span class="reflib-dp-bd">${i === g.biggest ? `<i class="big">${esc(dt("big"))}</i>` : ""}${i === g.smallest && g.rows.length > 1 ? `<i class="small">${esc(dt("small"))}</i>` : ""}${r.origin === "ai" ? `<i class="ia">${esc(dt("ia"))}</i>` : ""}${r.video ? `<i class="video">▶ ${esc(dt("video"))}</i>` : ""}</span></div>
+              <div><b>${r.w} × ${r.h}</b> ${r.mp} MP<br>${fmtB(r.bytes)} · ${esc(r.fmt)}<br>${r.video ? esc([r.dur != null ? r.dur + " s" : "", r.codec, r.fps ? r.fps + " fps" : ""].filter(Boolean).join(" · ")) + "<br>" : ""}<span class="reflib-fc-muted">${esc(fmtD(r.date))}</span><br>
               <span class="reflib-fc-muted reflib-dp-path" title="${esc(r.path)}">${esc(r.dir)}</span><br><span class="reflib-fc-muted">${esc(r.name)}${r.tags ? " · " + esc(dt("tags", { n: r.tags })) : ""}${r.in_library ? " · " + esc(dt("in_col")) : ""}</span>
               <div class="reflib-dp-k">${esc(i === k ? dt("k") : dt("l"))}</div></div></div>`).join("")}</div></div>`; };
         pan.innerHTML = `<div class="reflib-fc-box"><div class="reflib-fc-head"><b>${esc(dt("title"))}</b><button type="button" class="reflib-fc-x" data-dp="close" title="${esc(dt("close"))}">×</button></div>
@@ -144,7 +144,7 @@
 .reflib-dp-img { position: relative; height: 160px; border-radius: 6px; background: rgba(127,127,127,.15) center / contain no-repeat; margin-bottom: 4px; }
 .reflib-dp-bd { position: absolute; top: 4px; left: 4px; display: flex; gap: 4px; }
 .reflib-dp-bd i { font-style: normal; font-size: 11px; padding: 0 5px; border-radius: 4px; }
-.reflib-dp-bd .big { background: #22c55e; color: #fff; } .reflib-dp-bd .small { background: #f59e0b; color: #111; } .reflib-dp-bd .ia { background: #7c3aed; color: #fff; }
+.reflib-dp-bd .big { background: #22c55e; color: #fff; } .reflib-dp-bd .small { background: #f59e0b; color: #111; } .reflib-dp-bd .ia { background: #7c3aed; color: #fff; } .reflib-dp-bd .video { background: #0ea5e9; color: #fff; }
 .reflib-dp-r b { font-size: 14px; } .reflib-dp-k { font-weight: 600; margin-top: 3px; } .reflib-dp-r.keep .reflib-dp-k { color: #22c55e; }
 .reflib-dp-path { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }`;
     document.head.appendChild(css);

@@ -42,6 +42,7 @@ smaller faces are skipped when bbox is known). Change via `face_settings`.
 | `face_confirm` | `{person, faces:[fid]}` | = `face_assign` |
 | `face_reject` | `{person, faces:[fid]}` | `{ok, n}`; remembered per person+model, never suggested again |
 | `face_unreject` | `{person, faces?:[fid]}` | `{ok, n}`; all if `faces` omitted |
+| `person_review` (1.11.1) | `{person, accept:[fid], reject:[fid]}` | batch review of suggestions = `face_confirm(accept)` + `face_reject(reject)` (reject wins); `{ok, assigned, accepted, rejected, n_rejected}`. Undo: `face_unassign(accept)` + `face_unreject(person, reject)` |
 | `face_merge` | `{clusters:[cid≥2]}` or `{persons:[pid≥2], into:pid}` | `{ok, cluster:id}` / `{ok, person:PERSON}` (tags renamed via `tag_rename` logic) |
 | `face_split` | `{cluster, faces:[fid]}` or `{person, faces:[fid]}` | `{ok, cluster:new_cid}`; for a person the faces become unassigned and go to a new cluster |
 | `person_list` (fast) | `{offset=0, limit=200}` | `{ok, total, persons:[PERSON]}` sorted by count desc |

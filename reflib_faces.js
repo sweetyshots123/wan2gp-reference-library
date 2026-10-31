@@ -12,14 +12,14 @@
               running: "Grouping {d} / {t}…", name_ph: "Name…", name: "Name", merge: "Merge selected ({n})", back: "← Back", faces_n: "{n} faces", items_n: "{n} photos",
               ask: "Is this also {x}?", yes: "Yes", no: "No", no_more: "No more suggestions for {x}.", rename: "Rename", del: "Forget person", del_ok: "Forgot {x} (photos are kept)", undo: "Undo",
               cover: "Use as cover", remove: "Not {x}", split: "Move to new group ({n})", assign_to: "Assign selected to…", show: "Show photos", merge_into: "Merge into…",
-              assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
+              assigned: "{n} faces assigned to {x}", rejected: "OK, not {x}", rv_title: "Suggestions for {x} ({n})", rv_tip: "Click to discard · Shift+click discards a range", rv_cut: "Discard below", rv_ok: "Add the remaining {n}", rv_none: "Discard all", rv_none_q: "Discard all {n} suggestions? They will not be suggested again.", rv_done: "{a} added · {r} discarded", faces_btn: "Faces", faces_tip: "Show detected faces and who they are", no_index: "No faces computed for this face model yet.",
               close: "Close", del_q: "Forget {x}? Photos are never deleted; the persona tag is removed.", rename_q: "New name for {x}:", err: "Error: {e}", unknown: "?" },
         es: { open: "Personas", title: "Personas", persons: "Personas", none_p: "Aún no hay nadie con nombre: pon nombre a un grupo de caras de abajo.", clusters: "Caras sin nombre", none_c: "Aún no hay grupos. Calcula las caras (Buscar similares → Calcular caras) y pulsa «Agrupar caras».", none_c2: "Ahora no hay grupos sin nombre de {m} o más caras ({a} caras sueltas). Pulsa «Reagrupar todo» o baja la «Exigencia al agrupar».",
               run: "Agrupar caras", regroup: "Reagrupar todo", thr: "Exigencia al agrupar", thr_tip: "Más alto = solo se juntan caras muy parecidas (más grupos, más pequeños)", status: "{f} caras · {u} sin nombre · {c} grupos · {p} personas",
               running: "Agrupando {d} / {t}…", name_ph: "Nombre…", name: "Nombrar", merge: "Unir seleccionados ({n})", back: "← Volver", faces_n: "{n} caras", items_n: "{n} fotos",
               ask: "¿Es esta también {x}?", yes: "Sí", no: "No", no_more: "No hay más sugerencias para {x}.", rename: "Renombrar", del: "Olvidar persona", del_ok: "{x} olvidada (las fotos se conservan)", undo: "Deshacer",
               cover: "Usar como portada", remove: "No es {x}", split: "Mover a un grupo nuevo ({n})", assign_to: "Asignar seleccionadas a…", show: "Ver fotos", merge_into: "Unir con…",
-              assigned: "{n} caras asignadas a {x}", rejected: "Vale, no es {x}", faces_btn: "Caras", faces_tip: "Muestra las caras detectadas y de quién son", no_index: "Aún no hay caras calculadas con este modelo de caras.",
+              assigned: "{n} caras asignadas a {x}", rejected: "Vale, no es {x}", rv_title: "Sugerencias para {x} ({n})", rv_tip: "Clic para descartar · Mayús+clic descarta un rango", rv_cut: "Descartar por debajo de", rv_ok: "Añadir las {n} restantes", rv_none: "Descartar todas", rv_none_q: "¿Descartar las {n} sugerencias? No se volverán a sugerir.", rv_done: "{a} añadida(s) · {r} descartada(s)", faces_btn: "Caras", faces_tip: "Muestra las caras detectadas y de quién son", no_index: "Aún no hay caras calculadas con este modelo de caras.",
               close: "Cerrar", del_q: "¿Olvidar a {x}? Las fotos nunca se borran; se quita la etiqueta de persona.", rename_q: "Nuevo nombre para {x}:", err: "Error: {e}", unknown: "?" },
     };
     const lang = () => (RL.lang && RL.lang() === "es" ? "es" : "en");
@@ -101,21 +101,38 @@
           <datalist id="reflib-fc-names">${(pl.persons || []).map(p => `<option value="${esc(p.name)}">`).join("")}</datalist>`, ft("faces_n", { n: r.total }));
     }
     async function drawPerson() {
-        const [r, sg, pl] = await Promise.all([call({ action: "person_get", person: view.id, limit: 400 }), call({ action: "face_suggest", person: view.id, limit: 1 }), call({ action: "person_list" })]);
-        const p = r.person, s = (sg.faces || [])[0];
-        await needThumbs([...r.faces.map(f => f.hash), ...(s ? [s.hash] : [])]);
+        const [r, sg, pl] = await Promise.all([call({ action: "person_get", person: view.id, limit: 400 }), call({ action: "face_suggest", person: view.id, limit: 40 }), call({ action: "person_list" })]);
+        const p = r.person, sug = sg.faces || [];   // 1.11.1: all suggestions as a grid (review_rules.js, person_review)
+        if (!rv || rv.pid !== p.id) rv = { pid: p.id, discard: new Set(), anchor: -1, cut: 0 };
+        rv.faces = sug;
+        await needThumbs([...r.faces.map(f => f.hash), ...sug.map(f => f.hash)]);
         if (!pan) return;
         const others = (pl.persons || []).filter(x => x.id !== p.id);
         pan.innerHTML = shell(`<div class="reflib-fc-bar"><span class="reflib-fc-muted">${esc(ft("faces_n", { n: p.count }))} · ${esc(ft("items_n", { n: p.items }))} · ${esc(p.tag)}</span>
             <button type="button" class="reflib-ib-btn" data-f="show">${esc(ft("show"))}</button><button type="button" class="reflib-ib-btn" data-f="rename">${esc(ft("rename"))}</button>
             ${others.length ? `<select data-f="pmerge"><option value="">${esc(ft("merge_into"))}</option>${others.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select>` : ""}
             <button type="button" class="reflib-ib-btn reflib-fc-danger" data-f="pdel">${esc(ft("del"))}</button></div>
-          <div class="reflib-fc-ask">${s ? `${face(s, "big")}<div><b>${esc(ft("ask", { x: p.name }))}</b><div class="reflib-fc-muted">${Math.round(s.score * 100)}%</div>
-              <div class="reflib-fc-yn"><button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="yes" data-face="${esc(s.id)}">${esc(ft("yes"))}</button><button type="button" class="reflib-ib-btn" data-f="no" data-face="${esc(s.id)}">${esc(ft("no"))}</button></div></div>`
-              : `<span class="reflib-fc-muted">${esc(ft("no_more", { x: p.name }))}</span>`}</div>
+          ${sug.length ? reviewHtml(p) : `<div class="reflib-fc-ask"><span class="reflib-fc-muted">${esc(ft("no_more", { x: p.name }))}</span></div>`}
           ${sel.size ? `<div class="reflib-fc-bar"><button type="button" class="reflib-ib-btn" data-f="unassign">${esc(ft("remove", { x: p.name }))} (${sel.size})</button><button type="button" class="reflib-ib-btn" data-f="split">${esc(ft("split", { n: sel.size }))}</button>${sel.size === 1 ? `<button type="button" class="reflib-ib-btn" data-f="cover">${esc(ft("cover"))}</button>` : ""}</div>` : ""}
           <div class="reflib-fc-grid">${r.faces.map(f => face(f, (sel.has(f.id) ? "on " : "") + (p.cover && p.cover.id === f.id ? "cov" : ""), `data-f="fsel"`)).join("")}</div>`, p.name);
         view.name = p.name; view.tag = p.tag;
+    }
+    let rv = null;
+    function reviewHtml(p) {
+        const RR = window.ReflibReview, pl = RR.plan(rv.faces, rv.discard, rv.cut), low = new Set(rv.cut ? RR.below(rv.faces, rv.cut) : []);
+        return `<div class="reflib-fc-rv"><div class="reflib-fc-bar"><b>${esc(ft("rv_title", { x: p.name, n: rv.faces.length }))}</b><span class="reflib-fc-muted">${esc(ft("rv_tip"))}</span>
+            <label>${esc(ft("rv_cut"))} <input type="range" min="0" max="100" value="${rv.cut}" data-f="rvcut"> ${rv.cut}%</label>
+            <button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="rvok" ${pl.accept.length ? "" : "disabled"}>${esc(ft("rv_ok", { n: pl.accept.length }))}</button>
+            <button type="button" class="reflib-ib-btn" data-f="rvnone">${esc(ft("rv_none"))}</button></div>
+          <div class="reflib-fc-grid">${rv.faces.map((f, i) => `<div class="reflib-fc-rvc ${rv.discard.has(f.id) || low.has(f.id) ? "off" : ""}" data-f="rvt" data-i="${i}">${face(f)}<span>${Math.round((f.score || 0) * 100)}%</span></div>`).join("")}</div></div>`;
+    }
+    function review(all) {
+        const pl = all ? { accept: [], reject: rv.faces.map(f => f.id) } : window.ReflibReview.plan(rv.faces, rv.discard, rv.cut), pid = rv.pid;
+        call({ action: "person_review", person: pid, accept: pl.accept, reject: pl.reject }).then(() => {
+            RL.toast(ft("rv_done", { a: pl.accept.length, r: pl.reject.length }), "ok", [{ label: ft("undo"), onClick: () => (pl.accept.length ? call({ action: "face_unassign", faces: pl.accept }) : Promise.resolve())
+                .then(() => pl.reject.length && call({ action: "face_unreject", person: pid, faces: pl.reject })).then(() => pan && draw()).catch(() => {}) }], 15000);
+            rv = null; draw();
+        }).catch(() => {});
     }
     function nameCluster(c, name) {
         name = String(name || "").trim(); if (!name) return;
@@ -125,6 +142,7 @@
         const k = e.target.dataset.f;
         if (k === "thr") call({ action: "face_settings", settings: { face_cluster_threshold: +e.target.value } }).then(() => call({ action: "face_cluster_run" })).then(draw).catch(() => {});
         else if (k === "csel") { e.target.checked ? sel.add(e.target.dataset.c) : sel.delete(e.target.dataset.c); draw(); }
+        else if (k === "rvcut" && rv) { rv.cut = +e.target.value; draw(); }
         else if (k === "pmerge" && e.target.value) call({ action: "face_merge", persons: [view.id, e.target.value], into: e.target.value }).then(r => { view = { p: "person", id: r.person.id }; draw(); }).catch(() => {});
     }
     function onClick(e) {
@@ -142,6 +160,9 @@
         else if (k === "split") call(Object.assign({ action: "face_split", faces: [...sel] }, view.p === "person" ? { person: view.id } : { cluster: view.c })).then(r => { sel.clear(); view = { p: "cluster", c: r.cluster }; draw(); }).catch(() => {});
         else if (k === "unassign") call({ action: "face_unassign", faces: [...sel] }).then(() => call({ action: "face_reject", person: view.id, faces: [...sel] })).then(() => { sel.clear(); draw(); }).catch(() => {});
         else if (k === "cover") call({ action: "person_set_cover", person: view.id, face: [...sel][0] }).then(() => { sel.clear(); draw(); }).catch(() => {});
+        else if (k === "rvt" && rv) { window.ReflibReview.click(rv, rv.faces.map(f => f.id), +b.dataset.i, { shift: e.shiftKey }); draw(); }
+        else if (k === "rvok" && rv) review(false);
+        else if (k === "rvnone" && rv) { if (confirm(ft("rv_none_q", { n: rv.faces.length }))) review(true); }
         else if (k === "yes") call({ action: "face_confirm", person: view.id, faces: [b.dataset.face] }).then(r => { if (r && r.toast) RL.toast(r.toast, "ok"); draw(); }).catch(() => {});
         else if (k === "no") call({ action: "face_reject", person: view.id, faces: [b.dataset.face] }).then(() => { RL.toast(ft("rejected", { x: view.name }), "info"); draw(); }).catch(() => {});
         else if (k === "rename") { const n = prompt(ft("rename_q", { x: view.name }), view.name); if (n && n.trim()) call({ action: "person_rename", person: view.id, name: n.trim() }).then(r => { view = { p: "person", id: r.person.id }; draw(); }).catch(() => {}); }
@@ -242,6 +263,9 @@
 .reflib-fc-ask { display: flex; gap: 16px; align-items: center; padding: 12px; border-radius: 12px; background: var(--background-fill-secondary, #f3f4f6); }
 .reflib-fc-ask b { font-size: 15px; }
 .reflib-fc-yn { display: flex; gap: 8px; margin-top: 8px; }
+.reflib-fc-rvc { position: relative; cursor: pointer; text-align: center; font-size: 12px; transition: opacity .2s; }
+.reflib-fc-rvc.off { opacity: .4; } .reflib-fc-rvc.off .reflib-fc-face { outline: 3px solid #e5484d; filter: grayscale(1); }
+.reflib-fc-rvc.off::after { content: "✕"; position: absolute; left: 50%; top: 20%; transform: translateX(-50%); font-size: 30px; color: #e5484d; pointer-events: none; }
 .reflib-fc-danger { color: #dc2626; }
 .dark .reflib-fc-danger { color: #f87171; }
 .reflib-fc-ov { position: absolute; pointer-events: none; }

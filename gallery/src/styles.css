@@ -254,6 +254,7 @@ kbd{font-size:10px;opacity:.7;border:1px solid #666;border-radius:3px;padding:0 
 .ifaces{margin-top:8px}.iface{display:flex;align-items:center;gap:8px;margin:4px 0}.iface .face{width:44px;height:44px}
 
 /* 1.10.0 origen IA / Real */
+.badge.video { left: 8px; right: auto; top: auto; bottom: 8px; background: #0ea5e9; color: #fff; font-weight: 700; }
 .badge.ia { left: auto; right: 8px; top: auto; bottom: 8px; background: #6d3bd8; color: #fff; font-weight: 700; }
 .kinds.origins .kt b { font-size: 11px; letter-spacing: .02em; }
 .seg { display: inline-flex; border: 1px solid var(--line, #444); border-radius: 6px; overflow: hidden; }
@@ -292,3 +293,16 @@ kbd{font-size:10px;opacity:.7;border:1px solid #666;border-radius:3px;padding:0 
 .selbar b { margin-right:4px; font-size:13px; }
 .selbar button.danger { color:#f87171; }
 html{overflow-anchor:none}
+/* 1.11.1 revisar sugerencias en rejilla */
+.sreview{background:#1d1d1f;border-radius:14px;padding:12px 16px;margin:12px 0}
+.srbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px}.srbar .yes{background:#2f6fec;color:#fff}
+.srgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+.srcell{position:relative;text-align:center;cursor:pointer;border-radius:50%;outline:none;transition:opacity .2s}
+.srcell .face{width:96px;height:96px;border:3px solid transparent;transition:border-color .2s,filter .2s}
+.srcell.focus .face{border-color:#8ab4ff}
+.srcell.off{opacity:.4}.srcell.off .face{border-color:#e5484d;filter:grayscale(1)}
+.srcell.off::after{content:"✕";position:absolute;left:50%;top:38px;transform:translateX(-50%);font-size:34px;color:#e5484d;pointer-events:none}
+.srcell .pct{display:block;font-size:12px;opacity:.8}
+.srcell .x,.srcell .op{position:absolute;top:0;padding:0 6px;font-size:13px;border-radius:10px;opacity:0;transition:opacity .15s}
+.srcell .x{right:0}.srcell .op{left:0}.srcell:hover .x,.srcell:hover .op,.srcell:focus .x{opacity:1}
+.srmore{display:inline-block;margin-top:8px}

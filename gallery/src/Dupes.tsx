@@ -7,7 +7,7 @@ import { act } from "./actions";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { toast, Thumb } from "./ui";
 
-export interface DupRow { hash: string; name: string; path: string; dir: string; folder: string | null; w: number; h: number; mp: number; bytes: number; fmt: string; date: number; origin: string; tags: number; in_library: boolean; on_disk: boolean }
+export interface DupRow { hash: string; name: string; path: string; dir: string; folder: string | null; w: number; h: number; mp: number; bytes: number; fmt: string; date: number; origin: string; tags: number; in_library: boolean; on_disk: boolean; video?: boolean; dur?: number | null; codec?: string; fps?: number | null }
 export interface DupGroup { id: string; kind: "exact" | "near"; dist: number; rows: DupRow[]; keep: number; biggest: number; smallest: number; waste: number; same_item: boolean }
 
 const fmtB = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
@@ -86,10 +86,11 @@ export function DupesPage({ after }: { after: () => void }) {
               <div key={r.hash + r.path} className={`drow ${i === k ? "keep" : "lose"}`} onClick={() => setKeepSel({ ...keepSel, [g.id]: i })}>
                 <div className="dimg"><Thumb hash={r.hash} />
                   <span className="dbadges">{i === g.biggest && <span className="badge big">Más grande</span>}{i === g.smallest && g.rows.length > 1 && <span className="badge small">Más pequeña</span>}
-                    {r.origin === "ai" && <span className="badge ia">IA</span>}</span></div>
+                    {r.origin === "ai" && <span className="badge ia">IA</span>}{r.video && <span className="badge video">▶ Vídeo</span>}</span></div>
                 <div className="dinfo">
                   <b>{r.w} × {r.h}</b> <span>{r.mp} MP</span><br />
                   <span>{fmtB(r.bytes)} · {r.fmt}</span><br />
+                  {r.video && <><span>{[r.dur != null ? r.dur + " s" : "", r.codec, r.fps ? r.fps + " fps" : ""].filter(Boolean).join(" · ")}</span><br /></>}
                   <span className="muted">{fmtD(r.date)}</span><br />
                   <span className="muted dpath" title={r.path}>{r.dir}</span><br />
                   <span className="muted">{r.name}{r.tags ? ` · ${r.tags} etiqueta(s)` : ""}{r.in_library ? " · en colección" : ""}</span>

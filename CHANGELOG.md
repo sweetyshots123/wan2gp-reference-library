@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.1
+- Personas: las sugerencias ya no se responden una a una (Sí/No). Se muestran todas en una cuadrícula ordenada por parecido con su %; clic (o ×) descarta, Mayús+clic descarta un rango, «Descartar por debajo de X%», «Añadir las N restantes», «Descartar todas» (con confirmación) y «Cargar más». Las aceptadas se asignan y las descartadas quedan como negativas; «Deshacer» en el aviso. Galería: flechas, X/Supr y Enter, botón para abrir la foto. Media Library: misma lógica (review_rules.js) y misma acción. Nueva acción `person_review`.
+- Duplicados: vídeos solo como «Idénticos» (mismo contenido, comprobado byte a byte con sha256 completo aunque el hash de la biblioteca sea muestreado); nunca en «Casi iguales». Fila con duración, códec, fps y resolución (ffprobe en caché, vacío si no hay ffprobe) y distintivo «Vídeo» en Galería y Media Library. Las copias virtuales siguen excluidas.
+
 ## 1.11.0
 - Duplicados, arreglos: las copias idénticas se envían como `copies` (el host quita `paths` de toda acción, así que antes no se reciclaba nada); «Conservar» de un grupo y el borrado directo (delete_all, en Media Library y en toda la Galería) piden confirmación; las etiquetas/favoritos/personas solo pasan a la copia conservada después de borrar con éxito (nueva acción `dup_transfer`; cancelar no cambia nada); «Idénticos» solo con el mismo hash de contenido (mismo pHash y tamaño ahora es «Casi iguales»); textos ES/EN de `dup_not_found` y `dup_keep_one`.
 - Galería: seleccionar (círculo, Ctrl, Mayús) ya no abre el panel lateral en ninguna vista; aparece una barra compacta (n seleccionados, Todas/Ninguno, ♥ Favorita, Etiquetar, Quitar de la colección, Borrar con diálogo). El panel solo se abre con «Editar selección» y se actualiza si ya está abierto. Seleccionar no mueve el scroll (solo se re-renderiza la miniatura afectada); al abrir/cerrar el panel la primera fila visible queda anclada.

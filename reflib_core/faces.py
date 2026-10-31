@@ -793,7 +793,7 @@ FACE_TEXT = {
            "faces_need_two": "Elige al menos dos para unir", "undo_expired": "Ya no se puede deshacer"},
 }
 # writes refused (faces_busy) while a clustering job holds the lock, instead of stalling the action queue
-BUSY_WRITES = {"face_assign", "face_confirm", "face_unassign", "face_reject", "face_unreject", "face_merge", "face_split",
+BUSY_WRITES = {"person_review", "face_assign", "face_confirm", "face_unassign", "face_reject", "face_unreject", "face_merge", "face_split",
                "person_rename", "person_delete", "person_undo_delete", "person_set_cover", "face_settings"}
 
 
@@ -915,6 +915,18 @@ def a_reject(req, ctx):
 def a_unreject(req, ctx):
     fs = req.get("faces")
     return {"ok": True, "n": _svc().unreject(req.get("person"), fs if isinstance(fs, list) else None)}
+
+
+@A("person_review", doc="1.11.1 batch review of suggestions {person, accept:[fid], reject:[fid]} = face_confirm + face_reject")
+def a_review(req, ctx):
+    # thin wrapper over the per-face logic: rejects first (so an id in both lists ends up rejected, never assigned)
+    if not req.get("person"):
+        raise ActionError("person_not_found", person="")
+    rej = [str(x) for x in req.get("reject") or []]
+    acc = [str(x) for x in req.get("accept") or [] if str(x) not in set(rej)]
+    n = _svc().reject(req.get("person"), rej) if rej else 0
+    out = a_confirm({**req, "faces": acc}, ctx) if acc else _meta(ctx, {"ok": True, "assigned": 0}, req)
+    return {**out, "accepted": acc, "rejected": rej, "n_rejected": n}
 
 
 @A("face_merge", doc="Merge {clusters:[..]} or {persons:[..], into}")

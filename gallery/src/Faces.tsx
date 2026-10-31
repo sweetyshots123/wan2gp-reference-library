@@ -1,7 +1,9 @@
 // 1.10.0: Personas estilo «Fotos» del iPhone. Solo llama a las acciones compartidas face_* / person_* (reflib_core/faces.py,
 // FACES_API.md), las mismas que usa la Media Library (reflib_faces.js). Aquí no hay lógica de caras propia: solo vista.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { call, fold } from "./api";
+import { call, fold, mediaUrl } from "./api";
+import "../../selection_rules.js";
+import "../../review_rules.js";
 import { act } from "./actions";
 import { toast, Thumb } from "./ui";
 
@@ -116,28 +118,9 @@ export function PersonHeader({ name, rev, after }: { name: string; rev: number; 
   const [fsel, setFsel] = useState<Set<string>>(new Set());
   const refresh = () => { setTick((t) => t + 1); after(); };
   const pid = p?.id;
-  useEffect(() => { if (pid) call("face_suggest", { person: pid, limit: 20 }).then((r) => setSug(r.ok ? r.faces || [] : [])).catch(() => {}); else setSug([]); }, [pid, tick]);
+  const [lim, setLim] = useState(40);
+  useEffect(() => { if (pid) call("face_suggest", { person: pid, limit: lim + 1 }).then((r) => setSug(r.ok ? r.faces || [] : [])).catch(() => {}); else setSug([]); }, [pid, tick, lim]);
   useEffect(() => { if (pid && showFaces) call("person_get", { person: pid, limit: 500 }).then((r) => r.ok && setFaces(r.faces || [])); }, [pid, showFaces, tick]);
-  const cur = sug[0];
-  const answer = useCallback(async (yes: boolean) => {
-    if (!cur || !pid) return;
-    setSug((s) => s.slice(1));   // optimista: la siguiente sugerencia al instante
-    const r = await call(yes ? "face_confirm" : "face_reject", { person: pid, faces: [cur.id] }).catch(() => null);
-    if (!r || !r.ok) { toast(errMsg(r), "err"); setSug((s) => [cur, ...s]); return; }
-    if (yes) after();
-    if (sug.length <= 1) setTick((t) => t + 1);
-  }, [cur, pid, sug.length]);
-  const keys = useRef(answer); keys.current = answer;
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest("input,textarea,select") || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (document.querySelector(".viewer")) return;
-      const k = e.key.toLowerCase();
-      if (k === "y" || k === "s") { e.preventDefault(); keys.current(true); }
-      else if (k === "n") { e.preventDefault(); keys.current(false); }
-    };
-    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
-  }, []);
   if (!p) return null;
   const others = persons.filter((x) => x.id !== p.id);
   const fs = [...fsel];
@@ -152,14 +135,8 @@ export function PersonHeader({ name, rev, after }: { name: string; rev: number; 
           <button onClick={() => window.confirm(`¿Olvidar a «${p.name}»? Las fotos no se borran (se puede deshacer 5 min).`) && act("person_delete", { person: p.id }, () => { location.hash = "#/personas"; after(); })}>🗑 Olvidar persona</button>
           <button className={showFaces ? "on" : ""} onClick={() => setShowFaces(!showFaces)}>☺ Caras ({p.count})</button>
         </div>
-        {cur && (
-          <div className="suggest">
-            <FaceImg f={cur} size={160} className="round big" />
-            <div><b>¿Es esta también {p.name}?</b>
-              <div className="yn"><button className="yes" onClick={() => answer(true)}>Sí <kbd>Y</kbd></button><button onClick={() => answer(false)}>No <kbd>N</kbd></button></div>
-              <small className="muted">{sug.length} sugerencia(s){cur.score != null ? ` · parecido ${(cur.score * 100).toFixed(0)}%` : ""}</small></div>
-          </div>)}
       </div>
+      {sug.length > 0 && <SuggestReview key={pid} person={p} faces={sug.slice(0, lim)} more={sug.length > lim} onMore={() => setLim((l) => l + 40)} done={refresh} />}
       {showFaces && (
         <div className="pfaces">
           <div className="tools">{fs.length > 0 && <>
@@ -170,6 +147,63 @@ export function PersonHeader({ name, rev, after }: { name: string; rev: number; 
             <div key={f.id} className={`fcell ${fsel.has(f.id) ? "on" : ""}`} onClick={() => setFsel((s) => { const n = new Set(s); n.has(f.id) ? n.delete(f.id) : n.add(f.id); return n; })}>
               <FaceImg f={f} size={96} className="round" /></div>))}</div>
         </div>)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 1.11.1: revisar todas las sugerencias a la vez
+// Reglas compartidas con la Media Library: ../../review_rules.js (clic / Mayús / teclado / umbral) y la acción person_review.
+const RR: any = (globalThis as any).ReflibReview;
+function SuggestReview({ person, faces, more, onMore, done }: { person: Person; faces: Face[]; more: boolean; onMore: () => void; done: () => void }) {
+  const [disc, setDisc] = useState<Set<string>>(new Set());
+  const [cut, setCut] = useState(0);
+  const [focus, setFocus] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const st = useRef({ discard: disc, anchor: -1 });
+  const box = useRef<HTMLDivElement>(null);
+  const ids = faces.map((f) => f.id);
+  const low = new Set(cut ? RR.below(faces, cut) : []);
+  const plan = RR.plan(faces, disc, cut);
+  const click = (i: number, e: { shiftKey: boolean }) => { st.current.discard = new Set(disc); RR.click(st.current, ids, i, { shift: e.shiftKey }); setDisc(st.current.discard); setFocus(i); };
+  const confirm = async (all: boolean) => {
+    if (busy) return;
+    const pl = all ? { accept: [], reject: ids } : plan;
+    setBusy(true);
+    const r = await call("person_review", { person: person.id, accept: pl.accept, reject: pl.reject }).catch(() => null);
+    setBusy(false);
+    if (!r || !r.ok) { toast(errMsg(r), "err"); return; }
+    const undo = async () => {
+      if (pl.accept.length) await call("face_unassign", { faces: pl.accept }).catch(() => null);
+      if (pl.reject.length) await call("face_unreject", { person: person.id, faces: pl.reject }).catch(() => null);
+      done();
+    };
+    toast(`${pl.accept.length} añadida(s) a ${person.name} · ${pl.reject.length} descartada(s)`, "ok", { label: "Deshacer", run: undo });
+    setDisc(new Set()); setCut(0); done();
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    const cols = Math.max(1, Math.round((box.current?.clientWidth || 600) / 110));
+    const r = RR.key(e.key, focus, faces.length, cols); if (!r) return;
+    e.preventDefault();
+    if (r.op === "move") { setFocus(r.to); (box.current?.children[r.to] as HTMLElement)?.focus(); }
+    else if (r.op === "discard") click(focus, e);
+    else if (r.op === "confirm") confirm(false);
+  };
+  return (
+    <div className="sreview">
+      <div className="srbar"><b>Sugerencias para {person.name} ({faces.length}{more ? "+" : ""})</b>
+        <small className="muted">Clic o <kbd>X</kbd> descarta · <kbd>Mayús</kbd>+clic descarta un rango · <kbd>Enter</kbd> añade el resto</small>
+        <label title="Descarta todas las que se parecen menos que esto">Descartar por debajo de <input type="range" min={0} max={100} value={cut} onChange={(e) => setCut(+e.target.value)} /> {cut}%</label>
+        <button className="yes" disabled={busy || !plan.accept.length} onClick={() => confirm(false)}>Añadir las {plan.accept.length} restantes</button>
+        <button disabled={busy} onClick={() => window.confirm(`¿Descartar las ${faces.length} sugerencias? No se volverán a sugerir.`) && confirm(true)}>Descartar todas</button></div>
+      <div className="srgrid" ref={box} onKeyDown={onKey}>{faces.map((f, i) => { const off = disc.has(f.id) || low.has(f.id); return (
+        <div key={f.id} tabIndex={0} className={`srcell ${off ? "off" : ""} ${i === focus ? "focus" : ""}`} onClick={(e) => click(i, e)} onFocus={() => setFocus(i)}
+             title={off ? "Descartada (clic para recuperarla)" : "Clic para descartar"}>
+          <FaceImg f={f} size={96} className="round" />
+          <span className="pct">{f.score != null ? `${Math.round(f.score * 100)}%` : ""}</span>
+          <button className="x" title={off ? "Recuperar" : "Descartar"} onClick={(e) => { e.stopPropagation(); click(i, { shiftKey: false }); }}>×</button>
+          <button className="op" title="Abrir la foto" onClick={async (e) => { e.stopPropagation(); const u = await mediaUrl(f.hash); if (u.url) window.open(u.url, "_blank"); }}>↗</button>
+        </div>); })}</div>
+      {more && <a href="#" className="srmore" onClick={(e) => { e.preventDefault(); onMore(); }}>Cargar más</a>}
     </div>
   );
 }
