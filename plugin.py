@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.9.4"
+PLUGIN_VERSION = "1.9.5"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -2915,18 +2915,12 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not cid:
                 out = self._err(lang2, "no_collection")
                 return None, out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                col = storage.get_collection(cid)
-                out_dir = os.path.join(_upload_folder(), "reference_library", "export")
-                os.makedirs(out_dir, exist_ok=True)
-                safe = storage._safe_name(col["name"], tr(lang2, "default_name")).replace(" ", "_")
-                dest = os.path.join(out_dir, f"{safe}-{cid[:8]}.zip")
-                storage.export_collection_zip(cid, dest)
-                out = self._ok(lang2, "exported", path=os.path.basename(dest))
-                return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
-            except storage.StorageError:
-                out = self._err(lang2, "not_found")
+            out = _actions.call("col_export", {"collection_id": cid, "dir": os.path.join(_upload_folder(), "reference_library", "export")},
+                                self._actx(lang2))   # 1.9.5 shared
+            if not out.get("ok"):
                 return None, out["error"], json.dumps(out, ensure_ascii=False)
+            dest = out.pop("path"); out.pop("rel", None)
+            return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
 
         def on_import(file_obj, browser_lang=""):
             lang2 = self._lang(browser_lang)
@@ -2935,12 +2929,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 out = self._err(lang2, "bad_request")
                 a, b, c, d = refresh_mgr("", browser_lang)
                 return a, b, c, d, out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                col = storage.import_collection_zip(path, default_name=tr(lang2, "imported_name"))
-                out = self._ok(lang2, "imported", name=col["name"], n=len(col["images"]), _cid=col["id"])
-            except Exception as e:
-                out = {"ok": False, "error": storage_error_text(lang2, e)}
-                col = None
+            out = _actions.call("col_import", {"paths": [path], "meta": False}, self._actx(lang2))   # 1.9.5 shared
+            col = (out.get("collections") or [None])[-1]
             a, b, c, d = refresh_mgr((col or {}).get("id"), browser_lang)
             return a, b, c, d, out.get("message") or out.get("error"), json.dumps(out, ensure_ascii=False)
 
@@ -3137,22 +3127,14 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 return vresult(self._err(lang2, "no_video"), "", browser_lang, False)
             if not name:
                 return vresult(self._err(lang2, "need_vname"), vid, browser_lang, False)
-            try:
-                v = videostore.rename_video(vid, name, fallback=tr(lang2, "video_default_name"))
-                out = self._ok(lang2, "vrenamed", name=v["name"], _cid=v["id"])
-            except storage.StorageError as e:
-                out = {"ok": False, "error": storage_error_text(lang2, e)}
+            out = _actions.call("v_rename", {"vid": vid, "name": name, "meta": False}, self._actx(lang2))   # 1.9.5 shared
             return vresult(out, vid, browser_lang, False)
 
         def on_vmove(vid, delta, browser_lang=""):
             lang2 = self._lang(browser_lang)
             if not vid:
                 return vresult(self._err(lang2, "no_video"), "", browser_lang, False)
-            try:
-                videostore.move_video(vid, delta)
-                out = {"ok": True, "message": "", "changed": {"reason": "video-reordered", "id": vid, "kind": "video"}}
-            except storage.StorageError as e:
-                out = {"ok": False, "error": storage_error_text(lang2, e)}
+            out = _actions.call("v_move", {"vid": vid, "delta": delta, "meta": False}, self._actx(lang2))   # 1.9.5 shared
             return vresult(out, vid, browser_lang, False)
 
         def on_vdelete(vid, armed_raw, browser_lang=""):
@@ -3168,17 +3150,13 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not vid:
                 return (*vresult(self._err(lang2, "no_video"), "", browser_lang), *reset)
             if isinstance(armed, dict) and armed.get("vid") == vid and now < float(armed.get("until") or 0):
-                try:
-                    v = videostore.soft_delete(vid)
-                    token = uuid.uuid4().hex
-                    self._delete_undo[token] = {"id": v["id"], "name": v["name"], "time": now, "kind": "video"}
+                out = _actions.call("v_delete", {"vid": vid, "meta": False}, self._actx(lang2))   # 1.9.5 shared
+                if out.get("ok"):
                     for t in list(self._last_video):
                         if self._last_video[t] == vid:
                             self._last_video.pop(t, None)
-                    out = {**self._ok(lang2, "vdeleted_undo", name=v["name"], _cid=v["id"]), "undo_token": token,
-                           "undo_label": tr(lang2, "undo"), "undo_button": "reflib_undo_vdelete"}
-                except storage.StorageError as e:
-                    out = {"ok": False, "error": storage_error_text(lang2, e)}
+                    out["undo_button"] = "reflib_undo_vdelete"
+                    out.pop("deleted", None)
                 return (*vresult(out, "", browser_lang), *reset)
             out = {"ok": True, "message": tr(lang2, "delete_armed"), "toast": tr(lang2, "delete_armed"), "kind": "info",
                    "armed": True, "disarm_button": "reflib_vdelete_disarm"}
@@ -3202,50 +3180,17 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             except Exception:
                 req = {}
             token = req.get("undo_token") if isinstance(req, dict) else None
-            info = self._delete_undo.get(token) if token else None
-            if not info or info.get("kind") != "video" or time.time() - info["time"] > 5 * 60:
-                self._delete_undo.pop(token, None)
-                return vresult(self._err(lang2, "undo_expired"), "", browser_lang)
-            self._delete_undo.pop(token, None)
-            try:
-                v = videostore.restore_soft_deleted(info["id"])
-                merged = v.pop("_merged_from", None)
-                if merged:
-                    # An equivalent video was saved meanwhile: no second copy; select the one that is there.
-                    out = {"ok": True, "kind": "info", "message": tr(lang2, "vrestore_dup", name=merged["name"], existing=v["name"]),
-                           "toast": tr(lang2, "vrestore_dup", name=merged["name"], existing=v["name"])}
-                    return vresult(out, v["id"], browser_lang)
-                return vresult(self._ok(lang2, "vrestored", name=v["name"], _cid=v["id"]), v["id"], browser_lang)
-            except storage.StorageError:
-                return vresult(self._err(lang2, "undo_expired"), "", browser_lang)
+            out = _actions.call("v_undo_delete", {"undo_token": token, "meta": False}, self._actx(lang2))   # 1.9.5 shared
+            return vresult(out, out.pop("vid", ""), browser_lang)
 
         def on_vimport(files, browser_lang=""):
             lang2 = self._lang(browser_lang)
             files = files if isinstance(files, list) else ([files] if files else [])
-            added, skipped, errors = [], 0, []
-            for f in files:
-                path = f if isinstance(f, str) else getattr(f, "name", None) or getattr(f, "path", None)
-                if not path or not os.path.isfile(path):
-                    continue
-                try:
-                    if path.lower().endswith(".zip"):
-                        got, skip = videostore.import_zip(path, fallback=tr(lang2, "video_default_name"))
-                        added.extend(got)
-                        skipped += skip
-                    else:
-                        entry, created = videostore.add_video(path, source="import", fallback=tr(lang2, "video_default_name"))
-                        if created:
-                            added.append(entry)
-                        else:
-                            skipped += 1
-                except Exception as e:
-                    errors.append(storage_error_text(lang2, e))
-            if not added and not skipped and errors:
-                out = {"ok": False, "error": errors[0]}
-            else:
-                key = "vimported_skip" if skipped else "vimported"
-                out = self._ok(lang2, key, n=len(added), skipped=skipped, _cid=added[0]["id"] if added else None)
-            return vresult(out, added[0]["id"] if added else "", browser_lang)
+            paths = [f if isinstance(f, str) else getattr(f, "name", None) or getattr(f, "path", None) for f in files]
+            out = _actions.call("v_import", {"paths": [p for p in paths if p], "meta": False}, self._actx(lang2))   # 1.9.5 shared
+            if not out.get("ok") and not [p for p in paths if p]:
+                out = {"ok": True, "message": ""}
+            return vresult(out, out.pop("vid", ""), browser_lang)
 
         def export_dir():
             path = os.path.join(_upload_folder(), "reference_library", "export", uuid.uuid4().hex[:8])
@@ -3257,23 +3202,19 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             if not vid:
                 out = self._err(lang2, "no_video")
                 return gr.skip(), out["error"], json.dumps(out, ensure_ascii=False)
-            try:
-                dest = videostore.export_file(vid, export_dir(), fallback=tr(lang2, "video_default_name"))
-                out = self._ok(lang2, "vdownload", path=os.path.basename(dest))
-                return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
-            except Exception as e:
-                out = {"ok": False, "error": storage_error_text(lang2, e)}
+            out = _actions.call("v_export", {"vid": vid, "dir": export_dir()}, self._actx(lang2))   # 1.9.5 shared
+            if not out.get("ok"):
                 return gr.skip(), out["error"], json.dumps(out, ensure_ascii=False)
+            dest = out.pop("path"); out.pop("rel", None)
+            return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
 
         def on_vexport(browser_lang=""):
             lang2 = self._lang(browser_lang)
-            try:
-                dest, n = videostore.export_all_zip(os.path.join(export_dir(), time.strftime("reference-library-videos-%Y%m%d-%H%M.zip")))
-                out = self._ok(lang2, "vexported", n=n, path=os.path.basename(dest))
-                return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
-            except Exception as e:
-                out = {"ok": False, "error": storage_error_text(lang2, e)}
+            out = _actions.call("v_export", {"all": True, "dir": export_dir()}, self._actx(lang2))   # 1.9.5 shared
+            if not out.get("ok"):
                 return gr.skip(), out["error"], json.dumps(out, ensure_ascii=False)
+            dest = out.pop("path"); out.pop("rel", None)
+            return gr.update(value=dest, visible=True), out["message"], json.dumps(out, ensure_ascii=False)
 
         def on_vmgr_load(vid, browser_lang=""):
             lang2 = self._lang(browser_lang)
@@ -3723,7 +3664,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     def _actx(self, lang, request=None):
         """Context for shared actions: this plugin's texts, meta payload and undo store."""
-        return _actions.Ctx(lang, ok=self._ok, err=self._err, payload=self._ilib_payload, state=self._delete_undo, request=request)
+        return _actions.Ctx(lang, ok=self._ok, err=self._err, payload=self._ilib_payload, state=self._delete_undo, request=request, exc=storage_error_text)
 
     def ilib(self, raw, request: gr.Request = None):
         try:
@@ -3752,6 +3693,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             try:
                 if isinstance(req.get("selection"), dict):
                     req["hashes"] = imagelib.resolve_selection(req["selection"])
+                req.pop("paths", None); req.pop("dir", None)   # 1.9.5: server paths only come from the host (uploads / Gradio)
                 out = _actions.call(action, req, self._actx(lang, request))
             except Exception as e:
                 print(f"[Reference Library] action {action} failed: {e}")
@@ -4232,6 +4174,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         except Exception:
             meta = {}
         lang = meta.get("lang") if meta.get("lang") in LANGS else self._lang(meta.get("browser"))
+        if meta.get("action") in ("col_import", "v_import"):   # 1.9.5: Galería zip / video import -> the shared action
+            paths = [f if isinstance(f, str) else getattr(f, "name", None) for f in files or []]
+            out = _actions.call(meta["action"], {"paths": [p for p in paths if p]}, self._actx(lang))
+            out["id"] = meta.get("id"); out["ilib"] = True
+            return json.dumps(out, ensure_ascii=False), None
         created = skipped = 0
         for f in files or []:
             path = f if isinstance(f, str) else getattr(f, "name", None) or (f.get("path") if isinstance(f, dict) else None)

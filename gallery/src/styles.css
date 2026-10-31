@@ -200,3 +200,25 @@ button.link { background: none; border: 0; padding: 0; color: inherit; opacity: 
 .simhead .simref { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
 .simhead .seg button.on { background: #3b82f6; color: #fff; }
 .simbar { bottom: 56px; }
+.vman .vth { width: 72px; } .vman .vth img { width: 64px; height: 40px; object-fit: cover; border-radius: 4px; display: block; }
+/* 1.9.5 facetas + panel corporal */
+.withfacets { display: grid; grid-template-columns: minmax(0, 1fr) 270px; align-items: start; }
+.withside.withfacets { grid-template-columns: 290px minmax(0, 1fr) 270px; }
+.facetp { position: sticky; top: 56px; max-height: calc(100vh - 64px); overflow: auto; padding: 10px 12px; border-left: 1px solid #ffffff14; font-size: 13px; }
+.facetp .fph { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.facetp .small { font-size: 11px; margin: 0 0 8px; }
+.facetp .fct { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.facetp .fnode { display: flex; justify-content: space-between; cursor: pointer; padding: 2px 6px 2px 14px; border-radius: 4px; }
+.facetp .fnode:hover { background: #ffffff10; }
+.facetp .fnode.on { background: #3b82f640; }
+.facetp .fnode.not { background: #ef444430; text-decoration: line-through; }
+.facetp .fnode i { font-style: normal; opacity: .6; }
+.facetp .frange { display: flex; align-items: center; gap: 4px; padding: 2px 0 2px 14px; }
+.facetp .frange span { flex: 1; }
+.facetp .frange input { width: 58px; }
+.bodyp .btab { border-collapse: collapse; font-size: 12px; }
+.bodyp .btab th { text-align: left; padding-top: 6px; }
+.bodyp .btab td { padding: 1px 8px 1px 0; }
+.bodyp .bheight { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.bodyp .bheight input[type=number] { width: 70px; }
+@media (max-width: 760px) { .withfacets, .withside.withfacets { grid-template-columns: 1fr; } .facetp { position: static; border-left: 0; } }

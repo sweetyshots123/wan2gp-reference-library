@@ -37,11 +37,16 @@ class Ctx:
     """What an action may need from the host, without importing Gradio or the plugin."""
 
     def __init__(self, lang: str = "en", ok: Optional[Callable] = None, err: Optional[Callable] = None,
-                 payload: Optional[Callable] = None, state: Optional[Dict[str, Any]] = None, request=None):
+                 payload: Optional[Callable] = None, state: Optional[Dict[str, Any]] = None, request=None,
+                 exc: Optional[Callable] = None):
         self.lang = lang
         self._ok, self._err, self._payload = ok, err, payload
         self.state = state if state is not None else {}   # host-owned dict that survives between calls (undo tokens...)
         self.request = request
+        self._exc = exc   # 1.9.5: host's text for a storage / zip exception
+
+    def exc(self, e) -> str:
+        return self._exc(self.lang, e) if self._exc else (str(e) or e.__class__.__name__)
 
     def ok(self, key: str, **params) -> Dict[str, Any]:
         return self._ok(self.lang, key, **params) if self._ok else {"ok": True, "message": key, "toast": key, **params}

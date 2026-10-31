@@ -3,6 +3,8 @@ import Folders, { folderLabel, nodeHref } from "./Folders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personName, personTag, upload } from "./api";
 import { ManageList } from "./Manage";
+import { VideoManager } from "./Videos";
+import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
@@ -59,6 +61,9 @@ export default function App() {
   const [kc, setKc] = useState<Record<string, number>>({});
   const [sort, setSort] = useState(() => localStorage.getItem("gal.sort") || "date_desc");
   const [extraTags, setExtraTags] = useState<string[]>([]);
+  const [af, setAf] = useState<AFilt>(AF0);   // 1.9.5: facetas de la Media Library (atags / xtags / jst / rangos)
+  const [fpanel, setFpanel] = useState(() => localStorage.getItem("gal.facets") === "1");
+  useEffect(() => { localStorage.setItem("gal.facets", fpanel ? "1" : "0"); }, [fpanel]);
   const [, setTaxOk] = useState(false);
   const [simRef, setSimRef] = useState<SimRef | null>(() => { try { return JSON.parse(sessionStorage.getItem("gal.sim") || "null"); } catch { return null; } });   // 1.9.3: búsqueda de similares activa (sim_search)
   useEffect(() => { const h = (e: any) => { setSimRef(e.detail); try { sessionStorage.setItem("gal.sim", JSON.stringify(e.detail)); } catch {} setViewer(null); setSolo(null); setSel(new Set()); if (location.hash !== "#/similares") location.hash = "#/similares"; else refresh(); }; window.addEventListener(SIM_EVENT, h); return () => window.removeEventListener(SIM_EVENT, h); });
@@ -107,8 +112,10 @@ export default function App() {
     const out: Filter = { ...base, sort: base.sim ? "" : sort };   // 1.9.3: resultado de similitud = mejor primero
     if (kinds.length && kinds.length < 3 && !base.kind) out.kinds = kinds;
     if (extraTags.length) out.tags = [...(base.tags || []), ...extraTags];
-    return out;
-  }, [baseKey, kinds, sort, extraTags]);
+    const ax = afToFilter(af);
+    if (ax.atags) ax.atags = [...(base.atags || []), ...ax.atags];
+    return { ...out, ...ax };
+  }, [baseKey, kinds, sort, extraTags, JSON.stringify(af)]);
   const fkey = JSON.stringify(filter);
 
   const applyMeta = (r: any) => { const m = metaOf(r); if (m) { setMeta(m); rev.current = m.rev; } };
@@ -252,11 +259,12 @@ export default function App() {
       </header>
 
       {filter ? (
-        <div className={fside ? "withside" : ""}>
+        <div className={`${fside ? "withside" : ""} ${fpanel ? "withfacets" : ""}`}>
         {fside && meta && <Folders meta={meta} node={route.v === "carpeta" ? { fid: route.fid, rel: route.rel } : null} onChanged={refresh} />}
         <main>
           <div className="bar">
-            <h1>{(v === "carpetas" || v === "carpeta") && <button className="sidetg" onClick={() => setFopen(!fopen)} title="Mostrar/ocultar el árbol de carpetas">{fopen ? "◧" : "☰"}</button>}{title} <small>{total}</small></h1>
+            <h1>{(v === "carpetas" || v === "carpeta") && <button className="sidetg" onClick={() => setFopen(!fopen)} title="Mostrar/ocultar el árbol de carpetas">{fopen ? "◧" : "☰"}</button>}{title} <small>{total}</small>{v === "videos" && <button className="ml" onClick={() => setManage(!manage)} title="Video Library: renombrar, ordenar, borrar, importar y exportar">{manage ? "Ver vídeos" : "Gestionar Video Library"}</button>}</h1>
+            {v === "videos" && manage && <VideoManager after={refresh} />}
             {v === "carpeta" && <p className="muted crumbs">{crumbsOf(meta, route)}</p>}
             {v === "persona" && <p className="muted">Etiqueta: <code>{filter.tags?.[0] || PERSON + route.name}</code></p>}
             {v === "similares" && (simRef ? <SimHeader r={simRef} Thumb={Thumb} clear={() => { setSimRef(null); location.hash = "#/explorar"; }} />
@@ -269,6 +277,7 @@ export default function App() {
               </select>
               <input type="range" min={120} max={420} value={size} onChange={(e) => setSize(+e.target.value)} title="Tamaño de miniaturas" />
               <button className={selMode ? "on" : ""} onClick={() => { setSelMode(!selMode); setSel(new Set()); }} title="Seleccionar (S)">☑ Seleccionar</button>
+              <button className={fpanel ? "on" : ""} onClick={() => setFpanel(!fpanel)} title="Facetas: etiquetas automáticas, estado del autoetiquetado y rangos corporales (como en la Media Library)">🏷 Facetas{afActive(af) ? ` (${afActive(af)})` : ""}</button>
               <button onClick={() => startSimIndex(null)} title="Calcula pose y cara de toda la biblioteca para «Similares» (solo lo que falta; en segundo plano, como en la Media Library)">⧉ Calcular poses y caras</button>
             </div>
           </div>
@@ -296,6 +305,7 @@ export default function App() {
           )}
           {!total && ver > 1 && <p className="empty">{v === "buscar" ? "Sin resultados." : "Nada por aquí todavía. Arrastra imágenes o vídeos a la ventana para importarlos."}</p>}
         </main>
+        {fpanel && filter && <FacetPanel f={filter} af={af} setAf={setAf} rev={meta?.rev || 0} />}
         </div>
       ) : (
         <main>

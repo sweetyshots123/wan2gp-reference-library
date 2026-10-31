@@ -161,6 +161,18 @@ VLFOLDER = "__vlib"   # 1.6.8 pseudo folder "🎬 Librería de vídeos": the Vid
 _vl_hash: Dict[tuple, str] = {}
 
 
+def vlib_hash(v) -> str:
+    """1.9.5: the library hash of a Video Library entry (same cache as _vlib_entries), for thumbnails."""
+    from . import videostore as _vs
+    p = _vs.video_file(v)
+    st = os.stat(p)
+    k = (p, st.st_size, st.st_mtime_ns)
+    h = _vl_hash.get(k)
+    if not h:
+        h = _vl_hash[k] = storage._file_hash(p)
+    return h
+
+
 def _vlib_entries(by_hash: Dict[str, Dict[str, Any]], order: List[str], tags: Dict[str, List[str]]) -> None:
     """1.6.8: Video Library videos as library items, so the media browser (and the inputs' library button) can pick them.
     Same bytes already in a folder / collection -> that item just gains the "Librería de vídeos" location. Read-only from

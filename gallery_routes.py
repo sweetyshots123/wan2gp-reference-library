@@ -61,6 +61,15 @@ def mount(app, dependencies=None) -> None:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    @r.get("/reflib/export/{rel:path}")
+    async def export_file(rel: str):   # 1.9.5: downloads written by col_export / v_export (only inside their temp root)
+        from .reflib_core import ioactions
+        root = os.path.realpath(ioactions.EXPORT_ROOT)
+        p = os.path.realpath(os.path.join(root, rel))
+        if not p.startswith(root + os.sep) or not os.path.isfile(p):
+            return Response("not found", status_code=404)
+        return FileResponse(p, filename=os.path.basename(p))
+
     @r.get("/reflib/gallery")
     async def gallery_root():
         return RedirectResponse("/reflib/gallery/")

@@ -82,7 +82,50 @@ export function AutoTagBar({ onDone }: { onDone: () => void }) {
 
 /** 1.9.2: «Etiquetas automáticas» de una imagen, como en la Media Library: at_image (lectura) y at_edit
  *  (accept = ✓ confirmar, remove = × quitar, restore = ↺ recuperar). Se guardan aparte de las etiquetas manuales. */
-export function AutoTags({ hash, onSearch }: { hash: string; onSearch?: (id: string, label: string) => void }) {
+// 1.9.5: nombres de los campos corporales (los mismos que BODY_NAMES.es de la Media Library)
+export const BODY_ES: Record<string, string> = { age: "edad aparente (estimada)", bust: "pecho", underbust: "bajo pecho", waist: "cintura", high_hip: "cadera alta", hip: "cadera", thigh: "muslo", knee: "rodilla", gap: "separación de muslos",
+  shoulder: "hombros", shoulder_width: "anchura de hombros", waist_hip: "cintura / cadera", waist_bust: "cintura / pecho", shoulder_hip: "hombro / cadera", bust_hip: "pecho / cadera",
+  thigh_hip: "muslo / cadera", thigh_knee: "muslo / rodilla", gap_hip: "separación / cadera", curvature: "curvatura", waist_definition: "definición de cintura", torso: "torso", leg: "piernas", arm: "brazos" };
+export const bodyName = (k: string) => BODY_ES[k] || k;
+// los rangos filtrables del panel de facetas (BODY_RANGE_FIELDS de la Media Library)
+export const BODY_RANGE_FIELDS = ["age", "bust", "waist", "hip", "thigh", "waist_hip", "waist_bust", "shoulder_hip", "thigh_hip", "gap_hip", "curvature", "waist_definition"];
+
+// 1.9.5: panel corporal de una imagen (body de at_image) + estatura (acción compartida at_height)
+function BodyPanel({ hash, img, colId, onImg }: { hash: string; img: any; colId?: string; onImg: (x: any) => void }) {
+  const b = img.body;
+  const [cm, setCm] = useState<string>(img.height_cm ? String(img.height_cm) : "");
+  const [all, setAll] = useState(false);
+  useEffect(() => setCm(img.height_cm ? String(img.height_cm) : ""), [hash, img.height_cm]);
+  if (!b) return null;
+  const save = async () => {
+    const r = await call("at_height", { hash, cm: cm ? Number(cm) : null, ...(all && colId ? { collection_id: colId } : {}) });
+    if (r.ok) { if (r.img) onImg(r.img); toast(`Estatura guardada (${r.n} imagen(es)); las medidas se recalculan`, "ok"); window.dispatchEvent(new Event(AT_DONE)); }
+    else toast(r.error || "Error", "err");
+  };
+  const rows = (title: string, o: Record<string, any> | undefined, fmt: (v: any) => [string, string?]) =>
+    o && Object.keys(o).length ? [<tr key={title}><th colSpan={3}>{title}</th></tr>, ...Object.entries(o).map(([k, v]) => { const [a, x] = fmt(v); return <tr key={title + k}><td>{bodyName(k)}</td><td>{a}</td><td className="muted">{x || ""}</td></tr>; })] : null;
+  return (
+    <div className="bodyp">
+      <h4>Cuerpo <small className="muted">estimado</small></h4>
+      {!b.measurable ? <p className="muted">No medible{b.reason ? `: ${b.reason}` : ""}</p> : <>
+        <table className="btab"><tbody>
+          {rows("Medidas (cm)", b.cm, (v) => [`~${Math.round(v[0])}`, `${v[1]}–${v[2]}`])}
+          {rows("Proporciones", b.ratios, (v) => [Number(v).toFixed(2)])}
+          {rows("Puntuaciones", b.scores, (v) => [Number(v).toFixed(2)])}
+          {rows("Proporción corporal", b.prop, (v) => [Math.round(v * 100) + "%"])}
+        </tbody></table>
+        <p className="muted">Incertidumbre ±{Math.round((b.uncertainty || 0) * 100)} % · escala por {b.scale_from === "stature" ? "estatura" : "torso"}{b.height_cm ? ` (${b.height_cm} cm, ${b.height_source === "user" ? "introducida" : "supuesta"})` : ""}</p>
+        <div className="bheight">
+          <label title="Estatura real de la persona: mejora la escala de las medidas">Estatura (cm) <input type="number" min={120} max={220} value={cm} placeholder="165" onChange={(e) => setCm(e.target.value)} /></label>
+          <button onClick={save}>OK</button>
+          {colId && <label><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> toda la colección</label>}
+        </div>
+      </>}
+    </div>
+  );
+}
+
+export function AutoTags({ hash, onSearch, colId }: { hash: string; onSearch?: (id: string, label: string) => void; colId?: string }) {
   const [img, setImg] = useState<any>(null);
   const [st, setSt] = useState<any>(null);
   const [more, setMore] = useState(false);
@@ -113,12 +156,14 @@ export function AutoTags({ hash, onSearch }: { hash: string; onSearch?: (id: str
     <section>
       <h4>Etiquetas automáticas {img.model && <small className="muted">{img.model}</small>}</h4>
       {img.review && <p className="aterr">⚠ Marcada para revisión: sin etiquetas automáticas visibles.</p>}
+      {!img.review && img.age?.est ? <p className="muted">{bodyName("age")}: <b>~{Math.round(img.age.est)} ± {Math.round(img.age.pm)}</b></p> : null}
       <div className="chips">
         {shown.map(chip)}
         {!tags.length && <span className="muted">{st?.queued ? "En cola… aparecerán aquí al terminar." : img.model ? "El modelo no encontró etiquetas." : "Aún sin autoetiquetar."}</span>}
       </div>
       {hidden.length > 0 && <p><button className="link" onClick={() => setMore(!more)}>{more ? "Ocultar" : `+ ${hidden.length} con poca confianza o quitadas`}</button></p>}
       {more && <div className="chips">{hidden.map(chip)}</div>}
+      <BodyPanel hash={hash} img={img} colId={colId} onImg={setImg} />
     </section>
   );
 }

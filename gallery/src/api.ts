@@ -39,6 +39,22 @@ export async function call<T = Resp>(action: string, body: Record<string, any> =
   return r.json();
 }
 
+/** 1.9.5: descarga un archivo escrito por col_export / v_export (servido por GET /reflib/export/<rel>). */
+export function download(r: Resp) {
+  if (!r?.ok || !r.rel) return;
+  const a = document.createElement("a");
+  a.href = "/reflib/export/" + String(r.rel).split("/").map(encodeURIComponent).join("/"); a.download = r.name || "";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/** 1.9.5: elige archivos con un <input type=file> temporal. */
+export function pickFiles(accept: string, multiple = true): Promise<File[]> {
+  return new Promise((res) => {
+    const i = document.createElement("input"); i.type = "file"; i.accept = accept; i.multiple = multiple;
+    i.onchange = () => res([...(i.files || [])]); i.click();
+  });
+}
+
 export function metaOf(r: any): Meta | null {
   if (r?.meta) return r.meta;
   if (r && "rev" in r && "collections" in r) return r as Meta;
@@ -91,10 +107,10 @@ export async function mediaUrl(hash: string): Promise<{ url: string | null; rend
   return { url: r.url || null, rendering: !!r.rendering };
 }
 
-export async function upload(files: File[]): Promise<Resp> {
+export async function upload(files: File[], extra: Record<string, any> = {}): Promise<Resp> {
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f, f.name));
-  fd.append("meta", JSON.stringify({ lang: "es" }));
+  fd.append("meta", JSON.stringify({ lang: "es", ...extra }));   // 1.9.5: {action:"col_import"|"v_import"} -> acción compartida
   const r = await fetch("/reflib/upload", { method: "POST", body: fd, credentials: "same-origin" });
   return r.json();
 }

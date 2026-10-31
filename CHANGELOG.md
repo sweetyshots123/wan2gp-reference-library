@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.5
+- New shared actions in `reflib_core/ioactions.py`: col_export / col_import (collection zips) and v_list / v_rename / v_move / v_delete / v_undo_delete / v_import / v_export (Video Library). The Media Library's Gradio buttons now call them, so both UIs run the same code.
+- Galería: Colecciones → Gestionar can export a collection (⬇ .zip) and import zips. Vídeos → "Gestionar Video Library" can list, rename, reorder ◀▶, delete with undo, import videos or zips, download one video, and export everything.
+- Galería: a 🏷 Facetas side panel (at_facets) with auto tags for the current view (click to include, Ctrl-click or right-click to exclude), auto-tag status, and body ranges. The image panel shows apparent age, the body measurements, and a height field (at_height, optionally for the whole collection).
+- Downloads are served from a temporary export folder only (`GET /reflib/export/<rel>`). Server paths can't be sent through `/reflib/api`; imports go through `/reflib/upload` with `{action: "col_import" | "v_import"}`.
+
 ## 1.9.4
 - Fix: `similarity/settings.json` saved with a UTF-8 BOM (for example by PowerShell) was silently ignored. The worker then fell back to WanGP's Python instead of the configured venv. It is now read as utf-8-sig, and a parse error shows in `sim_status.settings_error`. The plugin's settings.json is read the same way.
 - Media Library: a 🏷 tag manager (rename, merge, delete with undo) on the shared tag_rename / tag_merge / tag_delete / tag_undo_delete actions, the same as the Galería's.

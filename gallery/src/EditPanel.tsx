@@ -114,7 +114,7 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
         </form>
       </section>
 
-      {one && (one.kind || "image") === "image" && <AutoTags hash={one.hash} onSearch={(id, label) => {
+      {one && (one.kind || "image") === "image" && <AutoTags hash={one.hash} colId={one.cols?.length === 1 ? one.cols[0] : undefined} onSearch={(id, label) => {
         window.dispatchEvent(new CustomEvent("reflib:search-chip", { detail: { k: "auto", v: id, label } }));
       }} />}
 

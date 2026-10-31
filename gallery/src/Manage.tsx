@@ -1,8 +1,18 @@
 // 1.8.6: gestión global de etiquetas, personas y colecciones. Sin lógica propia: todo son acciones compartidas de la
 // Media Library (tag_rename / tag_merge / tag_delete / tag_undo_delete, col_rename / col_delete / col_undo_delete).
 import { useState } from "react";
-import { PERSON, personName } from "./api";
+import { PERSON, download, personName, pickFiles, upload } from "./api";
 import { act } from "./actions";
+import { toast } from "./ui";
+
+// 1.9.5: exportar / importar colecciones (.zip) con las acciones compartidas col_export / col_import
+export async function exportCol(id: string) { const r = await act("col_export", { collection_id: id }, () => {}); if (r) download(r); }
+export async function importCols(after: () => void) {
+  const files = await pickFiles(".zip"); if (!files.length) return;
+  toast("Importando…", "info");
+  const r = await upload(files, { action: "col_import" });
+  toast(r.toast || r.message || r.error || "?", r.ok ? "ok" : "err"); after();
+}
 
 export type Kind = "tag" | "persona" | "col";
 export interface Row { key: string; label: string; count: number }
@@ -48,6 +58,7 @@ export function ManageList({ kind, rows, after }: { kind: Kind; rows: Row[]; aft
   };
   return (
     <div className="manage">
+      {kind === "col" && <div className="mbar"><button onClick={() => importCols(after)}>⬆ Importar colección (.zip)</button></div>}
       {kind !== "col" && <div className="mbar"><button disabled={sel.size < 2} onClick={merge}>Fusionar seleccionadas ({sel.size})</button></div>}
       <table><tbody>
         {vis.map((r) => (
@@ -56,6 +67,7 @@ export function ManageList({ kind, rows, after }: { kind: Kind; rows: Row[]; aft
             <td className="mname">{names[r.key] ?? r.label}</td>
             <td className="muted">{r.count}</td>
             <td>
+              {kind === "col" && <button title="Exportar como .zip" onClick={() => exportCol(r.key)}>⬇</button>}
               <button title="Renombrar" onClick={() => renameOne(kind, r.key, r.label, after, (to) => setNames((m) => { const n = { ...m }; if (to) n[r.key] = to; else delete n[r.key]; return n; }))}>✎</button>
               <button title="Borrar" onClick={() => deleteOne(kind, r.key, r.label, r.count, after, (g) => setGone((s) => { const n = new Set(s); g ? n.add(r.key) : n.delete(r.key); return n; }))}>🗑</button>
             </td>
