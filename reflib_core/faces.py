@@ -82,7 +82,11 @@ class FaceSource:
         nb = [None] * n
         if box is not None and len(box) == n:
             nb = [None if not np.all(np.isfinite(b[:4])) else [round(float(x), 5) for x in b[:4]] for b in box]
-        return {"w": e.get("w", 0) or 0, "h": e.get("h", 0) or 0, "n": n, "nbox": nb}
+        ts = [None] * n
+        if isinstance(pack, dict) and pack.get("t") is not None and len(pack["t"]) == n:
+            ts = [None if not np.isfinite(x) else round(float(x), 3) for x in pack["t"]]
+        return {"w": e.get("w", 0) or 0, "h": e.get("h", 0) or 0, "n": n, "nbox": nb, "t": ts,
+                "kind": e.get("kind") or "image"}
 
 
 def _px(nb, w, hh):
@@ -242,23 +246,36 @@ class Faces:
         mt = int(os.path.getmtime(src))
         it = self.src.item(h, m)
         box = it["nbox"][n] if n < len(it["nbox"]) else None
-        key = f"{h}_{n}_{m}_{size}_{int(round(margin * 100))}_{mt}{'' if box else '_full'}"
+        vt = (it.get("t") or [None] * (n + 1))[n] if n < len(it.get("t") or []) else None
+        # include video timestamp in cache key so each face-at-t gets its own crop
+        tkey = ("" if vt is None else ("_t%.3f" % float(vt)))
+        key = f"{h}_{n}_{m}_{size}_{int(round(margin * 100))}_{mt}{tkey}{'' if box else '_full'}"
         d = os.path.join(self.dir, "thumbs")
         out = os.path.join(d, key + ".jpg")
         if os.path.isfile(out):
             return out
         from PIL import Image, ImageOps
-        with Image.open(src) as im:
-            im = ImageOps.exif_transpose(im).convert("RGB")
-            W, H = im.size
-            if box:
-                x, y, w, hh = box[0] * W, box[1] * H, box[2] * W, box[3] * H   # xywh 0..1 -> pixels of this file
-                side = min(max(w, hh) * (1 + margin), W, H)
-                cx, cy = x + w / 2, y + hh / 2
-            else:
-                side, cx, cy = min(W, H), W / 2, H / 2
-            l = max(0, min(W - side, cx - side / 2)); t = max(0, min(H - side, cy - side / 2))
-            crop = im.crop((int(l), int(t), int(l + side), int(t + side))).resize((size, size), Image.LANCZOS)
+        import io as _io
+        if (it.get("kind") or "image") == "video" or vt is not None:
+            from . import videosim
+            frame = videosim.read_frame_at(src, float(vt or 0.0))
+            if frame is None:
+                return None
+            # BGR -> RGB PIL
+            rgb = frame[:, :, ::-1]
+            im = Image.fromarray(rgb)
+        else:
+            with Image.open(src) as im0:
+                im = ImageOps.exif_transpose(im0).convert("RGB")
+        W, H = im.size
+        if box:
+            x, y, w, hh = box[0] * W, box[1] * H, box[2] * W, box[3] * H   # xywh 0..1 -> pixels of this file
+            side = min(max(w, hh) * (1 + margin), W, H)
+            cx, cy = x + w / 2, y + hh / 2
+        else:
+            side, cx, cy = min(W, H), W / 2, H / 2
+        l = max(0, min(W - side, cx - side / 2)); top = max(0, min(H - side, cy - side / 2))
+        crop = im.crop((int(l), int(top), int(l + side), int(top + side))).resize((size, size), Image.LANCZOS)
         os.makedirs(d, exist_ok=True)
         for old in os.listdir(d):   # drop stale variants of this face/size (older source mtime)
             if old.startswith(f"{h}_{n}_{m}_{size}_") and old != key + ".jpg":
@@ -276,13 +293,56 @@ class Faces:
         it = self.src.item(h, m)
         o = {"id": f, "hash": h, "n": n, "model": m, "box": it["nbox"][n] if n < len(it["nbox"]) else None,
              "bbox": _px(it["nbox"][n], it["w"], it["h"]) if n < len(it["nbox"]) else None,
-             "w": it["w"], "h": it["h"], "thumb": thumb_url(f)}
+             "w": it["w"], "h": it["h"], "thumb": thumb_url(f), "kind": it.get("kind") or "image"}
+        ts = it.get("t") or []
+        if n < len(ts) and ts[n] is not None:
+            o["t"] = ts[n]
+            if o["kind"] == "video":
+                o["best_t"] = ts[n]
         pid = self.assign(m).get(f)
         if pid:
             o["person"] = pid
         if extra:
             o.update(extra)
         return o
+
+    def dedupe_video_faces(self, faces: List[Dict[str, Any]], merge_gap: float = 4.0) -> List[Dict[str, Any]]:
+        """Collapse many faces from the same video into ONE result with best_t + segments (images unchanged)."""
+        from . import videosim
+        out, seen_vid = [], {}
+        for f in faces:
+            if (f.get("kind") or "image") != "video":
+                out.append(f)
+                continue
+            h = f["hash"]
+            sc = float(f.get("score") or 0)
+            t = f.get("t")
+            if h not in seen_vid:
+                g = dict(f)
+                g["segments"] = []
+                g["_times"] = []
+                g["_best_score"] = sc
+                if t is not None:
+                    g["best_t"] = t
+                    g["_times"].append(t)
+                seen_vid[h] = g
+                out.append(g)
+            else:
+                g = seen_vid[h]
+                if t is not None:
+                    g["_times"].append(t)
+                if sc >= g["_best_score"]:
+                    g["_best_score"] = sc
+                    # prefer the higher-scoring face as the representative (id/thumb/box)
+                    for k in ("id", "n", "box", "bbox", "thumb", "t", "score", "person", "cluster"):
+                        if k in f:
+                            g[k] = f[k]
+                    if t is not None:
+                        g["best_t"] = t
+        for g in seen_vid.values():
+            g["segments"] = videosim.merge_segments(g.pop("_times", []), merge_gap)
+            g.pop("_best_score", None)
+        return out
 
     def _check(self, faces, m) -> List[str]:
         pos = self._mat(m)["pos"]
@@ -410,8 +470,9 @@ class Faces:
         out = []
         for k, fs in cs[offset:offset + limit]:
             cov = self._cover(fs, m)
+            faces = self.dedupe_video_faces([self.face_obj(f, m) for f in fs[:max(faces_per * 4, faces_per)]])[:faces_per]
             out.append({"id": k, "size": len(fs), "cover": self.face_obj(cov, m) if cov else None,
-                        "faces": [self.face_obj(f, m) for f in fs[:faces_per]]})
+                        "faces": faces})
         return {"total": len(cs), "clusters": out}
 
     # ------------------------------------------------------------------ persons
@@ -517,11 +578,12 @@ class Faces:
         sc = X @ _norm(P.sum(0)) if method == "centroid" else (X @ P.T).max(1)
         order = np.argsort(-sc)
         out = []
-        for k in order[:max(1, int(limit)) * 4]:
-            if sc[k] < th or len(out) >= limit:
+        # over-fetch so video dedupe still fills `limit` unique items
+        for k in order[:max(1, int(limit)) * 8]:
+            if sc[k] < th:
                 break
             out.append(self.face_obj(c["ids"][cand[k]], m, {"score": round(float(sc[k]), 4)}))
-        return out
+        return self.dedupe_video_faces(out)[:int(limit)]
 
     def reject(self, pid, faces) -> int:
         with self.lock:
@@ -869,7 +931,8 @@ def a_cluster_faces(req, ctx):
     if not c:
         raise ActionError("cluster_not_found", cluster=req.get("cluster"))
     o, l = int(req.get("offset", 0)), int(req.get("limit", 200))
-    return {"ok": True, "total": len(c["faces"]), "faces": [f.face_obj(x, m) for x in c["faces"][o:o + l]]}
+    faces = f.dedupe_video_faces([f.face_obj(x, m) for x in c["faces"]])
+    return {"ok": True, "total": len(faces), "faces": faces[o:o + l]}
 
 
 @A("face_for_item", fast=True, doc="Faces (bbox, person, cluster) of {hash} or {hashes}")
@@ -945,7 +1008,8 @@ def a_pget(req, ctx):
     p = f.person_obj(req.get("person"))
     fs = [x for x, q in f.assign(m).items() if q == p["id"]]
     o, l = int(req.get("offset", 0)), int(req.get("limit", 200))
-    return {"ok": True, "person": p, "total": len(fs), "faces": [f.face_obj(x, m) for x in fs[o:o + l]]}
+    faces = f.dedupe_video_faces([f.face_obj(x, m) for x in fs])
+    return {"ok": True, "person": p, "total": len(faces), "faces": faces[o:o + l]}
 
 
 @A("person_rename", doc="Rename a person and its persona: tag {person, name}")

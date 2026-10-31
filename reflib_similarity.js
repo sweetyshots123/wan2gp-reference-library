@@ -15,7 +15,7 @@
               wait_busy: "waiting: WanGP is generating", wait_paused: "paused", dl: "downloading model {m}…", chip: "Similar to {n} · {m}", chip_files: "{n} photos",
               none: "No query image has a detected person or face for this mode", no_q: "Choose or drop at least one image", engine: "Similarity engine error: {e}", env: "The similarity environment is not set up (Python with onnxruntime; see README «Similarity models»). {e}",
               found: "{n} similar images ({ms} ms)", unindexed: "Not computed yet: the first search computes the query images (this can take a few seconds)",
-              face_lic: "Face model: {m}", score: "Similarity {s}%",
+              face_lic: "Face model: {m}", score: "Similarity {s}%", at_t: "at {t}", seg: "{a}–{b}", open_at: "Open at {t}", video: "Video",
               fm: "Face model", fm_done: "{n} of {l} images", fm_dl: "not downloaded · {mb} MB, downloads on first use", faces_build: "Compute faces ({m})",
               fm_lic: "Licence: {l}", fm_fb: "{m} could not load, using SFace instead ({e})", dlp: "Downloading {m}: {d} / {t} MB ({p}%)",
               fm_switch: "Each model keeps its own face index: switching back is instant once computed.",
@@ -28,7 +28,7 @@
               wait_busy: "en espera: WanGP está generando", wait_paused: "en pausa", dl: "descargando el modelo {m}…", chip: "Similares a {n} · {m}", chip_files: "{n} fotos",
               none: "Ninguna imagen de consulta tiene una persona o cara detectada para este modo", no_q: "Elige o suelta al menos una imagen", engine: "Error del motor de similitud: {e}", env: "El entorno de similitud no está configurado (Python con onnxruntime; ver README «Similarity models»). {e}",
               found: "{n} imágenes similares ({ms} ms)", unindexed: "Aún sin calcular: la primera búsqueda calcula las imágenes de consulta (puede tardar unos segundos)",
-              face_lic: "Modelo de caras: {m}", score: "Similitud {s}%",
+              face_lic: "Modelo de caras: {m}", score: "Similitud {s}%", at_t: "en {t}", seg: "{a}–{b}", open_at: "Abrir en {t}", video: "Vídeo",
               fm: "Modelo de caras", fm_done: "{n} de {l} imágenes", fm_dl: "sin descargar · {mb} MB, se descarga al usarlo", faces_build: "Calcular caras ({m})",
               fm_lic: "Licencia: {l}", fm_fb: "{m} no se pudo cargar, se usa SFace ({e})", dlp: "Descargando {m}: {d} / {t} MB ({p}%)",
               fm_switch: "Cada modelo guarda su propio índice de caras: volver a uno ya calculado es instantáneo.",
@@ -44,7 +44,7 @@
     try { labels = JSON.parse(sessionStorage.getItem("reflib_sim_labels") || "{}"); } catch (e) {}
     const btn = (cls, act, h, n) => `<button type="button" class="${cls} reflib-sim-btn" data-act="${act}" ${h ? `data-hash="${esc(h)}"` : ""} title="${esc(st("find_tip"))}">⧉ ${esc(n ? st("find_sel", { n }) : st("find"))}</button>`;
     const itemOf = h => (ilib().q.items || []).find(x => x && x.hash === h) || {};
-    const isImg = it => !it.kind || it.kind === "image";
+    const isImg = it => !it.kind || it.kind === "image" || it.kind === "video";  // 1.12.0 videos too
 
     function open(hashes) {
         close();
@@ -157,7 +157,18 @@
         details: (h) => {
             const it = itemOf(h);
             if (!isImg(it)) return "";
-            return btn("reflib-ib-btn", "simfind", h) + (it.sim != null ? `<span class="reflib-sim-score">${esc(st("score", { s: Math.round(it.sim * 100) }))}</span>` : "");
+            const fmtT = (t) => { const s = Math.max(0, Number(t) || 0), m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + String(r).padStart(2, "0"); };
+            let chips = "";
+            if (it.kind === "video" && (it.best_t != null || (it.segments && it.segments.length))) {
+                const segs = it.segments || [];
+                chips = `<span class="reflib-sim-vmeta">` +
+                    (segs.length ? segs.slice(0, 4).map(sg => {
+                        const a = fmtT(sg.t0), b = fmtT(sg.t1);
+                        return `<button type="button" class="reflib-sim-tchip" data-act="simseek" data-hash="${esc(h)}" data-t="${sg.t0}" title="${esc(st("open_at", { t: a }))}">${a === b ? a : st("seg", { a, b })}</button>`;
+                    }).join("") : (it.best_t != null ? `<button type="button" class="reflib-sim-tchip" data-act="simseek" data-hash="${esc(h)}" data-t="${it.best_t}" title="${esc(st("open_at", { t: fmtT(it.best_t) }))}">${fmtT(it.best_t)}</button>` : "")) +
+                    `</span>`;
+            }
+            return btn("reflib-ib-btn", "simfind", h) + (it.sim != null ? `<span class="reflib-sim-score">${esc(st("score", { s: Math.round(it.sim * 100) }))}</span>` : "") + chips;
         },
         selbar: (n) => n > 1 && n <= 50 && !ilib().sel.all ? btn("reflib-ib-btn", "simfindsel", "", n) : "",
         chips: (f) => f.sim ? [`<span class="reflib-ib-fchip sim">⧉ ${esc(labels[f.sim] || st("find"))}<button type="button" data-act="simclear" title="×">×</button></span>`] : [],
@@ -167,6 +178,27 @@
             if (act === "simfind") { open([el.dataset.hash]); return true; }
             if (act === "simfindsel") { open([...ilib().sel].slice(0, 50)); return true; }
             if (act === "simclear") { ilib().f.sim = ""; RL.ilibRefresh(); return true; }
+            if (act === "simseek") {
+                const t = Number(el.dataset.t) || 0, h = el.dataset.hash;
+                try {
+                    const stt = ilib();
+                    if (stt.preview !== h) {
+                        const card = stt.root && stt.root.querySelector(`.reflib-ib-card[data-hash="${CSS.escape(h)}"]`);
+                        if (card) card.click();
+                    }
+                    const seek = () => {
+                        const v = stt.root && stt.root.querySelector(".reflib-ib-pvmedia");
+                        if (v && typeof v.currentTime === "number") {
+                            const go = () => { try { v.currentTime = Math.max(0, t); } catch (e) {} };
+                            if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
+                            return true;
+                        }
+                        return false;
+                    };
+                    if (!seek()) { let n = 0; const iv = setInterval(() => { if (seek() || ++n > 40) clearInterval(iv); }, 100); }
+                } catch (e) {}
+                return true;
+            }
             return false;
         },
     });
@@ -202,6 +234,12 @@
 .reflib-sim-lic { opacity: .7; }
 .reflib-sim-foot { display: flex; justify-content: flex-end; gap: 8px; }
 .reflib-sim-score { margin-left: 6px; font-size: 12px; opacity: .8; }
+.reflib-sim-vmeta { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.reflib-sim-tchip { background: rgba(0,0,0,.55); color: #fff; border: 0; font-size: 11px; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.reflib-sim-tchip:hover { background: rgba(30,90,200,.85); }
+.dark .reflib-sim-tchip { background: rgba(0,0,0,.75); }
+.reflib-ib-card .reflib-sim-cardt { position: absolute; left: 4px; bottom: 4px; z-index: 2; display: flex; gap: 3px; flex-wrap: wrap; }
+.reflib-ib-card .reflib-sim-cardt span { background: rgba(0,0,0,.65); color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; }
 .reflib-ib-fchip.sim { background: rgba(59,130,246,.18); }`;
     document.head.appendChild(css);
     document.addEventListener("keydown", e => { if (dlg && e.key === "Escape") { e.stopPropagation(); close(); } }, true);

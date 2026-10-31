@@ -16,7 +16,7 @@ class Src:
         return ids, F._norm(np.concatenate(V)) if V else np.zeros((0, 8), np.float32)
     def item(self, h, m):
         n = len(self.data.get(m, {}).get(h, ()))
-        return {"w": 1000, "h": 1000, "n": n, "nbox": [[0.1, 0.1, 0.2, 0.2]] * n}
+        return {"w": 1000, "h": 1000, "n": n, "nbox": [[0.1, 0.1, 0.2, 0.2]] * n, "t": [None] * n, "kind": "image"}
 
 
 class Tags:

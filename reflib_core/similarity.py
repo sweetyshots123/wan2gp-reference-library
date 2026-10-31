@@ -5,9 +5,12 @@ Everything lives here; the hosts only route `sim_*` actions to handle() (see SIM
 * Models run in a separate process (simworker.py) started with the tagging-engine Python (setting "python"; default
   REFLIB_SIM_PYTHON, else the Python running WanGP). Lazy: the process starts on the first job / search and is stopped
   after IDLE_UNLOAD seconds without work, which frees the GPU. While WanGP generates (host busy()) the job waits.
-* Index: <data>/similarity/ — meta.json (per image: persons / faces counts, size, error) + pose.npz (COCO-17 keypoints,
-  float16) + face.npz (L2-normalised embeddings, float16). Separate files: existing library data are never touched.
+* Index: <data>/similarity/ — meta.json (per image/video: persons / faces counts, size, error, video sampling fingerprint)
+  + pose.npz (COCO-17 keypoints, float16) + face.npz (L2-normalised embeddings, float16; optional per-face `t` seconds
+  for video faces). Separate files: existing library data are never touched.
   Saves are atomic (tmp + replace) every SAVE_EVERY images and at the end of a job.
+* Videos (1.12.0-videofaces): kind=video items sampled at interval + scene cuts (see videosim.py); one result per
+  video with best_t + segments. Settings: index_videos, video_interval_s, video_scene_detect, video_max_frames.
 * Search: brute-force cosine in numpy over every indexed person / face (15k images = well under 100 ms).
 * Result sets: a search returns an id ("sid"); the explorer shows it as a normal filter {"sim": sid} (imagelib hook),
   ordered by similarity unless another sort is picked, so nav history / selection / paging work unchanged.
@@ -19,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from . import posesim
+from . import videosim
 from . import actions as _actions
 
 BUSY: Callable[[], bool] = lambda: False   # set by the host (WanGP: "a generation is running" -> indexing waits)
@@ -31,7 +35,10 @@ SYNC_EVERY = 60.0
 RESULTS_KEEP = 30
 # workers: decode/prefetch threads inside simworker (0 = auto from CPU count, typically 2..4)
 DEFAULTS = {"python": "", "face_model": "arcface", "auto": True, "gpu": True, "models_dir": "", "w_pose": 0.5,
-            "threshold": 0.0, "mirror": True, "limit": 1000, "workers": 0}
+            "threshold": 0.0, "mirror": True, "limit": 1000, "workers": 0,
+            # 1.12.0-videofaces: index kind=video (frame sample + scene cuts); pose on the same frames when cheap
+            "index_videos": True, "video_interval_s": 2.0, "video_scene_detect": True, "video_max_frames": 60,
+            "video_merge_gap_s": 4.0}
 # Face recognisers the user can pick (Ajustes > Modelo de caras). Each keeps its own vectors (never mixed).
 FACE_MODELS = {   # id -> file, aliases, dim, label, licence
     "arcface": {"file": "w600k_r50.onnx", "alias": ["buffalo_l/w600k_r50.onnx"], "dim": 512, "label": "ArcFace w600k_r50 (buffalo_l)",
@@ -69,12 +76,14 @@ def _atomic_npz(path, **arrays):
     os.replace(tmp, path)
 
 
-def _face_pack(vec, box=None, det=None):
-    """In-memory multi-face record for one (item, face_model): embeddings + optional bbox/score.
+def _face_pack(vec, box=None, det=None, t=None):
+    """In-memory multi-face record for one (item, face_model): embeddings + optional bbox/score/time.
 
     box: (n, 4) float32 xywh normalised 0..1; NaN row = unknown (legacy entries without bbox).
     det: (n,) float32 detector score; NaN = unknown.
-    Face index within the image is the row order (0 = first / legacy sole face).
+    t:   (n,) float32 seconds into the video; NaN = image / unknown (backward compatible).
+    Face index within the item is the row order (0 = first / legacy sole face). For videos, rows from
+    all sampled frames are concatenated in time order; face_i is unique per video item.
     """
     v = np.asarray(vec, np.float16)
     if v.ndim == 1:
@@ -92,7 +101,13 @@ def _face_pack(vec, box=None, det=None):
         s = np.asarray(det, np.float32).reshape(-1)
         if s.shape[0] != n:
             s = np.full(n, np.nan, np.float32)
-    return {"vec": v, "box": b, "det": s}
+    if t is None:
+        tt = np.full(n, np.nan, np.float32)
+    else:
+        tt = np.asarray(t, np.float32).reshape(-1)
+        if tt.shape[0] != n:
+            tt = np.full(n, np.nan, np.float32)
+    return {"vec": v, "box": b, "det": s, "t": tt}
 
 
 def _face_vec(pack):
@@ -119,6 +134,19 @@ def _norm_boxes(faces, w, h):
         if f.get("det") is not None:
             det[i] = float(f["det"])
     return box, det
+
+
+def _face_times(faces):
+    """Per-face video timestamps (seconds); NaN when the face comes from a still image."""
+    n = len(faces)
+    t = np.full(n, np.nan, np.float32)
+    for i, f in enumerate(faces):
+        if f.get("t") is not None:
+            try:
+                t[i] = float(f["t"])
+            except (TypeError, ValueError):
+                pass
+    return t
 
 
 # ---------------------------------------------------------------------------------------------------- index
@@ -158,7 +186,7 @@ class SimIndex:
             for h, m in (meta.get("items") or {}).items():
                 nf = m.get("nf")
                 done[h] = set(nf) if isinstance(nf, dict) else ({self.face_model} if self.face_model else set())
-                self.items[h] = {"p": np.zeros((0, 17, 3), np.float16), "faces": {}, "w": m.get("w", 0), "h": m.get("h", 0), "err": m.get("err", ""), "t": m.get("t", 0)}
+                self.items[h] = {"p": np.zeros((0, 17, 3), np.float16), "faces": {}, "w": m.get("w", 0), "h": m.get("h", 0), "err": m.get("err", ""), "t": m.get("t", 0), "kind": m.get("kind", "image"), "v": m.get("v"), "pt": (np.asarray(m["pt"], np.float32) if isinstance(m.get("pt"), list) and m.get("pt") is not None else None)}
             files = [("pose.npz", "p", None)] + [("face-%s.npz" % fm, "f", fm) for fm in FACE_DIM]
             if self.face_model in FACE_DIM:
                 files.append(("face.npz", "f", self.face_model))   # legacy file
@@ -171,6 +199,8 @@ class SimIndex:
                         # Absent in older npz -> NaN (legacy sole face = face_i 0 with null bbox).
                         box = z["box"] if "box" in z.files else None
                         det = z["det"] if "det" in z.files else None
+                        # 1.12.0-videofaces: optional per-face timestamp (NaN for stills / legacy)
+                        ft = z["t"] if "t" in z.files else None
                 except Exception:
                     continue
                 if fm is not None:
@@ -183,23 +213,29 @@ class SimIndex:
                             box = box[keep]
                         if det is not None:
                             det = det[keep]
+                        if ft is not None:
+                            ft = ft[keep]
                 order = np.argsort(own, kind="stable")
                 own, vec = own[order], vec[order]
                 if box is not None:
                     box = np.asarray(box, np.float32)[order]
                 if det is not None:
                     det = np.asarray(det, np.float32)[order]
+                if ft is not None:
+                    ft = np.asarray(ft, np.float32)[order]
                 cuts = np.searchsorted(own, np.arange(len(keys) + 1))
                 for k, h in enumerate(keys.tolist()):
                     if h in self.items:
                         if fm is None:
                             self.items[h]["p"] = vec[cuts[k]:cuts[k + 1]]
+                            # pose times live in meta-side pt when present (loaded separately below)
                         elif fm in done.get(h, ()) and fm not in self.items[h]["faces"]:
                             sl = slice(cuts[k], cuts[k + 1])
                             n = int(cuts[k + 1] - cuts[k])
                             b = box[sl] if box is not None else np.full((n, 4), np.nan, np.float32)
                             d = det[sl] if det is not None else np.full(n, np.nan, np.float32)
-                            self.items[h]["faces"][fm] = _face_pack(vec[sl], b, d)
+                            tt = ft[sl] if ft is not None else np.full(n, np.nan, np.float32)
+                            self.items[h]["faces"][fm] = _face_pack(vec[sl], b, d, tt)
             self.rev += 1
             self._dirty_pose = False
             self._dirty_faces.clear()
@@ -248,9 +284,19 @@ class SimIndex:
                 n = sum(len(v) for v in vecs)
                 extra = {}
                 if fm is not None:
+                    times = []
+                    for k2, h2 in enumerate(keys):
+                        pack2 = self.items[h2]["faces"].get(fm)
+                        v2 = _face_vec(pack2)
+                        if v2 is not None and len(v2):
+                            if isinstance(pack2, dict) and "t" in pack2:
+                                times.append(pack2["t"])
+                            else:
+                                times.append(np.full(len(v2), np.nan, np.float32))
                     extra["model"] = np.full(n, fm, dtype="<U16")
                     extra["box"] = np.concatenate(boxes).astype(np.float32) if boxes else np.zeros((0, 4), np.float32)
                     extra["det"] = np.concatenate(dets).astype(np.float32) if dets else np.zeros(0, np.float32)
+                    extra["t"] = np.concatenate(times).astype(np.float32) if times else np.zeros(0, np.float32)
                 _atomic_npz(os.path.join(self.dir, name), keys=np.array(keys, dtype=str),
                             owner=np.concatenate(own) if own else np.zeros(0, np.int32),
                             vec=np.concatenate(vecs).astype(np.float16) if vecs else np.zeros(shape, np.float16), **extra)
@@ -259,10 +305,18 @@ class SimIndex:
             except OSError:
                 pass
             if force or self._dirty_meta or todo:
+                def _meta_row(e):
+                    row = {"np": int(len(e["p"])), "nf": {m: int(_face_n(v)) for m, v in e["faces"].items()},
+                           "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0),
+                           "kind": e.get("kind") or "image"}
+                    if e.get("v"):
+                        row["v"] = e["v"]
+                    pt = e.get("pt")
+                    if pt is not None and len(pt):
+                        row["pt"] = [None if not np.isfinite(x) else round(float(x), 3) for x in np.asarray(pt, np.float32)]
+                    return row
                 _atomic_json(self.meta_path, {"version": VERSION, "face_models": sorted(FACE_DIM), "pose_model": "dwpose-body17",
-                                              "items": {h: {"np": int(len(e["p"])), "nf": {m: int(_face_n(v)) for m, v in e["faces"].items()},
-                                                            "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0)}
-                                                        for h, e in self.items.items()}})
+                                              "items": {h: _meta_row(e) for h, e in self.items.items()}})
             self._dirty_pose = False
             self._dirty_faces.clear()
             self._dirty_meta = False
@@ -275,7 +329,17 @@ class SimIndex:
                 e.update(err=str(res.get("error") or "error")[:120], t=time.time())
             else:
                 if "persons" in res:
-                    e["p"] = np.asarray([p["kp"] for p in res["persons"]], np.float16).reshape(-1, 17, 3)
+                    raw_p = res["persons"] or []
+                    e["p"] = np.asarray([p["kp"] for p in raw_p], np.float16).reshape(-1, 17, 3)
+                    # per-person video timestamps (parallel to e["p"]); NaN / absent for stills
+                    pt = np.full(len(raw_p), np.nan, np.float32)
+                    for i, pr in enumerate(raw_p):
+                        if pr.get("t") is not None:
+                            try:
+                                pt[i] = float(pr["t"])
+                            except (TypeError, ValueError):
+                                pass
+                    e["pt"] = pt if len(raw_p) else None
                 if "faces" in res:
                     D = FACE_DIM[face_model]
                     raw = res["faces"] or []
@@ -284,10 +348,14 @@ class SimIndex:
                         raise ValueError("face vector dim %s does not match %s" % (getattr(f, "shape", None), face_model))
                     bw, bh = res.get("w", 0), res.get("h", 0)
                     box, det = _norm_boxes(raw, bw, bh)
-                    e["faces"][face_model] = _face_pack(f, box, det)
+                    e["faces"][face_model] = _face_pack(f, box, det, _face_times(raw))
                     e.update(w=bw, h=bh, err="", t=time.time())
                 else:
                     e.update(w=res.get("w", e.get("w", 0)), h=res.get("h", e.get("h", 0)), err="", t=time.time())
+                if res.get("kind"):
+                    e["kind"] = res["kind"]
+                if res.get("v") is not None:
+                    e["v"] = res["v"]
             self.items[h] = e
             self.rev += 1
             self._dirty_meta = True
@@ -307,6 +375,20 @@ class SimIndex:
     def has(self, h: str, fm: Optional[str] = None) -> bool:
         e = self.items.get(h)
         return bool(e) and not e.get("err") and (fm or self.active) in e["faces"]
+
+    def video_fresh(self, h: str, fingerprint: Dict[str, Any]) -> bool:
+        """True when the video was indexed with the same mtime + sampling params (incremental skip)."""
+        e = self.items.get(h)
+        if not e or e.get("err") or e.get("kind") != "video":
+            return False
+        v = e.get("v") or {}
+        try:
+            return (float(v.get("mtime", -1)) == float(fingerprint.get("mtime", -2))
+                    and float(v.get("interval_s", -1)) == float(fingerprint.get("interval_s", -2))
+                    and bool(v.get("scene")) == bool(fingerprint.get("scene"))
+                    and int(v.get("max_frames", -1)) == int(fingerprint.get("max_frames", -2)))
+        except (TypeError, ValueError):
+            return False
 
     def needs_faces_only(self, h: str, fm: Optional[str] = None) -> bool:
         """Pose done, faces missing for this model (e.g. after switching face model)."""
@@ -335,7 +417,10 @@ class SimIndex:
 
     def stats(self) -> Dict[str, int]:
         with self.lock:
-            return {"images": sum(1 for e in self.items.values() if not e.get("err")), "errors": sum(1 for e in self.items.values() if e.get("err")),
+            ok = [e for e in self.items.values() if not e.get("err")]
+            return {"images": sum(1 for e in ok if (e.get("kind") or "image") != "video"),
+                    "videos": sum(1 for e in ok if e.get("kind") == "video"),
+                    "errors": sum(1 for e in self.items.values() if e.get("err")),
                     "persons": int(sum(len(e["p"]) for e in self.items.values())),
                     "faces": int(sum(_face_n(e["faces"].get(self.active)) for e in self.items.values())),
                     "faces_pending": sum(1 for h in self.items if self.needs_faces_only(h)), "face_model": self.active}
@@ -363,6 +448,7 @@ class SimIndex:
         box = pack["box"] if isinstance(pack, dict) else np.full((len(v), 4), np.nan, np.float32)
         det = pack["det"] if isinstance(pack, dict) else np.full(len(v), np.nan, np.float32)
         recs = []
+        tt = pack["t"] if isinstance(pack, dict) and "t" in pack else np.full(len(v), np.nan, np.float32)
         for i in range(len(v)):
             b = box[i]
             recs.append({
@@ -371,6 +457,7 @@ class SimIndex:
                 "model": fm,
                 "box": None if not np.isfinite(b).all() else [float(x) for x in b],
                 "det": None if not np.isfinite(det[i]) else float(det[i]),
+                "t": None if not np.isfinite(tt[i]) else float(tt[i]),
                 "emb": np.asarray(v[i], np.float32),
             })
         for cb in list(self._face_listeners):
@@ -394,7 +481,7 @@ class SimIndex:
         fm = fm or self.active
         D = FACE_DIM.get(fm, 512)
         with self.lock:
-            ids, fi, vecs, boxes, dets = [], [], [], [], []
+            ids, fi, vecs, boxes, dets, times = [], [], [], [], [], []
             for h, e in self.items.items():
                 if e.get("err"):
                     continue
@@ -408,34 +495,61 @@ class SimIndex:
                 vecs.append(np.asarray(v, np.float32))
                 if isinstance(pack, dict):
                     boxes.append(pack["box"]); dets.append(pack["det"])
+                    times.append(pack["t"] if "t" in pack else np.full(n, np.nan, np.float32))
                 else:
                     boxes.append(np.full((n, 4), np.nan, np.float32))
                     dets.append(np.full(n, np.nan, np.float32))
+                    times.append(np.full(n, np.nan, np.float32))
             if not vecs:
                 return {"model": fm, "ids": np.array([], dtype=object), "face_i": np.zeros(0, np.int32),
-                        "vec": np.zeros((0, D), np.float32), "box": np.zeros((0, 4), np.float32), "det": np.zeros(0, np.float32)}
+                        "vec": np.zeros((0, D), np.float32), "box": np.zeros((0, 4), np.float32), "det": np.zeros(0, np.float32),
+                        "t": np.zeros(0, np.float32)}
             return {"model": fm, "ids": np.asarray(ids, dtype=object), "face_i": np.concatenate(fi),
                     "vec": np.concatenate(vecs).astype(np.float32, copy=False),
                     "box": np.concatenate(boxes).astype(np.float32, copy=False),
-                    "det": np.concatenate(dets).astype(np.float32, copy=False)}
+                    "det": np.concatenate(dets).astype(np.float32, copy=False),
+                    "t": np.concatenate(times).astype(np.float32, copy=False)}
+
+
+def _per_image_argmax(owner: np.ndarray, scores: np.ndarray, n_images: int):
+    """Best score per image + the global row index that produced it (-1 if none)."""
+    best = np.zeros(n_images, np.float32)
+    arg = np.full(n_images, -1, np.int32)
+    if len(scores):
+        # stable: first max wins unless a later score is strictly greater
+        for i in range(len(scores)):
+            o = int(owner[i]); sc = float(scores[i])
+            if arg[o] < 0 or sc > best[o]:
+                best[o] = sc; arg[o] = i
+    return best, arg
 
 
 def search(index: SimIndex, queries: List[Dict[str, np.ndarray]], mode: str = "both", w_pose: float = 0.5, threshold: float = 0.0,
-           agg: str = "any", mirror: bool = True, limit: int = 1000, allowed: Optional[set] = None) -> List[Dict[str, Any]]:
-    """queries: [{"p": (n,17,3), "f": (m,D)}] (one per query photo). -> [{hash, score, pose, face}] best first."""
+           agg: str = "any", mirror: bool = True, limit: int = 1000, allowed: Optional[set] = None,
+           merge_gap_s: float = 4.0) -> List[Dict[str, Any]]:
+    """queries: [{"p": (n,17,3), "f": (m,D)}] (one per query photo). -> [{hash, score, pose, face, best_t?, segments?}] best first.
+
+    Videos are already one index row (all frame faces under one hash); we attach best_t + segments from the
+    winning face/pose row's timestamps. Images omit those fields (backward compatible).
+    """
     keys, P, Po, F, Fo = index.matrices()
     N = len(keys)
     per_q, per_p, per_f = [], [], []
+    # keep last query's per-row face/pose scores for best_t (aggregate any = max across queries)
+    face_rows = np.zeros(len(F), np.float32)
+    pose_rows = np.zeros(len(P), np.float32)
     for q in queries:
         sp = sf = None
         if mode in ("pose", "both"):
             rows = np.zeros(len(P), np.float32)
             for person in np.asarray(q.get("p") if q.get("p") is not None else np.zeros((0, 17, 3)), np.float32):
                 rows = np.maximum(rows, posesim.pose_scores(person, P, mirror=mirror))
+            pose_rows = np.maximum(pose_rows, rows)
             sp = posesim.per_image_max(Po, rows, N)
         if mode in ("face", "both"):
             qf = q.get("f")
             rows = posesim.face_scores(qf, F) if qf is not None and len(qf) and len(F) else np.zeros(len(F), np.float32)
+            face_rows = np.maximum(face_rows, rows)
             sf = posesim.per_image_max(Fo, rows, N)
         per_q.append(posesim.combine(sp, sf, mode, w_pose)); per_p.append(sp); per_f.append(sf)
     if not per_q:
@@ -443,16 +557,69 @@ def search(index: SimIndex, queries: List[Dict[str, np.ndarray]], mode: str = "b
     tot = posesim.aggregate(per_q, agg)
     pp = posesim.aggregate([x for x in per_p if x is not None], agg) if mode != "face" else None
     ff = posesim.aggregate([x for x in per_f if x is not None], agg) if mode != "pose" else None
+    _, face_arg = _per_image_argmax(Fo, face_rows, N) if len(F) else (None, np.full(N, -1, np.int32))
+    _, pose_arg = _per_image_argmax(Po, pose_rows, N) if len(P) else (None, np.full(N, -1, np.int32))
+    # per-item face times / pose times for video enrichment
+    fm = index.face_matrix()
+    # map global face row -> t
+    face_t = fm.get("t")
     order = np.argsort(-tot, kind="stable")
     out = []
     for k in order:
-        s = float(tot[k])
-        if s <= 0 or s < threshold:
+        sc = float(tot[k])
+        if sc <= 0 or sc < threshold:
             break
         h = keys[k]
         if allowed is not None and h not in allowed:
             continue
-        out.append({"hash": h, "score": round(s, 4), "pose": None if pp is None else round(float(pp[k]), 4), "face": None if ff is None else round(float(ff[k]), 4)})
+        row = {"hash": h, "score": round(sc, 4), "pose": None if pp is None else round(float(pp[k]), 4),
+               "face": None if ff is None else round(float(ff[k]), 4)}
+        e = index.items.get(h) or {}
+        if e.get("kind") == "video":
+            # best_t from the modality that contributed most (prefer face when mode is face/both and a face won)
+            best_t = None
+            match_times = []
+            if mode != "pose" and face_arg[k] >= 0 and face_t is not None and face_arg[k] < len(face_t):
+                tv = float(face_t[face_arg[k]])
+                if np.isfinite(tv):
+                    best_t = round(tv, 3)
+                # segments: faces of this item whose score is within 10% of the item's face score (or >= threshold)
+                item_face_score = float(ff[k]) if ff is not None else sc
+                thr_seg = max(threshold, item_face_score * 0.9) if item_face_score > 0 else threshold
+                for ri in range(len(Fo)):
+                    if int(Fo[ri]) != k:
+                        continue
+                    if float(face_rows[ri]) >= thr_seg and face_t is not None and np.isfinite(face_t[ri]):
+                        match_times.append(float(face_t[ri]))
+            if best_t is None and mode != "face" and pose_arg[k] >= 0:
+                pt = e.get("pt")
+                if pt is not None and pose_arg[k] < len(Po):
+                    # pose_arg is global row into P; map to local person index within item
+                    # count how many pose rows belong to images before k
+                    local = int(pose_arg[k] - int(np.searchsorted(Po, k)))
+                    # simpler: enumerate persons of this item
+                    # Po[pose_arg[k]] == k; local index = number of Po[:pose_arg[k]+1] equal to k - 1
+                    local_i = int(np.sum(Po[:pose_arg[k] + 1] == k) - 1)
+                    if 0 <= local_i < len(pt) and np.isfinite(pt[local_i]):
+                        best_t = round(float(pt[local_i]), 3)
+                        match_times.append(float(pt[local_i]))
+                # also collect other pose hits
+                if pt is not None and pp is not None:
+                    thr_seg = max(threshold, float(pp[k]) * 0.9) if float(pp[k]) > 0 else threshold
+                    local_i = 0
+                    for ri in range(len(Po)):
+                        if int(Po[ri]) != k:
+                            continue
+                        if float(pose_rows[ri]) >= thr_seg and local_i < len(pt) and np.isfinite(pt[local_i]):
+                            match_times.append(float(pt[local_i]))
+                        local_i += 1
+            if best_t is not None:
+                row["best_t"] = best_t
+                row["kind"] = "video"
+                row["segments"] = videosim.merge_segments(match_times or [best_t], merge_gap_s)
+            else:
+                row["kind"] = "video"
+        out.append(row)
         if len(out) >= limit:
             break
     return out
@@ -538,7 +705,8 @@ class SimService:
         self.worker: Optional[WorkerProc] = None
         self.last_used = 0.0
         self.results: Dict[str, Dict[str, Any]] = {}
-        self.st = {"running": False, "done": 0, "total": 0, "failed": 0, "waiting": "", "error": "", "per_image_ms": 0}
+        self.st = {"running": False, "done": 0, "total": 0, "failed": 0, "waiting": "", "error": "", "per_image_ms": 0,
+                   "videos_done": 0, "per_video_ms": 0, "video_frames": 0}
         self._sync_t = 0.0
         self._hint = 0.0
 
@@ -688,6 +856,51 @@ class SimService:
         self.st["per_image_ms"] = int(1000 * float(r.get("secs") or 0) / n)
         return r["results"]
 
+    def analyse_video(self, path: str, pose: bool = True) -> Dict[str, Any]:
+        """Sample frames (interval + scene cuts), run the same batched worker, aggregate faces/persons with `t`."""
+        s = self.settings()
+        interval = float(s.get("video_interval_s") or videosim.INTERVAL_S)
+        scene = bool(s.get("video_scene_detect", True))
+        max_f = int(s.get("video_max_frames") or videosim.MAX_FRAMES)
+        t0 = time.time()
+        samp = videosim.sample_frames(path, interval_s=interval, scene_detect=scene, max_frames=max_f)
+        try:
+            if not samp.get("ok"):
+                return {"ok": False, "error": samp.get("error") or "sample failed", "kind": "video",
+                        "v": self._video_fingerprint(path)}
+            if samp.get("warning"):
+                self.log("[reflib] video sample %s: %s" % (os.path.basename(path), samp["warning"]))
+            paths = samp["paths"]
+            times = samp["times"]
+            if not paths:
+                return {"ok": False, "error": "no frames", "kind": "video", "v": self._video_fingerprint(path)}
+            # ensure models, then batch-analyse frame JPEGs through the existing pipeline
+            if self.missing_models():
+                self.analyse([])  # triggers download path; ignore empty
+            frame_res = self.analyse(paths, pose=pose) if paths else []
+            faces, persons = [], []
+            w = int(samp.get("w") or 0)
+            h = int(samp.get("h") or 0)
+            for fr, t in zip(frame_res, times):
+                if not fr.get("ok"):
+                    continue
+                if not w:
+                    w = int(fr.get("w") or 0); h = int(fr.get("h") or 0)
+                for f in fr.get("faces") or []:
+                    faces.append(dict(f, t=float(t)))
+                for pr in fr.get("persons") or []:
+                    persons.append(dict(pr, t=float(t)))
+            fp = videosim.video_cache_key(samp["mtime"], interval, scene, max_f)
+            fp["n_frames"] = len(paths)
+            fp["duration"] = samp.get("duration")
+            self.st["per_image_ms"] = int(1000 * (time.time() - t0))
+            self.st["per_video_ms"] = self.st["per_image_ms"]
+            self.st["video_frames"] = len(paths)
+            return {"ok": True, "kind": "video", "w": w, "h": h, "faces": faces, "persons": persons, "v": fp,
+                    "secs": round(time.time() - t0, 3)}
+        finally:
+            videosim.cleanup_sample(samp)
+
     # library
     def _path(self, item) -> Optional[str]:
         for p in (item.get("path"),) + tuple(item.get("files") or ()):
@@ -698,17 +911,51 @@ class SimService:
     def image_hashes(self) -> List[str]:
         return [i["hash"] for i in self.catalog()["items"] if i.get("kind", "image") == "image" and not i.get("missing")]
 
+    def video_hashes(self) -> List[str]:
+        if not self.settings().get("index_videos", True):
+            return []
+        return [i["hash"] for i in self.catalog()["items"] if i.get("kind") == "video" and not i.get("missing")]
+
+    def media_hashes(self) -> List[str]:
+        """Images + (when index_videos) videos — what sim_index / search may cover."""
+        return self.image_hashes() + self.video_hashes()
+
+    def _video_fingerprint(self, path: str) -> Dict[str, Any]:
+        s = self.settings()
+        return videosim.video_cache_key(
+            os.path.getmtime(path) if path and os.path.isfile(path) else 0.0,
+            float(s.get("video_interval_s") or videosim.INTERVAL_S),
+            bool(s.get("video_scene_detect", True)),
+            int(s.get("video_max_frames") or videosim.MAX_FRAMES),
+        )
+
+    def _video_needs(self, h: str, path: Optional[str], force: bool = False) -> bool:
+        if force:
+            return True
+        if not path:
+            return False
+        fp = self._video_fingerprint(path)
+        if not self.index.has(h):
+            return True
+        return not self.index.video_fresh(h, fp)
+
     # jobs
     def enqueue(self, hashes: Optional[List[str]] = None, force: bool = False, faces_only: bool = False) -> Dict[str, Any]:
-        allh = self.image_hashes()
-        imgs = set(allh)
-        hs = [h for h in (hashes if hashes is not None else allh) if h in imgs]
+        imgs = set(self.image_hashes())
+        vids = set(self.video_hashes())
+        allh = list(imgs) + list(vids)
+        hs = [h for h in (hashes if hashes is not None else allh) if h in imgs or h in vids]
+        by = self.catalog()["by_hash"]
         if faces_only:   # "Calcular caras": the selected model only, pose untouched
             fo = [h for h in hs if self.index.needs_faces_only(h) or (force and self.index.has(h))]
             hs = []
         elif not force:
-            fo = [h for h in hs if self.index.needs_faces_only(h)]
-            hs = [h for h in hs if not self.index.has(h)]
+            fo = [h for h in hs if h in imgs and self.index.needs_faces_only(h)]
+            img_new = [h for h in hs if h in imgs and not self.index.has(h)]
+            vid_new = [h for h in hs if h in vids and self._video_needs(h, self._path(by.get(h) or {}), False)]
+            # faces-only catch-up for videos already indexed under a previous face model
+            fo += [h for h in hs if h in vids and self.index.needs_faces_only(h) and h not in vid_new]
+            hs = img_new + vid_new
         else:
             fo = []
         hs = hs + [h for h in fo if h not in hs]
@@ -745,7 +992,10 @@ class SimService:
     def status(self) -> Dict[str, Any]:
         self.maybe_sync()
         s = self.settings()
-        return dict(self.st, pending=len(self.pending), paused=self.paused, index=self.index.stats(), library=len(self.image_hashes()),
+        st = self.index.stats()
+        return dict(self.st, pending=len(self.pending), paused=self.paused, index=st,
+                    library=len(self.image_hashes()), library_videos=len(self.video_hashes()),
+                    videos_done=int(st.get("videos") or 0),
                     worker=bool(self.worker and self.worker.alive()), python=self.python(), face_model=self.index.active, face_model_setting=s["face_model"],
                     face_fallback=self.st.get("face_fallback", ""), face_models=self.face_models(),
                     missing_models=self.missing_models(), settings=s, env_missing=self.env_missing(self.st.get("error", "")))
@@ -779,10 +1029,13 @@ class SimService:
                 if not batch:
                     break
                 by = self.catalog()["by_hash"]
-                todo = [(h, self._path(by.get(h) or {})) for h in batch]
-                fo = {h for h, _ in todo if h in self.face_only}
-                paths = [p for h, p in todo if p and h not in fo]
-                fpaths = [p for h, p in todo if p and h in fo]
+                todo = [(h, self._path(by.get(h) or {}), (by.get(h) or {}).get("kind", "image")) for h in batch]
+                fo = {h for h, _, _ in todo if h in self.face_only}
+                # images (non-video) go through the batched path; videos one-by-one (sample then batch frames)
+                img_todo = [(h, p) for h, p, k in todo if k != "video"]
+                vid_todo = [(h, p) for h, p, k in todo if k == "video"]
+                paths = [p for h, p in img_todo if p and h not in fo]
+                fpaths = [p for h, p in img_todo if p and h in fo]
                 try:
                     r_full = iter(self.analyse(paths)) if paths else iter(())
                     r_face = iter(self.analyse(fpaths, pose=False)) if fpaths else iter(())
@@ -796,12 +1049,27 @@ class SimService:
                         break
                     continue
                 fm = self.index.active
-                for h, p in todo:
+                for h, p in img_todo:
                     r = (next(r_face) if h in fo else next(r_full)) if p else {"ok": False, "error": "file not found"}
                     self.face_only.discard(h)
                     self.index.put(h, r, fm)
                     self.st["done"] += 1
                     self.st["failed"] += 0 if r.get("ok") else 1
+                    n_since += 1
+                for h, p in vid_todo:
+                    try:
+                        if not p:
+                            r = {"ok": False, "error": "file not found", "kind": "video"}
+                        else:
+                            r = self.analyse_video(p, pose=(h not in fo))
+                    except Exception as e:
+                        r = {"ok": False, "error": str(e)[:200], "kind": "video"}
+                        self.log("[reflib] video %s: %s" % (h[:12], r["error"]))
+                    self.face_only.discard(h)
+                    self.index.put(h, r, fm)
+                    self.st["done"] += 1
+                    self.st["failed"] += 0 if r.get("ok") else 1
+                    self.st["videos_done"] = int(self.index.stats().get("videos") or 0)
                     n_since += 1
                 if n_since >= SAVE_EVERY:
                     self.index.save(); n_since = 0
@@ -821,12 +1089,24 @@ class SimService:
     # search
     def _query_vectors(self, hashes: List[str], files: List[str]) -> List[Dict[str, np.ndarray]]:
         by = self.catalog()["by_hash"]
-        need = [h for h in hashes if not self.index.has(h) and self._path(by.get(h) or {})]
+        need = []
+        for h in hashes:
+            it = by.get(h) or {}
+            p = self._path(it)
+            if not p:
+                continue
+            if it.get("kind") == "video":
+                if self._video_needs(h, p, False):
+                    need.append((h, p, "video"))
+            elif not self.index.has(h):
+                need.append((h, p, "image"))
         if need:
-            res = self.analyse([self._path(by[h]) for h in need])
             fm = self.index.active
-            for h, r in zip(need, res):
-                self.index.put(h, r, fm)
+            for h, pth, kind in need:
+                if kind == "video":
+                    self.index.put(h, self.analyse_video(pth), fm)
+                else:
+                    self.index.put(h, self.analyse([pth])[0], fm)
             self.index.save()
         qs = []
         for h in hashes:
@@ -853,9 +1133,10 @@ class SimService:
         if not qs:
             return {"ok": False, "error": "no_query", **info}
         t1 = time.time()
-        allowed = set(self.image_hashes())
+        allowed = set(self.media_hashes())
         res = search(self.index, qs, mode, s["w_pose"] if w_pose is None else float(w_pose), s["threshold"] if threshold is None else float(threshold),
-                     agg, s["mirror"] if mirror is None else bool(mirror), int(limit or s["limit"]), allowed)
+                     agg, s["mirror"] if mirror is None else bool(mirror), int(limit or s["limit"]), allowed,
+                     float(s.get("video_merge_gap_s") or videosim.MERGE_GAP_S))
         ts = time.time() - t1
         sid = "s" + uuid.uuid4().hex[:10]
         params = {"mode": mode, "agg": agg, "hashes": list(hashes)[:50], "files": len(files)}
@@ -896,6 +1177,7 @@ def service(data_dir: Optional[str] = None, **kw) -> SimService:
         kw.setdefault("busy", lambda: BUSY())
         _SVC = SimService(dd, imagelib.catalog, model_dirs=dirs, **kw)
         imagelib.SIMILARITY = _SVC.scores
+        imagelib.SIMILARITY_ROW = _SVC.row
     return _SVC
 
 
