@@ -148,11 +148,61 @@ class Faces:
             raise ActionError("person_not_found", person=pid)
         return p
 
+    # ------------------------------------------------------------------ face thumbnails
+    def thumb_file(self, fid: str, size: int = 160, margin: float = 0.4, sources=None) -> Optional[str]:
+        """Square JPEG of one face (bbox + margin), cached in data/faces/thumbs/ keyed by face id, model, size, margin
+        and source mtime (a changed source gets a new file). No bbox (old index) -> centred whole-image square.
+        `sources(hash) -> [paths]` (default: imagelib catalog). None = no readable source."""
+        pf = parse_fid(fid)
+        if not pf:
+            raise ActionError("face_not_found", id=str(fid))
+        h, n, m = pf
+        size = max(32, min(1024, int(size or 160)))
+        margin = max(0.0, min(2.0, float(margin if margin is not None else 0.4)))
+        if sources is None:
+            from . import imagelib
+            sources = lambda hh: imagelib.paths_for_hashes([hh]).get(hh) or []
+        src = next((x for x in sources(h) if x and os.path.isfile(x)), None)
+        if not src:
+            return None
+        mt = int(os.path.getmtime(src))
+        it = self.src.item(h, m)
+        box = it["boxes"][n] if n < len(it["boxes"]) else None
+        key = f"{h}_{n}_{m}_{size}_{int(round(margin * 100))}_{mt}{'' if box else '_full'}"
+        d = os.path.join(self.dir, "thumbs")
+        out = os.path.join(d, key + ".jpg")
+        if os.path.isfile(out):
+            return out
+        from PIL import Image, ImageOps
+        with Image.open(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            W, H = im.size
+            if box:
+                sx, sy = (W / it["w"], H / it["h"]) if it.get("w") and it.get("h") else (1.0, 1.0)
+                x, y, w, hh = box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy
+                side = min(max(w, hh) * (1 + margin), W, H)
+                cx, cy = x + w / 2, y + hh / 2
+            else:
+                side, cx, cy = min(W, H), W / 2, H / 2
+            l = max(0, min(W - side, cx - side / 2)); t = max(0, min(H - side, cy - side / 2))
+            crop = im.crop((int(l), int(t), int(l + side), int(t + side))).resize((size, size), Image.LANCZOS)
+        os.makedirs(d, exist_ok=True)
+        for old in os.listdir(d):   # drop stale variants of this face/size (older source mtime)
+            if old.startswith(f"{h}_{n}_{m}_{size}_") and old != key + ".jpg":
+                try:
+                    os.remove(os.path.join(d, old))
+                except OSError:
+                    pass
+        tmp = out + ".tmp"
+        crop.save(tmp, "JPEG", quality=86)
+        os.replace(tmp, out)
+        return out
+
     def face_obj(self, f: str, m: str, extra=None) -> Dict[str, Any]:
         h, n, _ = parse_fid(f)
         it = self.src.item(h, m)
         o = {"id": f, "hash": h, "n": n, "model": m, "bbox": it["boxes"][n] if n < len(it["boxes"]) else None,
-             "w": it["w"], "h": it["h"]}
+             "w": it["w"], "h": it["h"], "thumb": thumb_url(f)}
         pid = self.assign(m).get(f)
         if pid:
             o["person"] = pid
@@ -638,7 +688,68 @@ def _model_seed(f: Faces):
         f._cache["seeded"] = f.src.model
 
 
-A = _actions.action
+FACE_TEXT = {
+    "en": {"face_assigned": "{n} face(s) assigned to {name}",
+           "faces_no_index": "No face vectors for the active face model yet. Run \"Compute faces\" first.",
+           "faces_busy": "Faces are being grouped right now. Try again in a moment.",
+           "face_not_found": "Face not found: {id}", "cluster_not_found": "Group not found",
+           "person_not_found": "Person not found", "person_need_name": "Type a name first",
+           "faces_model_mismatch": "That face belongs to another face model",
+           "faces_need_two": "Pick at least two to merge", "undo_expired": "Too late to undo"},
+    "es": {"face_assigned": "{n} cara(s) asignada(s) a {name}",
+           "faces_no_index": "Aún no hay caras calculadas para el modelo de caras activo. Usa \"Calcular caras\" primero.",
+           "faces_busy": "Se están agrupando las caras ahora mismo. Inténtalo de nuevo en un momento.",
+           "face_not_found": "Cara no encontrada: {id}", "cluster_not_found": "Grupo no encontrado",
+           "person_not_found": "Persona no encontrada", "person_need_name": "Escribe un nombre primero",
+           "faces_model_mismatch": "Esa cara pertenece a otro modelo de caras",
+           "faces_need_two": "Elige al menos dos para unir", "undo_expired": "Ya no se puede deshacer"},
+}
+# writes refused (faces_busy) while a clustering job holds the lock, instead of stalling the action queue
+BUSY_WRITES = {"face_assign", "face_confirm", "face_unassign", "face_reject", "face_unreject", "face_merge", "face_split",
+               "person_rename", "person_delete", "person_undo_delete", "person_set_cover", "face_settings"}
+
+
+THUMB_ROUTE = "/reflib/face_thumb/"
+
+
+def thumb_url(fid: str, size: int = 160, margin: float = 0.4) -> str:
+    from urllib.parse import quote
+    return f"{THUMB_ROUTE}{quote(str(fid), safe='')}.jpg?size={int(size)}&margin={margin:g}"
+
+
+def face_thumb_path(fid: str, size=160, margin=0.4) -> Optional[str]:
+    """Used by the HTTP route (gallery_routes.py): path of the cached face JPEG, or None."""
+    return service().thumb_file(fid, size, margin)
+
+
+def ftext(lang, key, **p):
+    t = FACE_TEXT.get(str(lang or "en")[:2], FACE_TEXT["en"]).get(key) or FACE_TEXT["en"].get(key, key)
+    try:
+        return t.format(**p)
+    except (KeyError, IndexError):
+        return t
+
+
+def _ok(ctx, key, **p):
+    t = ftext(getattr(ctx, "lang", "en"), key, **p)
+    return {"ok": True, "message": t, "toast": t, "code": key}
+
+
+def A(name, **kw):
+    """actions.action + translated face errors ({ok:false, error:<text>, code:<key>}) + faces_busy guard."""
+    def deco(fn):
+        def run(req, ctx):
+            try:
+                if name in BUSY_WRITES and _svc().st.get("running"):
+                    raise ActionError("faces_busy")
+                return fn(req, ctx)
+            except ActionError as e:
+                if e.key not in FACE_TEXT["en"]:
+                    raise
+                return {"ok": False, "error": ftext(getattr(ctx, "lang", "en"), e.key, **e.params), "code": e.key, **{("face" if k == "id" else k): v for k, v in e.params.items()}}
+        run.__name__, run.__doc__ = fn.__name__, fn.__doc__
+        return _actions.action(name, **kw)(run)
+    return deco
 
 
 @A("face_status", fast=True, doc="Personas: clustering progress / counts (fast)")
@@ -683,7 +794,7 @@ def a_for_item(req, ctx):
 def a_assign(req, ctx):
     f = _svc()
     r = f.assign_faces(req.get("person"), req.get("name"), req.get("clusters") or [], req.get("faces") or [])
-    return _meta(ctx, {**ctx.ok("face_assigned", n=r["assigned"], name=r["person"]["name"]), **r}, req)
+    return _meta(ctx, {**_ok(ctx, "face_assigned", n=r["assigned"], name=r["person"]["name"]), **r}, req)
 
 
 @A("face_confirm", doc="'Is this also X?' yes {person, faces}")
@@ -776,3 +887,22 @@ def a_settings(req, ctx):
     if isinstance(s, dict) and f._save_settings:
         f._save_settings({k: v for k, v in s.items() if k in DEFAULTS})
     return {"ok": True, "settings": f.settings()}
+
+
+@A("face_thumb", fast=True, doc="Face thumbnail {id | hash+n[+model], size=160, margin=0.4, data?} -> {url, cached, data?}")
+def a_thumb(req, ctx):
+    f = _svc()
+    fid = req.get("id")
+    if not fid and req.get("hash"):
+        fid = f"{req['hash']}:{int(req.get('n', 0))}@{req.get('model') or f.src.model}"
+    size, margin = int(req.get("size") or 160), float(req.get("margin") if req.get("margin") is not None else 0.4)
+    p = f.thumb_file(fid, size, margin)
+    if not p:
+        raise ActionError("face_not_found", id=str(fid))
+    out = {"ok": True, "id": fid, "url": thumb_url(fid, size, margin)}
+    if req.get("data"):
+        import base64
+        with open(p, "rb") as fh:
+            out["data"] = "data:image/jpeg;base64," + base64.b64encode(fh.read()).decode()
+    return out
+

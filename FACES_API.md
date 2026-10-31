@@ -50,10 +50,20 @@ smaller faces are skipped when bbox is known). Change via `face_settings`.
 | `person_undo_delete` | `{undo_token}` | 5 min |
 | `person_set_cover` | `{person, face}` | `{ok, person}` |
 | `face_settings` | `{settings?:{face_cluster_threshold, …}}` | `{ok, settings}` |
+| `face_thumb` (fast) | `{id}` or `{hash, n, model?}` (+ `size=160` 32–1024, `margin=0.4` 0–2, `data?:bool`) | `{ok, id, url, data?:"data:image/jpeg;base64,…"}`; `face_not_found` when the id is bad or no source file is readable |
 
 FACE = `{id, hash, n, model, bbox:[x,y,w,h]|null (pixels of the original image), w, h, score?, person?:pid,
-cluster?:cid}` (thumbnails: Media Library via the existing `thumbs` action, Galería via its own thumb route) — `bbox` is filled when the index has face boxes (simperf face
-records, see SIMILARITY_API.md); UIs crop/draw with it, else show the whole thumbnail.
+cluster?:cid, thumb:url}` — `thumb` is the shared face-thumbnail URL (see below), used by both the Media Library and the Galería. `bbox` is filled when the index has face boxes (simperf face
+records, see SIMILARITY_API.md); UIs draw overlays with it.
+
+### Face thumbnails (shared URL)
+`GET /reflib/face_thumb/<urlencoded face id>.jpg?size=160&margin=0.4` (gallery_routes.py, same FastAPI router and
+WanGP login check as `/reflib/api`), e.g. `/reflib/face_thumb/9f..e1%3A0%40arcface.jpg?size=160&margin=0.4`.
+Square JPEG: bbox enlarged by `margin` (0.4 = 40 % larger side), centred on the face, clamped to the image, resized to
+`size`. No bbox (older index) → centred square of the whole image. 404 when there's no readable source.
+Cache: `data/faces/thumbs/<hash>_<n>_<model>_<size>_<margin×100>_<source mtime>[_full].jpg`. A changed source (new mtime)
+makes a new file and removes older variants for that face and size. The cache can be deleted at any time.
+Built by `faces.thumb_url(fid, size, margin)`; the file comes from `faces.face_thumb_path(...)`.
 PERSON = `{id, name, tag, count (faces, active model), items, cover:FACE|null, seeded?:bool}`.
 
 ### Examples
@@ -73,9 +83,9 @@ PERSON = `{id, name, tag, count (faces, active model), items, cover:FACE|null, s
 {"ok":true,"n":1}
 ```
 
-### Errors (`{ok:false, error, ...}`, translated by the host)
-`faces_no_index` (no face vectors for the active model → run "Calcular caras"), `faces_busy` (cluster job running for a
-write that needs it), `face_not_found` (`id`), `cluster_not_found`, `person_not_found`, `person_need_name`,
+### Errors (`{ok:false, error:<translated text>, code:<key>, ...}`, translated by faces.py `FACE_TEXT` EN/ES)
+`faces_no_index` (no face vectors for the active model → run "Calcular caras"), `faces_busy` (a clustering job is running: every write — assign/confirm/unassign/reject/unreject/merge/split/
+person_rename/delete/undo_delete/set_cover/face_settings — is refused instead of waiting on the lock; `face_cluster_run` too), `face_not_found` (`face`: the bad face id), `cluster_not_found`, `person_not_found`, `person_need_name`,
 `faces_model_mismatch` (face id of another model than the active one), `faces_need_two` (merge), `undo_expired`.
 
 ## Storage (`data/faces/`, new files only, atomic tmp+replace, never touches existing library files)
@@ -83,6 +93,7 @@ write that needs it), `face_not_found` (`id`), `cluster_not_found`, `person_not_
   reject:{model:{pid:[fid]}}}` (source of truth; a `.bak` of the previous version is kept on each write).
 * `clusters-<model>.json` — `{version:1, threshold, seen:[fid], clusters:{cid:{faces:[fid]}}}` (cache; deleting it
   only loses unnamed grouping).
+* `thumbs/` — face thumbnail cache (see Face thumbnails; disposable).
 * Centroids are recomputed in memory (L2-normalised mean of a person's faces).
 
 ## Re-index

@@ -26,7 +26,7 @@
     const ft = (k, p = {}) => String((S[lang()] || S.en)[k] ?? S.en[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p[n] ?? m));
     const esc = RL.esc;
     const ilib = () => RL.ilibState();
-    const call = (req) => RL.sendIlib(req).then(r => { if (r && r.ok === false) { RL.toast(r.error === "faces_no_index" ? ft("no_index") : ft("err", { e: r.error || r.message || "?" }), "warn"); throw r; } return r; });
+    const call = (req) => RL.sendIlib(req).then(r => { if (r && r.ok === false) { RL.toast(r.code === "faces_no_index" ? ft("no_index") : (r.code ? r.error : ft("err", { e: r.error || r.message || "?" })), "warn"); throw r; } return r; });
     const thumbs = new Map();
     function needThumbs(hs) {
         const cache = ilib().thumbs, want = [...new Set(hs)].filter(h => !thumbs.has(h) && !(cache && cache.get(h)));
@@ -37,6 +37,8 @@
     const thumb = h => thumbs.get(h) || (ilib().thumbs && ilib().thumbs.get(h)) || "";
     // a face tile: thumbnail cropped to the bbox (CSS background), or the whole thumbnail when no bbox is known
     function face(f, cls = "", extra = "") {
+        // shared face_thumb route (same URL as the Galería): server-side square crop, whole image when no bbox
+        if (f.thumb) return `<div class="reflib-fc-face ${cls}" data-face="${esc(f.id)}" style="background-image:url('${esc(f.thumb)}')" ${extra}></div>`;
         const src = thumb(f.hash);
         let st = `background-image:url('${src}')`;
         if (f.bbox && f.w && f.h) {
@@ -140,7 +142,7 @@
         else if (k === "split") call(Object.assign({ action: "face_split", faces: [...sel] }, view.p === "person" ? { person: view.id } : { cluster: view.c })).then(r => { sel.clear(); view = { p: "cluster", c: r.cluster }; draw(); }).catch(() => {});
         else if (k === "unassign") call({ action: "face_unassign", faces: [...sel] }).then(() => call({ action: "face_reject", person: view.id, faces: [...sel] })).then(() => { sel.clear(); draw(); }).catch(() => {});
         else if (k === "cover") call({ action: "person_set_cover", person: view.id, face: [...sel][0] }).then(() => { sel.clear(); draw(); }).catch(() => {});
-        else if (k === "yes") call({ action: "face_confirm", person: view.id, faces: [b.dataset.face] }).then(draw).catch(() => {});
+        else if (k === "yes") call({ action: "face_confirm", person: view.id, faces: [b.dataset.face] }).then(r => { if (r && r.toast) RL.toast(r.toast, "ok"); draw(); }).catch(() => {});
         else if (k === "no") call({ action: "face_reject", person: view.id, faces: [b.dataset.face] }).then(() => { RL.toast(ft("rejected", { x: view.name }), "info"); draw(); }).catch(() => {});
         else if (k === "rename") { const n = prompt(ft("rename_q", { x: view.name }), view.name); if (n && n.trim()) call({ action: "person_rename", person: view.id, name: n.trim() }).then(r => { view = { p: "person", id: r.person.id }; draw(); }).catch(() => {}); }
         else if (k === "pdel") { if (!confirm(ft("del_q", { x: view.name }))) return; const nm = view.name;

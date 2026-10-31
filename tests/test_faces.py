@@ -148,6 +148,47 @@ def test_scale_speed():
     print("12000 faces clustered in %.2fs -> %d clusters" % (dt, st["clusters"]))
 
 
+def test_face_thumb_crop_cache_invalidate():
+    from PIL import Image
+    data, _ = synth(people=1, per=2)
+    f, _, d = mk(data)
+    img = os.path.join(d, "src.png")
+    im = Image.new("RGB", (200, 200), (0, 0, 255)); im.paste((255, 0, 0), (20, 20, 60, 60)); im.save(img)   # face bbox 10,10,20,20 @100px -> 20..60 @200px
+    src = lambda h: [img]
+    fid = F.fid("h00000", 0, "arcface")
+    p = f.thumb_file(fid, 64, 0.0, sources=src)
+    with Image.open(p) as t:
+        assert t.size == (64, 64) and t.getpixel((32, 32))[0] > 200, t.getpixel((32, 32))   # red face fills the crop
+    assert f.thumb_file(fid, 64, 0.0, sources=src) == p          # cached
+    os.utime(img, (os.path.getmtime(img) + 10,) * 2)
+    p2 = f.thumb_file(fid, 64, 0.0, sources=src)
+    assert p2 != p and not os.path.exists(p)                      # source changed -> new file, old removed
+    f.src.item = lambda h, m: {"w": 100, "h": 100, "n": 1, "boxes": [None]}   # old index: no bbox -> whole image
+    p3 = f.thumb_file(fid, 64, 0.4, sources=src)
+    assert p3.endswith("_full.jpg")
+    with Image.open(p3) as t:
+        assert t.getpixel((60, 60))[2] > 200                      # blue background visible = whole image
+    assert f.thumb_file(fid, 64, sources=lambda h: []) is None
+    assert F.thumb_url(fid) == "/reflib/face_thumb/h00000%3A0%40arcface.jpg?size=160&margin=0.4"
+
+
+def test_busy_and_translated_errors():
+    data, _ = synth(people=1, per=3)
+    f, _, _ = mk(data)
+    old = F._F; F._F = f
+    try:
+        class C: lang = "es"
+        f.st["running"] = True
+        r = F._actions.call("face_reject", {"person": "p_x", "faces": []}, C())
+        assert r["ok"] is False and r["code"] == "faces_busy" and "agrupando" in r["error"], r
+        f.st["running"] = False
+        r = F._actions.call("person_rename", {"person": "p_nope", "name": "a"}, C())
+        assert r["code"] == "person_not_found" and r["error"] == "Persona no encontrada", r
+        assert F._ok(C(), "face_assigned", n=2, name="Ana")["toast"] == "2 cara(s) asignada(s) a Ana"
+    finally:
+        F._F = old
+
+
 if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):
