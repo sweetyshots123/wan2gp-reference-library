@@ -1,29 +1,23 @@
 // 1.9.7: navegación rápida del visor con la rueda + caché de imágenes decodificadas.
-// · WheelStepper: acumula deltas normalizados (deltaMode píxel / línea / página; rueda con muescas o trackpad)
-//   y devuelve cuántas fotos avanzar; nunca descarta eventos (sin bloqueo fijo ni debounce).
+// · WheelStepper: envoltorio de ../../wheel_rules.js (1.11.0, compartido con la Media Library): 1 muesca = 1 foto.
 // · MediumCache: LRU de imágenes medianas (acción compartida "preview", la misma que usa la Media Library
 //   en su vista previa) ya decodificadas; precarga ±N vecinos en la dirección del giro y cancela lo que sobra.
 import { call } from "./api";
 
-export const STEP_PX = 100;        // una muesca típica de rueda = 100 px (Chrome/Edge, deltaMode 0) = 1 foto
-const IDLE_RESET_MS = 220;         // sin eventos durante este tiempo, el resto acumulado se olvida
+import "../../wheel_rules.js";
 
+/** píxeles aproximados (solo para zoom con Ctrl y para desplazar con zoom; NO para pasar de foto) */
 export function normDelta(e: { deltaY: number; deltaMode: number }): number {
   return e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY;
 }
 
+// 1.11.0: anterior/siguiente con la rueda = ../../wheel_rules.js (compartido): 1 muesca = 1 foto exacta.
+type WR = { push: (dy: number, mode: number, now: number) => number; reset: () => void };
 export class WheelStepper {
-  private acc = 0; private last = 0;
-  /** delta normalizado en px -> número de fotos a avanzar (con signo) */
-  push(dy: number, now = performance.now()): number {
-    if (now - this.last > IDLE_RESET_MS || (this.acc && Math.sign(dy) !== Math.sign(this.acc))) this.acc = 0;
-    this.last = now;
-    this.acc += dy;
-    const n = Math.trunc(this.acc / STEP_PX);
-    this.acc -= n * STEP_PX;
-    return n;
-  }
-  reset() { this.acc = 0; }
+  private w: WR = (globalThis as any).ReflibWheel.create();
+  /** evento de rueda -> número de fotos a avanzar (con signo); nunca descarta muescas */
+  push(e: { deltaY: number; deltaMode: number }, now = performance.now()): number { return this.w.push(e.deltaY, e.deltaMode, now); }
+  reset() { this.w.reset(); }
 }
 
 type Entry = { src: string; img: HTMLImageElement };

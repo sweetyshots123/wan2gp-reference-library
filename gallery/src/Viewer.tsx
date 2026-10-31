@@ -158,7 +158,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       if (e.ctrlKey || e.metaKey) { rect.current = null; zoomAt(Math.exp(-dy * 0.0025), e.clientX, e.clientY, "later"); return; }
       if (live.current.s > 1) { const o = live.current; setLive({ ...o, x: o.x - dx, y: o.y - dy }, "later"); return; }
       // 1.9.7: tantas fotos como pasos acumulados, sin bloqueo: girar rápido recorre muchas seguidas
-      const n = stepper.current.push(dy, e.timeStamp || performance.now());
+      const n = stepper.current.push(e, e.timeStamp || performance.now());
       if (!n) return;
       const j = clamp(idxRef.current + n, 0, totalRef.current - 1);
       if (j === idxRef.current) return;
