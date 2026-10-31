@@ -67,7 +67,7 @@ export function DupesPage({ after }: { after: () => void }) {
   return (
     <div className="dupes">
       <div className="fstat muted">
-        {st ? <>{st.hashed} fotos analizadas{st.running ? ` · analizando ${st.done}/${st.total}…` : ""}{data ? ` · ${data.count} grupo(s) · ${fmtB(data.waste || 0)} recuperables` : ""}</> : "…"}
+        {st ? <>{st.hashed_videos != null ? `${st.hashed_images} fotos · ${st.hashed_videos} vídeos analizados` : `${st.hashed} elementos analizados`}{st.running ? ` · analizando ${st.done}/${st.total}…` : ""}{data ? ` · ${data.count} grupo(s) · ${fmtB(data.waste || 0)} recuperables` : ""}</> : "…"}
         <button disabled={!!st?.running} onClick={() => act("dup_scan", {}, refresh, { quiet: true })} title="Analiza las fotos nuevas (incremental)">↻ Buscar duplicados</button>
         <label title="Diferencia permitida entre fotos (bits de pHash): 0 = solo idénticas, más alto = también recortes / recompresiones">Parecido
           <input type="range" min={0} max={16} value={thr} onChange={(e) => setThr(+e.target.value)} /> {thr}</label>

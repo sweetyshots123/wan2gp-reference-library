@@ -7,14 +7,14 @@
     if (!RL || !RL.extend || RL.dupesLoaded) return;
     RL.dupesLoaded = true;
     const S = {
-        en: { open: "Duplicates", title: "Duplicates", scan: "Find duplicates", status: "{h} photos analysed · {g} groups · {w} recoverable", running: "Analysing {d} / {t}…",
+        en: { open: "Duplicates", title: "Duplicates", scan: "Find duplicates", status: "{h} analysed · {g} groups · {w} recoverable", running: "Analysing {d} / {t}…",
               thr: "Similarity", thr_tip: "Allowed difference (pHash bits): 0 = identical only, higher = also crops / recompressions", all: "All", exact: "Identical", near: "Near-identical",
               transfer: "Move tags", transfer_tip: "Move tags, favorites and people to the copy that is kept", keepall: "Keep the largest in all groups", keep: "Keep marked",
               g_exact: "Identical", g_near: "Near-identical (difference {d})", copies: "{n} copies", rec: "{w} recoverable", big: "Largest", small: "Smallest", ia: "AI", video: "Video",
               k: "✓ Keep", l: "Remove", in_col: "in a collection", tags: "{n} tag(s)", none: "No duplicates at this similarity.", first: "Press «Find duplicates» to analyse your photos.",
               q_all: "Keep the largest copy in {g} group(s) and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_tr: "\nTags, favorites and people move to the kept copy.", q_one: "Keep the selected copy and remove the other {n}?\n\nIdentical copies of the same file go to the Recycle Bin; for the rest the usual delete dialog opens.", q_del: "Remove {n} item(s) from the library? You can undo it.",
               recycled: "{n} identical copies sent to the Recycle Bin", more: "More groups", close: "Close", err: "Error: {e}" },
-        es: { open: "Duplicados", title: "Duplicados", scan: "Buscar duplicados", status: "{h} fotos analizadas · {g} grupos · {w} recuperables", running: "Analizando {d} / {t}…",
+        es: { open: "Duplicados", title: "Duplicados", scan: "Buscar duplicados", status: "{h} analizados · {g} grupos · {w} recuperables", running: "Analizando {d} / {t}…",
               thr: "Parecido", thr_tip: "Diferencia permitida (bits de pHash): 0 = solo idénticas, más alto = también recortes / recompresiones", all: "Todos", exact: "Idénticos", near: "Casi iguales",
               transfer: "Pasar etiquetas", transfer_tip: "Mueve etiquetas, favoritos y personas a la copia que se conserva", keepall: "Conservar la más grande en todos", keep: "Conservar la marcada",
               g_exact: "Idénticos", g_near: "Casi iguales (diferencia {d})", copies: "{n} copias", rec: "{w} recuperables", big: "Más grande", small: "Más pequeña", ia: "IA", video: "Vídeo",
@@ -61,7 +61,7 @@
     function draw() {
         if (!pan) return;
         const gs = (data && data.groups) || [];
-        const stat = st ? dt("status", { h: st.hashed, g: data ? data.count : 0, w: fmtB((data && data.waste) || 0) }) + (st.running ? " · " + dt("running", { d: st.done, t: st.total }) : "") : "…";
+        const stat = st ? dt("status", { h: (st.hashed_videos != null ? (lang() === "es" ? `${st.hashed_images} fotos · ${st.hashed_videos} vídeos` : `${st.hashed_images} photos · ${st.hashed_videos} videos`) : st.hashed), g: data ? data.count : 0, w: fmtB((data && data.waste) || 0) }) + (st.running ? " · " + dt("running", { d: st.done, t: st.total }) : "") : "…";
         const seg = [["", "all"], ["exact", "exact"], ["near", "near"]].map(([k, l]) => `<button type="button" class="reflib-ib-btn ${V.kind === k ? "on" : ""}" data-dp="kind" data-k="${k}">${esc(dt(l))}</button>`).join("");
         const grp = g => { const k = V.keep[g.id] ?? g.keep; return `<div class="reflib-dp-g"><div class="reflib-dp-gh"><b>${esc(g.kind === "exact" ? dt("g_exact") : dt("g_near", { d: g.dist }))}</b> · ${esc(dt("copies", { n: g.rows.length }))} · ${esc(dt("rec", { w: fmtB(g.waste) }))}
             <button type="button" class="reflib-ib-btn" data-dp="keep1" data-g="${esc(g.id)}">${esc(dt("keep"))}</button></div><div class="reflib-dp-rows">${g.rows.map((r, i) => `
