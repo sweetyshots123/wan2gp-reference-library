@@ -17,6 +17,11 @@ VERSION = 1
 UNDO_S = 5 * 60
 THRESH = {"arcface": 0.42, "glintr100": 0.40, "adaface": 0.40, "sface": 0.50}
 DEFAULTS = {"face_auto_cluster": True, "face_cluster_threshold": None, "face_suggest_threshold": None, "face_min_cluster": 2, "face_min_size": 40}
+# facequality: quality gate (faces failing it stay searchable but are left out of clustering, centroids and
+# suggestions, and are flagged), strict clustering and multi-prototype suggestions. Defaults tuned on LFW.
+QDEFAULTS = {"face_q_min_det": 0.80, "face_q_min_blur": 25.0, "face_q_max_yaw": 0.60, "face_q_skip_trunc": True,
+             "face_link_k": 3, "face_link_margin": 0.05, "face_proto_k": 4, "face_suggest_margin": 0.05}
+DEFAULTS.update(QDEFAULTS)
 _FID = re.compile(r"^([0-9A-Za-z_\-]+):(\d+)@([a-z0-9_]+)$")
 
 
@@ -42,6 +47,130 @@ def _atomic_json(path: str, obj, bak: bool = False):
         json.dump(obj, fh, ensure_ascii=False)
         fh.flush(); os.fsync(fh.fileno())
     os.replace(tmp, path)
+
+
+def face_quality(det, px, q, s: Dict[str, Any]) -> Dict[str, Any]:
+    """Quality of one face. det: detector score; px: min(bbox w, h) in source pixels; q: [blur, yaw, trunc, aligned]
+    (NaN = unknown, e.g. faces indexed before facequality: unknown inputs never fail the gate).
+    -> {score 0..1, ok, flags:[low_det|small|blurry|profile|truncated], aligned:int|None}"""
+    q = list(q) if q is not None else []
+    q += [float("nan")] * (4 - len(q))
+    blur, yaw, trunc, al = (float(x) if x is not None else float("nan") for x in q[:4])
+    fin = lambda x: x is not None and np.isfinite(x)
+    flags = []
+    if fin(det) and det < float(s["face_q_min_det"]):
+        flags.append("low_det")
+    if fin(px) and px < float(s.get("face_min_size") or 0):
+        flags.append("small")
+    if fin(blur) and blur < float(s["face_q_min_blur"]):
+        flags.append("blurry")
+    if fin(yaw) and yaw > float(s["face_q_max_yaw"]):
+        flags.append("profile")
+    if fin(trunc) and trunc > 0.5 and s.get("face_q_skip_trunc", True):
+        flags.append("truncated")
+    parts = [min(1.0, max(0.0, (det - 0.5) / 0.5)) if fin(det) else 1.0,
+             min(1.0, px / 112.0) if fin(px) else 1.0,
+             min(1.0, blur / 150.0) if fin(blur) else 1.0,
+             1.0 - min(1.0, yaw) if fin(yaw) else 1.0,
+             0.7 if fin(trunc) and trunc > 0.5 else 1.0]
+    return {"score": round(float(np.prod(parts)), 3), "ok": not flags, "flags": flags,
+            "aligned": int(al) if fin(al) else None}
+
+
+def box_iou(a, b) -> float:
+    if not a or not b:
+        return 0.0
+    x1, y1 = max(a[0], b[0]), max(a[1], b[1])
+    x2, y2 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    i = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    u = a[2] * a[3] + b[2] * b[3] - i
+    return i / u if u > 0 else 0.0
+
+
+def remap_by_iou(old: Dict[int, Any], new: List[Any], min_iou: float = 0.5) -> Dict[int, Optional[int]]:
+    """Greedy best-IoU matching of old face rows (face_i -> bbox xywh 0..1) onto the re-indexed rows of the same item.
+    Old faces without a bbox (legacy) keep their row when it still exists; unmatched -> None."""
+    pairs = sorted(((box_iou(b, nb), i, j) for i, b in old.items() if b for j, nb in enumerate(new) if nb), reverse=True)
+    mp: Dict[int, Optional[int]] = {}
+    used = set()
+    for v, i, j in pairs:
+        if v < min_iou:
+            break
+        if i not in mp and j not in used:
+            mp[i] = j; used.add(j)
+    for i, b in old.items():
+        if i not in mp:
+            mp[i] = i if (not b and i < len(new) and i not in used) else None
+    return mp
+
+
+def strict_cluster(M: np.ndarray, todo: List[int], groups: List[List[int]], th: float, k: int = 3, margin: float = 0.05) -> List[List[int]]:
+    """No-chaining clustering. A face joins the best group whose centroid is >= th AND that has at least
+    min(k, size) members >= th - margin; otherwise it starts a new group. Then groups are merged only when their
+    AVERAGE pairwise similarity (average linkage, not centroid-to-centroid) is >= th. `groups` (rows of M) are
+    extended in place and returned."""
+    th_m = th - margin
+    S = [M[g].sum(0) for g in groups]
+    for i in todo:
+        v = M[i]
+        best = -1
+        if S:
+            C = np.stack(S); C = C / np.maximum(np.linalg.norm(C, axis=1, keepdims=True), 1e-8)
+            sc = C @ v
+            for j in np.argsort(-sc):
+                if sc[j] < th:
+                    break
+                g = groups[j]
+                if int((M[g] @ v >= th_m).sum()) >= min(k, len(g)):
+                    best = int(j); break
+        if best < 0:
+            groups.append([i]); S.append(v.copy())
+        else:
+            groups[best].append(i); S[best] = S[best] + v
+    # average-linkage merge among groups whose centroids are close
+    while len(groups) > 1:
+        C = np.stack([x / max(np.linalg.norm(x), 1e-8) for x in S])
+        G = C @ C.T; np.fill_diagonal(G, -1)
+        a_s, b_s = np.nonzero(np.triu(G >= th))
+        best, pair = th, None
+        for a, b in zip(a_s.tolist(), b_s.tolist()):
+            avg = float((M[groups[a]] @ M[groups[b]].T).mean())
+            if avg >= best:
+                best, pair = avg, (a, b)
+        if pair is None:
+            break
+        a, b = pair
+        groups[a] += groups[b]; S[a] = S[a] + S[b]
+        del groups[b]; del S[b]
+    return groups
+
+
+def prototypes(P: np.ndarray, k: int = 4, iters: int = 15) -> np.ndarray:
+    """Centroid + up to k k-means centroids (cosine, deterministic init: farthest-point) of confirmed faces."""
+    c = _norm(P.sum(0, keepdims=True))
+    k = max(0, min(int(k), len(P) // 5))
+    if k < 2:
+        return c
+    idx = [int(np.argmax(P @ c[0]))]
+    for _ in range(k - 1):
+        idx.append(int(np.argmin((P @ P[idx].T).max(1))))
+    C = P[idx].copy()
+    for _ in range(iters):
+        a = (P @ C.T).argmax(1)
+        C = _norm(np.stack([P[a == j].sum(0) if (a == j).any() else C[j] for j in range(len(C))]))
+    return np.vstack([c, C])
+
+
+def suggest_scores(X: np.ndarray, P: np.ndarray, neg: Optional[np.ndarray] = None, others: Optional[np.ndarray] = None,
+                   k: int = 4) -> Tuple[np.ndarray, np.ndarray]:
+    """score = max similarity to the person's prototypes (centroid + k-means); margin = score - max(similarity to the
+    person's rejected faces, to other persons' prototypes). Returns (score, margin)."""
+    sc = (X @ prototypes(P, k).T).max(1)
+    rival = np.full(len(X), -1.0, np.float32)
+    for R in (neg, others):
+        if R is not None and len(R):
+            rival = np.maximum(rival, (X @ R.T).max(1))
+    return sc, sc - rival
 
 
 def _norm(m: np.ndarray) -> np.ndarray:
@@ -79,10 +208,14 @@ class FaceSource:
         vec = pack.get("vec") if isinstance(pack, dict) else pack
         n = 0 if vec is None else len(vec)
         box = pack.get("box") if isinstance(pack, dict) else None
+        det = pack.get("det") if isinstance(pack, dict) else None
+        qq = pack.get("q") if isinstance(pack, dict) else None
         nb = [None] * n
         if box is not None and len(box) == n:
             nb = [None if not np.all(np.isfinite(b[:4])) else [round(float(x), 5) for x in b[:4]] for b in box]
-        return {"w": e.get("w", 0) or 0, "h": e.get("h", 0) or 0, "n": n, "nbox": nb}
+        dd = [float(det[i]) if det is not None and i < len(det) and np.isfinite(det[i]) else None for i in range(n)]
+        qs = [[float(x) for x in qq[i]] if qq is not None and i < len(qq) else None for i in range(n)]
+        return {"w": e.get("w", 0) or 0, "h": e.get("h", 0) or 0, "n": n, "nbox": nb, "det": dd, "q": qs}
 
 
 def _px(nb, w, hh):
@@ -125,6 +258,7 @@ class Faces:
 
     def _on_faces(self, records) -> None:
         try:
+            self._remap_pending({str(r.get("id")) for r in records or [] if r.get("model") == self.src.model}, self.src.model)
             if not self.settings().get("face_auto_cluster", True):
                 return
             if not any(r.get("model") == self.src.model for r in records or []):
@@ -139,6 +273,60 @@ class Faces:
                 t.start()
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ facequality: recompute faces, keep people
+    def recompute_plan(self, hashes=None, m: Optional[str] = None) -> List[str]:
+        """Before re-indexing faces (new alignment / quality fields): remember the bbox of every assigned or rejected
+        face of `hashes` (default: every item with one) in persons.json "remap"; when the item comes back from the
+        worker, _remap_pending() maps old face rows to new ones by bbox IoU, so person assignments survive."""
+        m = m or self.src.model
+        with self.lock:
+            used = {}
+            for f in list(self.assign(m)) + [f for fs in (self.db["reject"].get(m) or {}).values() for f in fs]:
+                p = parse_fid(f)
+                if p:
+                    used.setdefault(p[0], set()).add(p[1])
+            hs = [h for h in (hashes if hashes is not None else list(used))]
+            rm = self.db.setdefault("remap", {}).setdefault(m, {})
+            for h in hs:
+                if h in used and h not in rm:
+                    it = self.src.item(h, m)
+                    rm[h] = {str(i): it["nbox"][i] for i in used[h] if i < len(it["nbox"])}
+            self._save_db()
+            return hs
+
+    def _remap_pending(self, hashes, m) -> int:
+        rm = (self.db.get("remap") or {}).get(m) or {}
+        todo = [h for h in hashes if h in rm]
+        if not todo:
+            return 0
+        n = 0
+        with self.lock:
+            for h in todo:
+                old = rm.pop(h)
+                new = self.src.item(h, m)["nbox"]
+                mp = remap_by_iou({int(k): v for k, v in old.items()}, new)
+                n += self._apply_remap(h, m, mp)
+            self._save_db()
+            self.rev += 1
+        return n
+
+    def _apply_remap(self, h, m, mp) -> int:
+        """mp: old face_i -> new face_i (None = no match: assignment / rejection dropped)."""
+        def tr(f):
+            p = parse_fid(f)
+            if not p or p[0] != h or p[1] not in mp:
+                return f
+            return None if mp[p[1]] is None else fid(h, mp[p[1]], m)
+        a = self.assign(m)
+        moved = {f: a.pop(f) for f in [f for f in a if tr(f) != f]}
+        for f, pid in moved.items():
+            g = tr(f)
+            if g:
+                a[g] = pid
+        for pid, fs in (self.db["reject"].get(m) or {}).items():
+            self.db["reject"][m][pid] = [g for g in (tr(f) for f in fs) if g]
+        return len(moved)
 
     def _drop_stale(self, hashes, m) -> None:
         """Re-indexed items: drop assignments / rejections that point past the item's new face count."""
@@ -208,10 +396,28 @@ class Faces:
             if not all(keep):
                 k = np.array(keep)
                 ids, M = [f for f, x in zip(ids, keep) if x], M[k]
-        key = (m, rev, ms, len(ids), id(M) if rev is None else 0)
+        key = (m, rev, ms, len(ids), id(M) if rev is None else 0, self._qkey())
         if self._cache.get("key") != key:
             self._cache = {"key": key, "ids": ids, "M": M, "pos": {f: i for i, f in enumerate(ids)}}
+            self._cache["good"] = self._good(ids, m)
         return self._cache
+
+    # ------------------------------------------------------------------ facequality helpers
+    def _qkey(self):
+        s = self.settings()
+        return tuple(s.get(k) for k in sorted(QDEFAULTS))
+
+    def quality(self, f: str, m: str) -> Dict[str, Any]:
+        h, n, _ = parse_fid(f)
+        it = self.src.item(h, m)
+        b = it["nbox"][n] if n < len(it["nbox"]) else None
+        px = min(b[2] * it["w"], b[3] * it["h"]) if b and it["w"] and it["h"] else None
+        det = (it.get("det") or [None] * (n + 1))[n] if n < len(it.get("det") or []) else None
+        q = (it.get("q") or [None] * (n + 1))[n] if n < len(it.get("q") or []) else None
+        return face_quality(det, px, q, self.settings())
+
+    def _good(self, ids, m) -> np.ndarray:
+        return np.array([self.quality(f, m)["ok"] for f in ids], bool) if len(ids) else np.zeros(0, bool)
 
     def assign(self, m) -> Dict[str, str]:
         return self.db["assign"].setdefault(m, {})
@@ -277,12 +483,17 @@ class Faces:
         o = {"id": f, "hash": h, "n": n, "model": m, "box": it["nbox"][n] if n < len(it["nbox"]) else None,
              "bbox": _px(it["nbox"][n], it["w"], it["h"]) if n < len(it["nbox"]) else None,
              "w": it["w"], "h": it["h"], "thumb": thumb_url(f)}
+        o.update(self._qfields(f, m))
         pid = self.assign(m).get(f)
         if pid:
             o["person"] = pid
         if extra:
             o.update(extra)
         return o
+
+    def _qfields(self, f, m) -> Dict[str, Any]:
+        q = self.quality(f, m)
+        return {"quality": {"score": q["score"], "ok": q["ok"], "flags": q["flags"]}, "aligned": q["aligned"]}
 
     def _check(self, faces, m) -> List[str]:
         pos = self._mat(m)["pos"]
@@ -331,51 +542,32 @@ class Faces:
             seen = set(cl["seen"]) & set(pos)
             todo = [f for f in ids if f not in seen and f not in asg]
             self.st = {"running": True, "done": 0, "total": len(todo)}
-            cids = list(cl["clusters"])
-            sums = [M[[pos[f] for f in cl["clusters"][k]["faces"]]].sum(0) for k in cids]
-            cent = _norm(np.stack(sums)) if sums else np.zeros((0, M.shape[1]), np.float32)
-            cap = max(64, len(cids) * 2)
-            C = np.zeros((cap, M.shape[1]), np.float32); C[:len(cids)] = cent
-            S = np.zeros_like(C); S[:len(cids)] = np.stack(sums) if sums else 0
-            nc = len(cids)
-            for i, f in enumerate(todo):
-                v = M[pos[f]]
-                j = -1
-                if nc:
-                    sc = C[:nc] @ v
-                    j = int(sc.argmax())
-                    if sc[j] < th:
-                        j = -1
-                if j < 0:
-                    if nc == len(C):
-                        C = np.concatenate([C, np.zeros_like(C)]); S = np.concatenate([S, np.zeros_like(S)])
-                    cid = "c_" + uuid.uuid4().hex[:12]
-                    cids.append(cid); cl["clusters"][cid] = {"faces": []}
-                    j = nc; nc += 1
-                cl["clusters"][cids[j]]["faces"].append(f)
-                S[j] += v; C[j] = S[j] / max(np.linalg.norm(S[j]), 1e-8)
-                self.st["done"] = i + 1
-            # merge pass: clusters whose centroids are >= th
-            if nc > 1:
-                G = C[:nc] @ C[:nc].T
-                np.fill_diagonal(G, -1)
-                parent = list(range(nc))
-                def root(a):
-                    while parent[a] != a:
-                        parent[a] = parent[parent[a]]; a = parent[a]
-                    return a
-                for a, b in zip(*np.nonzero(np.triu(G >= th))):
-                    ra, rb = root(int(a)), root(int(b))
-                    if ra != rb:
-                        parent[rb] = ra
-                for k in range(nc):
-                    r = root(k)
-                    if r != k and cids[k] in cl["clusters"]:
-                        cl["clusters"][cids[r]]["faces"] += cl["clusters"].pop(cids[k])["faces"]
+            self._cluster_into(cl, M, pos, todo, th, c.get("good"), s)
             cl["seen"] = sorted(seen | set(todo))
             self._save_cl(m)
             self.st = {"running": False, "done": len(todo), "total": len(todo)}
             return self.status()
+
+    def _cluster_into(self, cl, M, pos, todo, th, good, s) -> None:
+        """facequality: strict (no chaining) clustering of `todo` into cl["clusters"]; low-quality faces are skipped
+        (they stay searchable, are flagged, and are never grouped)."""
+        if good is not None and len(good):
+            todo = [f for f in todo if good[pos[f]]]
+        cids, groups = [], []
+        for k, v in cl["clusters"].items():
+            g = [pos[f] for f in v["faces"] if good is None or not len(good) or good[pos[f]]]
+            if g:
+                cids.append(k); groups.append(g)
+        first = {g[0]: (k, len(g)) for k, g in zip(cids, groups)}
+        groups = strict_cluster(M, [pos[f] for f in todo], groups, th, int(s["face_link_k"]), float(s["face_link_margin"]))
+        ids = self.mat["ids"]
+        out = {}
+        for g in groups:   # keep the id of the biggest previous group a group contains (stable ids across runs)
+            ks = [first[i] for i in g if i in first]
+            cid = max(ks, key=lambda x: x[1])[0] if ks else "c_" + uuid.uuid4().hex[:12]
+            out[cid] = {"faces": [ids[i] for i in g]}
+        cl["clusters"] = out
+        self.st["done"] = len(todo)
 
     def status(self) -> Dict[str, Any]:
         m = self.src.model
@@ -500,7 +692,7 @@ class Faces:
                 self._retag_after_remove(q, hs)
             return {"n": sum(len(v) for v in by.values()), "hashes": sorted(set().union(*by.values())) if by else []}
 
-    def suggest(self, pid, method="nn", limit=40, threshold=None) -> List[Dict[str, Any]]:
+    def suggest(self, pid, method="proto", limit=40, threshold=None) -> List[Dict[str, Any]]:
         self._person(pid)
         m = self.src.model
         c = self._mat(m)
@@ -513,15 +705,42 @@ class Faces:
         cand = [i for i, f in enumerate(c["ids"]) if f not in asg and f not in rej]
         if not cand:
             return []
-        P, X = c["M"][mine], c["M"][cand]
-        sc = X @ _norm(P.sum(0)) if method == "centroid" else (X @ P.T).max(1)
-        order = np.argsort(-sc)
-        out = []
-        for k in order[:max(1, int(limit)) * 4]:
-            if sc[k] < th or len(out) >= limit:
-                break
-            out.append(self.face_obj(c["ids"][cand[k]], m, {"score": round(float(sc[k]), 4)}))
-        return out
+        return self._suggest_ranked(pid, m, c, asg, mine, cand, rej, method, limit, th)
+
+    def _suggest_ranked(self, pid, m, c, asg, mine, cand, rej, method, limit, th) -> List[Dict[str, Any]]:
+        """facequality: candidates must pass the quality gate; score = max over the person's prototypes (centroid +
+        k-means of confirmed good faces; "nn" = every confirmed face, "centroid" = centroid only); margin = score minus
+        the best similarity to this person's rejected faces and to other persons' prototypes. Kept when
+        score >= th and margin >= face_suggest_margin; ranked by margin, then score."""
+        s = self.settings()
+        good = c.get("good")
+        ok = (lambda i: bool(good[i])) if good is not None and len(good) else (lambda i: True)
+        cand = [i for i in cand if ok(i)]
+        P_idx = [i for i in mine if ok(i)] or mine
+        if not cand:
+            return []
+        M = c["M"]; P, X = M[P_idx], M[cand]
+        neg = M[[c["pos"][f] for f in rej if f in c["pos"]]] if rej else None
+        others = []
+        for q in self.db["persons"]:
+            if q != pid:
+                oi = [c["pos"][f] for f, w in asg.items() if w == q and f in c["pos"] and ok(c["pos"][f])]
+                if oi:
+                    others.append(prototypes(M[oi], int(s["face_proto_k"])))
+        others = np.vstack(others) if others else None
+        if method == "nn":
+            sc = (X @ P.T).max(1)
+            rival = np.full(len(X), -1.0, np.float32)
+            for R in (neg, others):
+                if R is not None and len(R):
+                    rival = np.maximum(rival, (X @ R.T).max(1))
+            mg = sc - rival
+        else:
+            sc, mg = suggest_scores(X, P, neg, others, 0 if method == "centroid" else int(s["face_proto_k"]))
+        keep = np.nonzero((sc >= th) & (mg >= float(s["face_suggest_margin"])))[0]
+        order = keep[np.lexsort((-sc[keep], -mg[keep]))]
+        return [self.face_obj(c["ids"][cand[k]], m, {"score": round(float(sc[k]), 4), "margin": round(float(mg[k]), 4)})
+                for k in order[:max(1, int(limit))]]
 
     def reject(self, pid, faces) -> int:
         with self.lock:
@@ -902,7 +1121,7 @@ def a_unassign(req, ctx):
 def a_suggest(req, ctx):
     f = _svc(); _model_seed(f)
     th = req.get("threshold")
-    return {"ok": True, "person": req.get("person"), "faces": f.suggest(req.get("person"), req.get("method") or "nn", int(req.get("limit", 40)),
+    return {"ok": True, "person": req.get("person"), "faces": f.suggest(req.get("person"), req.get("method") or "proto", int(req.get("limit", 40)),
                                                                          float(th) if th is not None else None)}
 
 
@@ -966,6 +1185,18 @@ def a_pundo(req, ctx):
 @A("person_set_cover", doc="Cover face of a person {person, face}")
 def a_pcover(req, ctx):
     return {"ok": True, "person": _svc().set_cover(req.get("person"), req.get("face"))}
+
+
+@A("face_recompute", doc="Re-index faces (new alignment + quality) keeping person assignments by bbox IoU {hashes?}")
+def a_recompute(req, ctx):
+    f = _svc()
+    hs = req.get("hashes") if isinstance(req.get("hashes"), list) else None
+    from . import similarity
+    svc = similarity.service()
+    plan = f.recompute_plan(hs)
+    target = hs if hs is not None else None   # None = every library image
+    r = svc.enqueue(target, force=True, faces_only=True)
+    return {"ok": True, "remap_items": len(plan), **r}
 
 
 @A("face_settings", doc="Read / update face clustering settings {settings}")

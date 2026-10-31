@@ -265,6 +265,43 @@ def test_status_counts_shown_groups_and_last_threshold():
     assert s["clusters"] == 2 == f.list_clusters()["total"] and s["persons"] == 1, s
 
 
+def test_facequality_helpers():
+    s = dict(F.DEFAULTS)
+    assert F.face_quality(0.95, 120, [200, 0.1, 0.0, 2], s)["ok"]
+    q = F.face_quality(0.5, 120, [5, 0.9, 1.0, 2], s)
+    assert not q["ok"] and {"low_det", "blurry", "profile", "truncated"} <= set(q["flags"]) and q["aligned"] == 2
+    assert F.face_quality(None, None, None, s)["ok"]           # legacy faces: unknown never fails
+    # strict clustering does not chain A - bridge - B
+    rng = np.random.default_rng(0)
+    a, b = F._norm(rng.normal(size=(1, 64))), F._norm(rng.normal(size=(1, 64)))
+    A = F._norm(a + 0.15 * rng.normal(size=(6, 64))); B = F._norm(b + 0.15 * rng.normal(size=(6, 64)))
+    br = F._norm((a + b))
+    M = F._norm(np.vstack([A, br, B]))
+    gs = F.strict_cluster(M, list(range(len(M))), [], 0.5, 3, 0.05)
+    assert not any(set(g) & set(range(6)) and set(g) & set(range(7, 13)) for g in gs), gs
+    # prototypes / suggest margin: a candidate closer to a rival person gets a negative margin
+    P = A; others = F.prototypes(B, 2)
+    sc, mg = F.suggest_scores(np.vstack([A[:1], B[:1]]), P, None, others, 2)
+    assert mg[0] > 0 > mg[1]
+    # remap by IoU
+    mp = F.remap_by_iou({0: [0.1, 0.1, 0.2, 0.2], 1: [0.6, 0.6, 0.2, 0.2], 2: [0.0, 0.9, 0.05, 0.05]},
+                        [[0.61, 0.6, 0.2, 0.2], [0.1, 0.11, 0.2, 0.2]])
+    assert mp == {0: 1, 1: 0, 2: None}, mp
+
+
+def test_recompute_keeps_assignments():
+    data, truth = synth(people=2, per=6)
+    f, _, d = mk(data)
+    f.run()
+    c = list(f.clusters()["clusters"])[0]
+    f.assign_faces(name="Ana", clusters=[c])
+    before = dict(f.assign("arcface"))
+    hs = f.recompute_plan()
+    assert set(hs) == {F.parse_fid(x)[0] for x in before} and f.db["remap"]["arcface"]
+    f._remap_pending(set(hs), "arcface")   # same boxes -> identity mapping
+    assert f.assign("arcface") == before and not f.db["remap"]["arcface"]
+
+
 if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):

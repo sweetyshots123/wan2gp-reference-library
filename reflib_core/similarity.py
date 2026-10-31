@@ -69,7 +69,7 @@ def _atomic_npz(path, **arrays):
     os.replace(tmp, path)
 
 
-def _face_pack(vec, box=None, det=None):
+def _face_pack(vec, box=None, det=None, q=None):
     """In-memory multi-face record for one (item, face_model): embeddings + optional bbox/score.
 
     box: (n, 4) float32 xywh normalised 0..1; NaN row = unknown (legacy entries without bbox).
@@ -92,7 +92,22 @@ def _face_pack(vec, box=None, det=None):
         s = np.asarray(det, np.float32).reshape(-1)
         if s.shape[0] != n:
             s = np.full(n, np.nan, np.float32)
-    return {"vec": v, "box": b, "det": s}
+    return {"vec": v, "box": b, "det": s, "q": _q_rows(q, n)}
+
+
+Q_COLS = ("blur", "yaw", "trunc", "aligned")   # facequality: per-face quality inputs; NaN = unknown (pre-facequality)
+
+
+def _q_rows(q, n):
+    if q is not None:
+        q = np.asarray(q, np.float32)
+        if q.ndim == 2 and q.shape == (n, len(Q_COLS)):
+            return q
+    return np.full((n, len(Q_COLS)), np.nan, np.float32)
+
+
+def _pack_q(pack, n):
+    return _q_rows(pack.get("q") if isinstance(pack, dict) else None, n)
 
 
 def _face_vec(pack):
@@ -111,6 +126,7 @@ def _norm_boxes(faces, w, h):
     n = len(faces)
     box = np.full((n, 4), np.nan, np.float32)
     det = np.full(n, np.nan, np.float32)
+    q = np.full((n, len(Q_COLS)), np.nan, np.float32)
     iw, ih = float(w or 0), float(h or 0)
     for i, f in enumerate(faces):
         b = f.get("box")
@@ -118,7 +134,11 @@ def _norm_boxes(faces, w, h):
             box[i] = [float(b[0]) / iw, float(b[1]) / ih, float(b[2]) / iw, float(b[3]) / ih]
         if f.get("det") is not None:
             det[i] = float(f["det"])
-    return box, det
+        if isinstance(f.get("q"), (list, tuple)) and len(f["q"]) == 3:
+            q[i, :3] = [float(x) for x in f["q"]]
+        if f.get("al") is not None:
+            q[i, 3] = float(f["al"])
+    return box, det, q
 
 
 # ---------------------------------------------------------------------------------------------------- index
@@ -171,6 +191,7 @@ class SimIndex:
                         # Absent in older npz -> NaN (legacy sole face = face_i 0 with null bbox).
                         box = z["box"] if "box" in z.files else None
                         det = z["det"] if "det" in z.files else None
+                        qz = z["q"] if "q" in z.files else None
                 except Exception:
                     continue
                 if fm is not None:
@@ -183,12 +204,18 @@ class SimIndex:
                             box = box[keep]
                         if det is not None:
                             det = det[keep]
+                        if qz is not None:
+                            qz = qz[keep]
                 order = np.argsort(own, kind="stable")
                 own, vec = own[order], vec[order]
                 if box is not None:
                     box = np.asarray(box, np.float32)[order]
                 if det is not None:
                     det = np.asarray(det, np.float32)[order]
+                if fm is not None and qz is not None and len(qz) == len(order):
+                    qz = np.asarray(qz, np.float32)[order]
+                else:
+                    qz = None
                 cuts = np.searchsorted(own, np.arange(len(keys) + 1))
                 for k, h in enumerate(keys.tolist()):
                     if h in self.items:
@@ -199,7 +226,7 @@ class SimIndex:
                             n = int(cuts[k + 1] - cuts[k])
                             b = box[sl] if box is not None else np.full((n, 4), np.nan, np.float32)
                             d = det[sl] if det is not None else np.full(n, np.nan, np.float32)
-                            self.items[h]["faces"][fm] = _face_pack(vec[sl], b, d)
+                            self.items[h]["faces"][fm] = _face_pack(vec[sl], b, d, qz[sl] if qz is not None else None)
             self.rev += 1
             self._dirty_pose = False
             self._dirty_faces.clear()
@@ -229,7 +256,7 @@ class SimIndex:
                 if has_any or os.path.isfile(path):
                     todo.append(("face-%s.npz" % m, m, (0, d)))
             for name, fm, shape in todo:
-                vecs, own, boxes, dets = [], [], [], []
+                vecs, own, boxes, dets, qs = [], [], [], [], []
                 for k, h in enumerate(keys):
                     if fm is None:
                         v = self.items[h]["p"]
@@ -245,12 +272,14 @@ class SimIndex:
                             else:
                                 boxes.append(np.full((len(v), 4), np.nan, np.float32))
                                 dets.append(np.full(len(v), np.nan, np.float32))
+                            qs.append(_pack_q(pack, len(v)))
                 n = sum(len(v) for v in vecs)
                 extra = {}
                 if fm is not None:
                     extra["model"] = np.full(n, fm, dtype="<U16")
                     extra["box"] = np.concatenate(boxes).astype(np.float32) if boxes else np.zeros((0, 4), np.float32)
                     extra["det"] = np.concatenate(dets).astype(np.float32) if dets else np.zeros(0, np.float32)
+                    extra["q"] = np.concatenate(qs).astype(np.float32) if qs else np.zeros((0, len(Q_COLS)), np.float32)
                 _atomic_npz(os.path.join(self.dir, name), keys=np.array(keys, dtype=str),
                             owner=np.concatenate(own) if own else np.zeros(0, np.int32),
                             vec=np.concatenate(vecs).astype(np.float16) if vecs else np.zeros(shape, np.float16), **extra)
@@ -283,8 +312,8 @@ class SimIndex:
                     if f.ndim != 2 or f.shape[1] != D:
                         raise ValueError("face vector dim %s does not match %s" % (getattr(f, "shape", None), face_model))
                     bw, bh = res.get("w", 0), res.get("h", 0)
-                    box, det = _norm_boxes(raw, bw, bh)
-                    e["faces"][face_model] = _face_pack(f, box, det)
+                    box, det, q = _norm_boxes(raw, bw, bh)
+                    e["faces"][face_model] = _face_pack(f, box, det, q)
                     e.update(w=bw, h=bh, err="", t=time.time())
                 else:
                     e.update(w=res.get("w", e.get("w", 0)), h=res.get("h", e.get("h", 0)), err="", t=time.time())
@@ -362,6 +391,7 @@ class SimIndex:
             return
         box = pack["box"] if isinstance(pack, dict) else np.full((len(v), 4), np.nan, np.float32)
         det = pack["det"] if isinstance(pack, dict) else np.full(len(v), np.nan, np.float32)
+        q = _pack_q(pack, len(v))
         recs = []
         for i in range(len(v)):
             b = box[i]
@@ -372,6 +402,7 @@ class SimIndex:
                 "box": None if not np.isfinite(b).all() else [float(x) for x in b],
                 "det": None if not np.isfinite(det[i]) else float(det[i]),
                 "emb": np.asarray(v[i], np.float32),
+                "q": q[i],
             })
         for cb in list(self._face_listeners):
             try:
@@ -394,7 +425,7 @@ class SimIndex:
         fm = fm or self.active
         D = FACE_DIM.get(fm, 512)
         with self.lock:
-            ids, fi, vecs, boxes, dets = [], [], [], [], []
+            ids, fi, vecs, boxes, dets, qs = [], [], [], [], [], []
             for h, e in self.items.items():
                 if e.get("err"):
                     continue
@@ -411,13 +442,16 @@ class SimIndex:
                 else:
                     boxes.append(np.full((n, 4), np.nan, np.float32))
                     dets.append(np.full(n, np.nan, np.float32))
+                qs.append(_pack_q(pack, n))
             if not vecs:
                 return {"model": fm, "ids": np.array([], dtype=object), "face_i": np.zeros(0, np.int32),
-                        "vec": np.zeros((0, D), np.float32), "box": np.zeros((0, 4), np.float32), "det": np.zeros(0, np.float32)}
+                        "vec": np.zeros((0, D), np.float32), "box": np.zeros((0, 4), np.float32), "det": np.zeros(0, np.float32),
+                        "q": np.zeros((0, len(Q_COLS)), np.float32)}
             return {"model": fm, "ids": np.asarray(ids, dtype=object), "face_i": np.concatenate(fi),
                     "vec": np.concatenate(vecs).astype(np.float32, copy=False),
                     "box": np.concatenate(boxes).astype(np.float32, copy=False),
-                    "det": np.concatenate(dets).astype(np.float32, copy=False)}
+                    "det": np.concatenate(dets).astype(np.float32, copy=False),
+                    "q": np.concatenate(qs).astype(np.float32, copy=False)}
 
 
 def search(index: SimIndex, queries: List[Dict[str, np.ndarray]], mode: str = "both", w_pose: float = 0.5, threshold: float = 0.0,
