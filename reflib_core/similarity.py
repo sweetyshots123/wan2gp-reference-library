@@ -25,12 +25,13 @@ BUSY: Callable[[], bool] = lambda: False   # set by the host (WanGP: "a generati
 
 VERSION = 1
 SAVE_EVERY = 50
-BATCH = 8
+BATCH = 24   # 1.9.6-simperf: larger IPC batches so decode prefetch has work to overlap
 IDLE_UNLOAD = 120.0
 SYNC_EVERY = 60.0
 RESULTS_KEEP = 30
+# workers: decode/prefetch threads inside simworker (0 = auto from CPU count, typically 2..4)
 DEFAULTS = {"python": "", "face_model": "arcface", "auto": True, "gpu": True, "models_dir": "", "w_pose": 0.5,
-            "threshold": 0.0, "mirror": True, "limit": 1000}
+            "threshold": 0.0, "mirror": True, "limit": 1000, "workers": 0}
 # Face recognisers the user can pick (Ajustes > Modelo de caras). Each keeps its own vectors (never mixed).
 FACE_MODELS = {   # id -> file, aliases, dim, label, licence
     "arcface": {"file": "w600k_r50.onnx", "alias": ["buffalo_l/w600k_r50.onnx"], "dim": 512, "label": "ArcFace w600k_r50 (buffalo_l)",
@@ -68,6 +69,58 @@ def _atomic_npz(path, **arrays):
     os.replace(tmp, path)
 
 
+def _face_pack(vec, box=None, det=None):
+    """In-memory multi-face record for one (item, face_model): embeddings + optional bbox/score.
+
+    box: (n, 4) float32 xywh normalised 0..1; NaN row = unknown (legacy entries without bbox).
+    det: (n,) float32 detector score; NaN = unknown.
+    Face index within the image is the row order (0 = first / legacy sole face).
+    """
+    v = np.asarray(vec, np.float16)
+    if v.ndim == 1:
+        v = v.reshape(1, -1) if v.size else np.zeros((0, 0), np.float16)
+    n = int(v.shape[0])
+    if box is None:
+        b = np.full((n, 4), np.nan, np.float32)
+    else:
+        b = np.asarray(box, np.float32).reshape(-1, 4)
+        if b.shape[0] != n:
+            b = np.full((n, 4), np.nan, np.float32)
+    if det is None:
+        s = np.full(n, np.nan, np.float32)
+    else:
+        s = np.asarray(det, np.float32).reshape(-1)
+        if s.shape[0] != n:
+            s = np.full(n, np.nan, np.float32)
+    return {"vec": v, "box": b, "det": s}
+
+
+def _face_vec(pack):
+    if pack is None:
+        return None
+    return pack["vec"] if isinstance(pack, dict) else pack  # legacy bare ndarray
+
+
+def _face_n(pack) -> int:
+    v = _face_vec(pack)
+    return 0 if v is None else int(len(v))
+
+
+def _norm_boxes(faces, w, h):
+    """Worker boxes are pixel xywh in original image space; store normalised 0..1 (or NaN)."""
+    n = len(faces)
+    box = np.full((n, 4), np.nan, np.float32)
+    det = np.full(n, np.nan, np.float32)
+    iw, ih = float(w or 0), float(h or 0)
+    for i, f in enumerate(faces):
+        b = f.get("box")
+        if b is not None and len(b) >= 4 and iw > 0 and ih > 0:
+            box[i] = [float(b[0]) / iw, float(b[1]) / ih, float(b[2]) / iw, float(b[3]) / ih]
+        if f.get("det") is not None:
+            det[i] = float(f["det"])
+    return box, det
+
+
 # ---------------------------------------------------------------------------------------------------- index
 class SimIndex:
     """Vectors per image hash. In memory: dict hash -> {"p": (n,17,3) f16, "f": (m,D) f16, "w", "h", "err"}."""
@@ -80,6 +133,12 @@ class SimIndex:
         self.active = "arcface"  # face model whose vectors are searched / counted; others are kept but never mixed
         self.rev = 0
         self._mat = None
+        # 1.9.6-simperf: only rewrite npz files that changed (rewriting every face-*.npz each SAVE_EVERY
+        # dominated wall time once the index grew past a few thousand images).
+        self._dirty_pose = False
+        self._dirty_faces: set = set()
+        self._dirty_meta = False
+        self._face_listeners: List[Callable] = []
         self.load()
 
     @property
@@ -108,6 +167,10 @@ class SimIndex:
                     with np.load(os.path.join(self.dir, name), allow_pickle=False) as z:
                         keys, own, vec = z["keys"], z["owner"], z["vec"]
                         model = z["model"] if "model" in z.files else None
+                        # 1.9.6-simperf Personas: optional per-face bbox (xywh 0..1) + detector score.
+                        # Absent in older npz -> NaN (legacy sole face = face_i 0 with null bbox).
+                        box = z["box"] if "box" in z.files else None
+                        det = z["det"] if "det" in z.files else None
                 except Exception:
                     continue
                 if fm is not None:
@@ -116,29 +179,78 @@ class SimIndex:
                     if model is not None:   # per-vector model id: drop anything that is not this file's model
                         keep = model == fm
                         own, vec = own[keep], vec[keep]
+                        if box is not None:
+                            box = box[keep]
+                        if det is not None:
+                            det = det[keep]
                 order = np.argsort(own, kind="stable")
                 own, vec = own[order], vec[order]
+                if box is not None:
+                    box = np.asarray(box, np.float32)[order]
+                if det is not None:
+                    det = np.asarray(det, np.float32)[order]
                 cuts = np.searchsorted(own, np.arange(len(keys) + 1))
                 for k, h in enumerate(keys.tolist()):
                     if h in self.items:
                         if fm is None:
                             self.items[h]["p"] = vec[cuts[k]:cuts[k + 1]]
                         elif fm in done.get(h, ()) and fm not in self.items[h]["faces"]:
-                            self.items[h]["faces"][fm] = vec[cuts[k]:cuts[k + 1]]
+                            sl = slice(cuts[k], cuts[k + 1])
+                            n = int(cuts[k + 1] - cuts[k])
+                            b = box[sl] if box is not None else np.full((n, 4), np.nan, np.float32)
+                            d = det[sl] if det is not None else np.full(n, np.nan, np.float32)
+                            self.items[h]["faces"][fm] = _face_pack(vec[sl], b, d)
             self.rev += 1
+            self._dirty_pose = False
+            self._dirty_faces.clear()
+            self._dirty_meta = False
 
-    def save(self):
+    def save(self, force: bool = False):
+        """Atomic incremental save. force=True rewrites every npz (final job save / migration).
+
+        Otherwise only pose.npz and face-<model>.npz that received new vectors since the last save are
+        rewritten, plus meta.json. Unused empty face-*.npz are left alone so a crash mid-job never loses
+        already-committed vectors, and a new build can resume from the current meta + npz without reindex.
+        """
         with self.lock:
             os.makedirs(self.dir, exist_ok=True)
             keys = list(self.items)
-            for name, fm, shape in [("pose.npz", None, (0, 17, 3))] + [("face-%s.npz" % m, m, (0, d)) for m, d in FACE_DIM.items()]:
-                vecs, own = [], []
+            todo = []
+            if force or self._dirty_pose:
+                todo.append(("pose.npz", None, (0, 17, 3)))
+            dirty_fm = set(FACE_DIM) if force else set(self._dirty_faces)
+            for m, d in FACE_DIM.items():
+                if m not in dirty_fm:
+                    continue
+                # Never create a brand-new empty face-*.npz for an unused model; rewrite if it has
+                # vectors or the file already exists (keeps resume / multi-model indexes intact).
+                has_any = any(_face_n(self.items[h]["faces"].get(m)) for h in keys)
+                path = os.path.join(self.dir, "face-%s.npz" % m)
+                if has_any or os.path.isfile(path):
+                    todo.append(("face-%s.npz" % m, m, (0, d)))
+            for name, fm, shape in todo:
+                vecs, own, boxes, dets = [], [], [], []
                 for k, h in enumerate(keys):
-                    v = self.items[h]["p"] if fm is None else self.items[h]["faces"].get(fm)
-                    if v is not None and len(v):
-                        vecs.append(v); own.append(np.full(len(v), k, np.int32))
+                    if fm is None:
+                        v = self.items[h]["p"]
+                        if v is not None and len(v):
+                            vecs.append(v); own.append(np.full(len(v), k, np.int32))
+                    else:
+                        pack = self.items[h]["faces"].get(fm)
+                        v = _face_vec(pack)
+                        if v is not None and len(v):
+                            vecs.append(v); own.append(np.full(len(v), k, np.int32))
+                            if isinstance(pack, dict):
+                                boxes.append(pack["box"]); dets.append(pack["det"])
+                            else:
+                                boxes.append(np.full((len(v), 4), np.nan, np.float32))
+                                dets.append(np.full(len(v), np.nan, np.float32))
                 n = sum(len(v) for v in vecs)
-                extra = {} if fm is None else {"model": np.full(n, fm, dtype="<U16")}   # model id per vector
+                extra = {}
+                if fm is not None:
+                    extra["model"] = np.full(n, fm, dtype="<U16")
+                    extra["box"] = np.concatenate(boxes).astype(np.float32) if boxes else np.zeros((0, 4), np.float32)
+                    extra["det"] = np.concatenate(dets).astype(np.float32) if dets else np.zeros(0, np.float32)
                 _atomic_npz(os.path.join(self.dir, name), keys=np.array(keys, dtype=str),
                             owner=np.concatenate(own) if own else np.zeros(0, np.int32),
                             vec=np.concatenate(vecs).astype(np.float16) if vecs else np.zeros(shape, np.float16), **extra)
@@ -146,10 +258,14 @@ class SimIndex:
                 os.remove(os.path.join(self.dir, "face.npz"))   # legacy, now split per model
             except OSError:
                 pass
-            _atomic_json(self.meta_path, {"version": VERSION, "face_models": sorted(FACE_DIM), "pose_model": "dwpose-body17",
-                                          "items": {h: {"np": int(len(e["p"])), "nf": {m: int(len(v)) for m, v in e["faces"].items()},
-                                                        "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0)}
-                                                    for h, e in self.items.items()}})
+            if force or self._dirty_meta or todo:
+                _atomic_json(self.meta_path, {"version": VERSION, "face_models": sorted(FACE_DIM), "pose_model": "dwpose-body17",
+                                              "items": {h: {"np": int(len(e["p"])), "nf": {m: int(_face_n(v)) for m, v in e["faces"].items()},
+                                                            "w": e.get("w", 0), "h": e.get("h", 0), "err": e.get("err", ""), "t": e.get("t", 0)}
+                                                        for h, e in self.items.items()}})
+            self._dirty_pose = False
+            self._dirty_faces.clear()
+            self._dirty_meta = False
 
     def put(self, h: str, res: Dict[str, Any], face_model: str):
         with self.lock:
@@ -162,17 +278,31 @@ class SimIndex:
                     e["p"] = np.asarray([p["kp"] for p in res["persons"]], np.float16).reshape(-1, 17, 3)
                 if "faces" in res:
                     D = FACE_DIM[face_model]
-                    f = np.stack([np.frombuffer(base64.b64decode(f["emb"]), np.float16) for f in res["faces"]]) if res["faces"] else np.zeros((0, D), np.float16)
-                    if f.shape[1] != D:
-                        raise ValueError("face vector dim %d does not match %s" % (f.shape[1], face_model))
-                    e["faces"][face_model] = f
-                e.update(w=res.get("w", 0), h=res.get("h", 0), err="", t=time.time())
+                    raw = res["faces"] or []
+                    f = np.stack([np.frombuffer(base64.b64decode(x["emb"]), np.float16) for x in raw]) if raw else np.zeros((0, D), np.float16)
+                    if f.ndim != 2 or f.shape[1] != D:
+                        raise ValueError("face vector dim %s does not match %s" % (getattr(f, "shape", None), face_model))
+                    bw, bh = res.get("w", 0), res.get("h", 0)
+                    box, det = _norm_boxes(raw, bw, bh)
+                    e["faces"][face_model] = _face_pack(f, box, det)
+                    e.update(w=bw, h=bh, err="", t=time.time())
+                else:
+                    e.update(w=res.get("w", e.get("w", 0)), h=res.get("h", e.get("h", 0)), err="", t=time.time())
             self.items[h] = e
             self.rev += 1
+            self._dirty_meta = True
+            if "persons" in res or not res.get("ok"):
+                self._dirty_pose = True
+            if "faces" in res and face_model:
+                self._dirty_faces.add(face_model)
+                pack = e["faces"].get(face_model)
+                if pack is not None and _face_n(pack):
+                    self._notify_faces(h, face_model, pack)
 
     def face(self, h: str, fm: Optional[str] = None):
+        """Embedding matrix (n, D) float16 for search; None if missing. Multi-face = multiple rows."""
         e = self.items.get(h)
-        return None if not e else e["faces"].get(fm or self.active)
+        return None if not e else _face_vec(e["faces"].get(fm or self.active))
 
     def has(self, h: str, fm: Optional[str] = None) -> bool:
         e = self.items.get(h)
@@ -194,7 +324,7 @@ class SimIndex:
                 e = self.items[h]
                 if len(e["p"]):
                     P.append(e["p"]); Po.append(np.full(len(e["p"]), k, np.int32))
-                f = e["faces"].get(self.active)
+                f = _face_vec(e["faces"].get(self.active))
                 if f is not None and len(f):
                     F.append(f); Fo.append(np.full(len(f), k, np.int32))
             D = FACE_DIM.get(self.active, 512)
@@ -207,8 +337,87 @@ class SimIndex:
         with self.lock:
             return {"images": sum(1 for e in self.items.values() if not e.get("err")), "errors": sum(1 for e in self.items.values() if e.get("err")),
                     "persons": int(sum(len(e["p"]) for e in self.items.values())),
-                    "faces": int(sum(len(e["faces"].get(self.active, ())) for e in self.items.values())),
+                    "faces": int(sum(_face_n(e["faces"].get(self.active)) for e in self.items.values())),
                     "faces_pending": sum(1 for h in self.items if self.needs_faces_only(h)), "face_model": self.active}
+
+    # -------------------------------------------------------------------------------- Personas / face records
+    def on_faces(self, callback: Callable) -> Callable[[], None]:
+        """Subscribe to newly indexed faces. callback(records) where each record is
+        {id, face_i, model, box, det, emb}. Returns an unsubscribe function.
+
+        Designed for reflib_core/faces.py (clustering / person assignment) to update
+        incrementally without re-reading the whole index after every batch.
+        """
+        self._face_listeners.append(callback)
+        def _unsub():
+            try:
+                self._face_listeners.remove(callback)
+            except ValueError:
+                pass
+        return _unsub
+
+    def _notify_faces(self, h: str, fm: str, pack):
+        v = _face_vec(pack)
+        if v is None or not len(v):
+            return
+        box = pack["box"] if isinstance(pack, dict) else np.full((len(v), 4), np.nan, np.float32)
+        det = pack["det"] if isinstance(pack, dict) else np.full(len(v), np.nan, np.float32)
+        recs = []
+        for i in range(len(v)):
+            b = box[i]
+            recs.append({
+                "id": h,
+                "face_i": i,
+                "model": fm,
+                "box": None if not np.isfinite(b).all() else [float(x) for x in b],
+                "det": None if not np.isfinite(det[i]) else float(det[i]),
+                "emb": np.asarray(v[i], np.float32),
+            })
+        for cb in list(self._face_listeners):
+            try:
+                cb(recs)
+            except Exception:
+                pass
+
+    def face_matrix(self, fm: Optional[str] = None) -> Dict[str, Any]:
+        """Efficient dump of every face vector for Personas clustering / assignment.
+
+        Returns a dict (all arrays length F, aligned):
+          model: str — face model id
+          ids: (F,) object — item hash per face
+          face_i: (F,) int32 — 0-based index within that item (legacy sole face => 0)
+          vec: (F, D) float32 — L2-normalised embeddings
+          box: (F, 4) float32 — xywh normalised 0..1; NaN row if unknown (legacy)
+          det: (F,) float32 — detector score; NaN if unknown
+        Empty index => F=0 arrays with the right shapes.
+        """
+        fm = fm or self.active
+        D = FACE_DIM.get(fm, 512)
+        with self.lock:
+            ids, fi, vecs, boxes, dets = [], [], [], [], []
+            for h, e in self.items.items():
+                if e.get("err"):
+                    continue
+                pack = e["faces"].get(fm)
+                v = _face_vec(pack)
+                if v is None or not len(v):
+                    continue
+                n = len(v)
+                ids.extend([h] * n)
+                fi.append(np.arange(n, dtype=np.int32))
+                vecs.append(np.asarray(v, np.float32))
+                if isinstance(pack, dict):
+                    boxes.append(pack["box"]); dets.append(pack["det"])
+                else:
+                    boxes.append(np.full((n, 4), np.nan, np.float32))
+                    dets.append(np.full(n, np.nan, np.float32))
+            if not vecs:
+                return {"model": fm, "ids": np.array([], dtype=object), "face_i": np.zeros(0, np.int32),
+                        "vec": np.zeros((0, D), np.float32), "box": np.zeros((0, 4), np.float32), "det": np.zeros(0, np.float32)}
+            return {"model": fm, "ids": np.asarray(ids, dtype=object), "face_i": np.concatenate(fi),
+                    "vec": np.concatenate(vecs).astype(np.float32, copy=False),
+                    "box": np.concatenate(boxes).astype(np.float32, copy=False),
+                    "det": np.concatenate(dets).astype(np.float32, copy=False)}
 
 
 def search(index: SimIndex, queries: List[Dict[str, np.ndarray]], mode: str = "both", w_pose: float = 0.5, threshold: float = 0.0,
@@ -357,7 +566,13 @@ class SimService:
         s = self.settings()
         for k, v in (upd or {}).items():
             if k in DEFAULTS:
-                s[k] = type(DEFAULTS[k])(v) if not isinstance(DEFAULTS[k], bool) else bool(v)
+                if k == "workers":
+                    try:
+                        s[k] = max(0, min(16, int(v)))
+                    except (TypeError, ValueError):
+                        s[k] = 0
+                else:
+                    s[k] = type(DEFAULTS[k])(v) if not isinstance(DEFAULTS[k], bool) else bool(v)
         if s["face_model"] not in FACE_DIM:
             s["face_model"] = "arcface"
         old = self.settings()["face_model"]
@@ -395,8 +610,8 @@ class SimService:
             done = {k: 0 for k in FACE_MODELS}
             for e in self.index.items.values():
                 if not e.get("err"):
-                    for k in e["faces"]:
-                        if k in done:
+                    for k, pack in e["faces"].items():
+                        if k in done and _face_n(pack) >= 0:
                             done[k] += 1
         return [{"id": k, "label": m["label"], "license": m["license"], "dim": m["dim"], "mb": MODEL_FILES[m["file"]][1],
                  "downloaded": self.model_found(m["file"]), "images": done[k]} for k, m in FACE_MODELS.items()]
@@ -434,6 +649,7 @@ class SimService:
         if self.worker is None:
             s = self.settings()
             self.worker = WorkerProc(self.python(), {"dirs": self.model_dirs(), "face_model": s["face_model"], "gpu": s["gpu"],
+                                                         "workers": int(s.get("workers") or 0),
                                                          "face_files": {k: [m["file"]] + m["alias"] for k, m in FACE_MODELS.items()}, "log": os.path.join(self.dir, "worker.log")}, self.log)
         self.last_used = time.time()
         return self.worker
@@ -442,6 +658,13 @@ class SimService:
         w, self.worker = self.worker, None
         if w:
             w.stop()
+
+    # Personas: thin pass-through so faces.py does not reach into SimIndex internals.
+    def face_matrix(self, fm: Optional[str] = None) -> Dict[str, Any]:
+        return self.index.face_matrix(fm or self.index.active)
+
+    def on_faces(self, callback: Callable) -> Callable[[], None]:
+        return self.index.on_faces(callback)
 
     def analyse(self, paths: List[str], pose: bool = True) -> List[Dict[str, Any]]:
         if self.missing_models():
@@ -583,8 +806,8 @@ class SimService:
                 if n_since >= SAVE_EVERY:
                     self.index.save(); n_since = 0
         finally:
-            if n_since:
-                self.index.save()
+            if n_since or self.index._dirty_meta or self.index._dirty_pose or self.index._dirty_faces:
+                self.index.save(force=True)
             self.st.update(running=False, waiting="")
             if not self.pending:
                 self.st.update(done=0, total=0, failed=0)

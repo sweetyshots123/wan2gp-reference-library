@@ -3,6 +3,7 @@
 Routes added to WanGP's FastAPI app (behind WanGP's login check when auth is on):
   GET  /reflib/gallery/...   the built Galería SPA (gallery/dist)
   POST /reflib/api           JSON body -> plugin.ilib(...)  (exactly the media-browser bridge: every action)
+  GET  /reflib/face_thumb/<face id>.jpg?size=&margin=   cropped face (faces.face_thumb_path)
   POST /reflib/upload        multipart files -> plugin.ilib_upload(...) (import into the unassigned pool)
 Nothing is duplicated: the Galería calls the same handler as the Media browser, so a change made in one UI is what
 the other reads on its next query."""
@@ -69,6 +70,18 @@ def mount(app, dependencies=None) -> None:
         if not p.startswith(root + os.sep) or not os.path.isfile(p):
             return Response("not found", status_code=404)
         return FileResponse(p, filename=os.path.basename(p))
+
+    @r.get("/reflib/face_thumb/{name}")
+    async def face_thumb(name: str, size: int = 160, margin: float = 0.4):   # 1.10.0: Personas face crops (both UIs)
+        from .reflib_core import faces as _faces
+        fid = name[:-4] if name.endswith(".jpg") else name
+        try:
+            p = await run_in_threadpool(_faces.face_thumb_path, fid, size, margin)
+        except Exception:
+            p = None
+        if not p:
+            return Response("not found", status_code=404)
+        return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
 
     @r.get("/reflib/gallery")
     async def gallery_root():

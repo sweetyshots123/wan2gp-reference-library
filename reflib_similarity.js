@@ -18,7 +18,8 @@
               face_lic: "Face model: {m}", score: "Similarity {s}%",
               fm: "Face model", fm_done: "{n} of {l} images", fm_dl: "not downloaded · {mb} MB, downloads on first use", faces_build: "Compute faces ({m})",
               fm_lic: "Licence: {l}", fm_fb: "{m} could not load, using SFace instead ({e})", dlp: "Downloading {m}: {d} / {t} MB ({p}%)",
-              fm_switch: "Each model keeps its own face index: switching back is instant once computed." },
+              fm_switch: "Each model keeps its own face index: switching back is instant once computed.",
+              workers: "Decode workers", workers_auto: "Auto (CPU)", workers_tip: "Parallel image decode / resize while the GPU runs. 0 = auto (2–4). 1 = sequential (best when images are local/fast). Takes effect on the next indexing batch." },
         es: { find: "Buscar similares", find_tip: "Busca imágenes con una pose y/o cara parecida", find_sel: "Buscar similares ({n})", title: "Buscar imágenes similares",
               q_n: "{n} imágenes de consulta", drop: "Suelta fotos aquí o haz clic para añadir (no se guardan en la biblioteca)", mode: "Comparar", m_pose: "Pose", m_face: "Cara", m_both: "Ambas",
               w: "Peso de la pose", thr: "Similitud mínima", agg: "Varias imágenes de consulta", a_any: "Parecidas a cualquiera", a_avg: "Parecidas a todas (media)",
@@ -30,7 +31,8 @@
               face_lic: "Modelo de caras: {m}", score: "Similitud {s}%",
               fm: "Modelo de caras", fm_done: "{n} de {l} imágenes", fm_dl: "sin descargar · {mb} MB, se descarga al usarlo", faces_build: "Calcular caras ({m})",
               fm_lic: "Licencia: {l}", fm_fb: "{m} no se pudo cargar, se usa SFace ({e})", dlp: "Descargando {m}: {d} / {t} MB ({p}%)",
-              fm_switch: "Cada modelo guarda su propio índice de caras: volver a uno ya calculado es instantáneo." },
+              fm_switch: "Cada modelo guarda su propio índice de caras: volver a uno ya calculado es instantáneo.",
+              workers: "Workers de decodificación", workers_auto: "Auto (CPU)", workers_tip: "Decodifica / redimensiona imágenes en paralelo mientras la GPU calcula. 0 = auto (2–4). 1 = secuencial (mejor si las imágenes son locales/rápidas). Se aplica en el siguiente lote de indexación." },
     };
     const lang = () => (RL.lang && RL.lang() === "es" ? "es" : "en");
     const st = (k, p = {}) => String((S[lang()] || S.en)[k] ?? S.en[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (p[n] ?? m));
@@ -90,6 +92,7 @@
         dlg.addEventListener("change", e => {
             const k = e.target.dataset.s;
             if (k === "fm") { fmSig = ""; RL.sendIlib({ action: "sim_settings", settings: { face_model: e.target.value } }).then(status); return; }
+            if (k === "workers") { fmSig = ""; RL.sendIlib({ action: "sim_settings", settings: { workers: +e.target.value } }).then(status); return; }
             if (k === "agg") opts.agg = e.target.value; else if (k === "mirror") opts.mirror = e.target.checked; else if (e.target.type === "file") addFiles(e.target.files); else return;
             saveOpts();
         });
@@ -111,11 +114,14 @@
             const dlTxt = dl ? st("dlp", { m: dl.file, d: mb(dl.done), t: mb(dl.total), p: dl.total ? Math.round(100 * dl.done / dl.total) : 0 }) : "";
             const fms = s.face_models || [], sel = s.face_model_setting || s.face_model, cur = fms.find(m => m.id === sel) || {};
             const fmHost = dlg.querySelector(".reflib-sim-fm");
-            const sig = JSON.stringify([lang(), sel, s.face_model, s.face_fallback, s.library, fms.map(m => [m.images, m.downloaded])]);
+            const wrk = (s.settings && s.settings.workers != null) ? s.settings.workers : 0;
+            const sig = JSON.stringify([lang(), sel, s.face_model, s.face_fallback, s.library, wrk, fms.map(m => [m.images, m.downloaded])]);
             if (fmHost && sig !== fmSig) {
                 fmSig = sig;
+                const wopts = [0, 1, 2, 4, 8].map(n => `<option value="${n}"${+wrk === n ? " selected" : ""}>${n === 0 ? esc(st("workers_auto")) : n}</option>`).join("");
                 fmHost.innerHTML = `<label>${esc(st("fm"))} <select data-s="fm">${fms.map(m => `<option value="${esc(m.id)}"${m.id === sel ? " selected" : ""}>${esc(m.label)} — ${esc(m.downloaded ? st("fm_done", { n: m.images, l: s.library || 0 }) : st("fm_dl", { mb: m.mb }))}</option>`).join("")}</select></label>`
                     + `<div class="reflib-sim-lic">${esc(st("fm_lic", { l: cur.license || "" }))}</div><div class="reflib-sim-lic">${esc(st("fm_switch"))}</div>`
+                    + `<label title="${esc(st("workers_tip"))}">${esc(st("workers"))} <select data-s="workers">${wopts}</select></label>`
                     + (s.face_fallback ? `<div class="reflib-sim-err">${esc(st("fm_fb", { m: cur.label || sel, e: s.face_fallback }))}</div>` : "");
             }
             host.innerHTML = `<div>${esc(st("idx", { i: ix.images || 0, l: s.library || 0, p: ix.persons || 0, f: ix.faces || 0 }))} · <span class="reflib-sim-lic">${esc(st("face_lic", { m: s.face_model }))}</span></div>`
