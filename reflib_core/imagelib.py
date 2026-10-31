@@ -1732,6 +1732,7 @@ AUTOTAGS = None
 AUTOTAG_STORE = None   # 1.7.1: the host's TagStore (pop / restore when an entry is removed from the library)
 # 1.5.4: the host sets JOBSTATUS = callable -> (rev, {hash: queued|processing|done|failed|local})
 JOBSTATUS = None
+SIMILARITY = None   # 1.8.4: similarity.service() sets it: sid -> {hash: score} (the {"sim": sid} result-set filter)
 JST_KEYS = ("queued", "processing", "done", "failed", "local", "never")
 
 
@@ -1879,7 +1880,8 @@ def _clean_filter(f) -> Dict[str, Any]:
             # 1.8.2 Galería: several types at once (photo / video / audio toggles); a mask counts as a video
             "kinds": sorted({str(k) for k in (f.get("kinds") or []) if str(k) in KINDS}) if isinstance(f.get("kinds"), list) else [],
             "hasmask": bool(f.get("hasmask")), "missing": bool(f.get("missing")),
-            "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else ""}
+            "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else "",
+            "sim": str(f.get("sim") or "")[:40]}   # 1.8.4 similarity result set (similarity.py)
 
 
 SORTS = ("date_desc", "date_asc", "name_asc", "name_desc")   # 1.7.4 explorer sort; "" = the view's own order
@@ -2017,6 +2019,11 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     if f["used"]:   # 1.5.5 "Usadas como referencia": newest use first
         um = _ru.load()
         out = sorted((i for i in out if i["hash"] in um), key=lambda i: -um[i["hash"]].get("last", 0))
+    if f["sim"]:   # 1.8.4: a similarity search result: only its images, best match first unless another sort is chosen
+        sc = (SIMILARITY(f["sim"]) if SIMILARITY else None) or {}
+        out = [i for i in out if i["hash"] in sc]
+        if not f["sort"]:
+            out.sort(key=lambda i: -sc[i["hash"]])
     out = _sorted(cat, out, f["sort"])
     res = {"items": out, "recent_more": more, "recent": f["recent"], "used": f["used"]}
     with _cat_lock:
@@ -2122,7 +2129,10 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0, sections: bool 
         mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image" and not i.get("virtual")), front=True)
     except Exception:
         pass
+    sc = (SIMILARITY(str(f.get("sim") or "")) or {}) if SIMILARITY and isinstance(f, dict) and f.get("sim") else None
     for x in page:
+        if sc is not None and x["hash"] in sc:
+            x["sim"] = sc[x["hash"]]   # 1.8.4
         st = jmap.get(x["hash"])
         if st:
             x["js"] = st

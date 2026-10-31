@@ -67,6 +67,9 @@ def _wgp_busy() -> bool:
         return False
 
 
+_actions_all.similarity.BUSY = _wgp_busy   # 1.9.0: similarity indexing waits while WanGP generates
+
+
 _AUTOTAG = None
 
 
@@ -80,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.8.6"
+PLUGIN_VERSION = "1.9.0"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -873,6 +876,12 @@ def build_js(settings=None):
     settings = settings or load_settings()
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
+    for extra in ("reflib_similarity.js",):   # 1.8.4: explorer extension modules (window.referenceLibrary.extend)
+        try:
+            with open(os.path.join(_PLUGIN_DIR, extra), "r", encoding="utf-8") as reader:
+                script += "\n" + reader.read()
+        except OSError:
+            pass
     return (script
             .replace("__REFLIB_SETTINGS__", json.dumps(settings))
             .replace("__REFLIB_CSS__", json.dumps(load_css()))

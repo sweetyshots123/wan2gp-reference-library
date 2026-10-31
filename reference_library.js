@@ -680,7 +680,7 @@
             big_preview: "Large preview",
             v_size: "Thumbnail size", v_l: "Very large thumbnails", v_m: "Medium thumbnails", v_s: "Small thumbnails",
             s_used: "Last used first", nav_back: "Back (Alt+←)", nav_fwd: "Forward (Alt+→)", nav_list: "Navigation history", nav_empty: "No history yet", nav_all: "All", nav_folder: "Folder: {n}", nav_col: "Collection: {n}", nav_cols: "{n} collections", nav_nocol: "No collection", nav_q: "Search: “{q}”", nav_tags: "+{n} filters", n_date_desc: "Date ↓", n_date_asc: "Date ↑", n_name_asc: "Name A–Z", n_name_desc: "Name Z–A", n_used: "Last used",
-            sort_lbl: "Sort", sort_tip: "Sort what the explorer shows (this session; the default is in the plugin settings)", s_date_desc: "Newest first", s_date_asc: "Oldest first", s_name_asc: "Name A–Z", s_name_desc: "Name Z–A",
+            sort_lbl: "Sort", sort_tip: "Sort what the explorer shows (this session; the default is in the plugin settings)", s_date_desc: "Newest first", s_date_asc: "Oldest first", s_name_asc: "Name A–Z", s_name_desc: "Name Z–A", s_sim: "Most similar first", n_sim: "Similarity ↓",
             v_details: "Details", v_details_tip: "Show or hide the details panel on the right (selected image)", v_pick: "Select an image to see its details.",
             ctx_details: "Show details", crop: "Crop", crop_tip: "Crop with Cropper; the result is saved to the library", crop_na: "Needs Cropper with file cropping (window.cropper.cropFile, file API 1). Update Cropper to enable it.", crop_audio: "Audio can't be cropped", crop_saved_img: "Crop saved to \u201c{c}\u201d", crop_saved_vid: "Crop saved to the Video Library", crop_fail: "Crop failed: {e}", crop_busy: "A crop is already open", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
             lb_prev: "Previous (←)", lb_next: "Next (→)",
@@ -779,7 +779,7 @@
             big_preview: "Vista grande",
             v_size: "Tamaño de miniaturas", v_l: "Miniaturas muy grandes", v_m: "Miniaturas medianas", v_s: "Miniaturas pequeñas",
             s_used: "Último uso primero", nav_back: "Atrás (Alt+←)", nav_fwd: "Adelante (Alt+→)", nav_list: "Historial de navegación", nav_empty: "Aún no hay historial", nav_all: "Todo", nav_folder: "Carpeta: {n}", nav_col: "Colección: {n}", nav_cols: "{n} colecciones", nav_nocol: "Sin colección", nav_q: "Búsqueda: «{q}»", nav_tags: "+{n} filtros", n_date_desc: "Fecha ↓", n_date_asc: "Fecha ↑", n_name_asc: "Nombre A–Z", n_name_desc: "Nombre Z–A", n_used: "Último uso",
-            sort_lbl: "Orden", sort_tip: "Ordena lo que muestra el explorador (esta sesión; el orden por defecto está en los ajustes del plugin)", s_date_desc: "Más recientes primero", s_date_asc: "Más antiguos primero", s_name_asc: "Nombre A–Z", s_name_desc: "Nombre Z–A",
+            sort_lbl: "Orden", sort_tip: "Ordena lo que muestra el explorador (esta sesión; el orden por defecto está en los ajustes del plugin)", s_date_desc: "Más recientes primero", s_date_asc: "Más antiguos primero", s_name_asc: "Nombre A–Z", s_name_desc: "Nombre Z–A", s_sim: "Más parecidas primero", n_sim: "Similitud ↓",
             v_details: "Detalles", v_details_tip: "Muestra u oculta el panel de detalles de la derecha (imagen seleccionada)", v_pick: "Selecciona una imagen para ver sus detalles.",
             ctx_details: "Ver detalles", crop: "Recortar", crop_tip: "Recortar con Cropper; el resultado se guarda en la librería", crop_na: "Necesita Cropper con recorte de archivos (window.cropper.cropFile, API de archivos 1). Actualiza Cropper para activarlo.", crop_audio: "Los audios no se pueden recortar", crop_saved_img: "Recorte guardado en «{c}»", crop_saved_vid: "Recorte guardado en la Librería de vídeos", crop_fail: "No se pudo recortar: {e}", crop_busy: "Ya hay un recorte abierto", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
             lb_prev: "Anterior (←)", lb_next: "Siguiente (→)",
@@ -902,7 +902,7 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get"]);
+    const FAST_ACTIONS = new Set(["col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
@@ -925,11 +925,15 @@
         if (staleShown) return; staleShown = true;
         toast(it("stale_tab", { mine: VERSION, srv }), "error", [{ label: it("reload_page"), onClick: () => location.reload() }], 600000);
     }
+    // 1.8.4: extension hooks (reflib_similarity.js…): a module adds context-menu / details / selection-bar buttons,
+    // filter chips and click actions without the explorer knowing about it. window.referenceLibrary.extend({ctx, details, selbar, chips, clear, act})
+    const EXT = [];
+    const extHtml = (k, ...a) => EXT.map(x => { try { return (x[k] && x[k](...a)) || ""; } catch (e) { return ""; } }).join("");
     function filterSnap() {
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, sort: sortCur() };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, sort: sortCur(), sim: f.sim || "" };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -1099,7 +1103,7 @@
         pkBanner();   // 1.6.8
         navUi();
         const so = root.querySelector(".reflib-ib-sort");   // 1.7.4 sort menu
-        if (so) { const cur = sortCur(); so.innerHTML = (ilib.f.used ? ["used"] : []).concat(SORTS).map(k => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(it("s_" + k))}</option>`).join(""); so.title = it("sort_tip"); so.setAttribute("aria-label", it("sort_lbl")); }
+        if (so) { const cur = sortCur(); so.innerHTML = (ilib.f.sim ? ["sim"] : ilib.f.used ? ["used"] : []).concat(SORTS).map(k => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(it("s_" + k))}</option>`).join(""); so.title = it("sort_tip"); so.setAttribute("aria-label", it("sort_lbl")); }
         const vp = viewPref();   // 1.5.9 view selector
         root.querySelector(".reflib-ib-view").setAttribute("aria-label", it("v_size"));
         root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
@@ -1461,6 +1465,7 @@
         if (f.kind) groups.push(chip("kind", f.kind, esc(it("chip_kind", { k: it("k_" + f.kind) })), "kind"));
         if (f.hasmask) groups.push(chip("hasmask", "", esc("🎭 " + mkt("hasmask")), "hasmask"));   // 1.7.0
         if (f.missing) groups.push(chip("missing", "", esc("⚠ " + fgt("f_missing")), "missing"));   // 1.7.1
+        EXT.forEach(x => { try { if (x.chips) groups.push(...(x.chips(f, chip) || [])); } catch (e) {} });
         if (!groups.length) return "";
         return `<div class="reflib-ib-fchips" title="${esc(it("chips_tip"))}">${join(groups, "chip_and")}<button type="button" class="reflib-ib-fclear" data-act="chipclear">${esc(it("chips_clear"))}</button></div>`;
     }
@@ -1468,6 +1473,7 @@
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
             f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false;
+            EXT.forEach(x => { if (x.clear) x.clear(f); });
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
         }
@@ -2076,7 +2082,7 @@
               <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
-              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}</div>
+              <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}${extHtml("details", h)}</div>
               ${lite && lite.missing ? `<div class="reflib-fg-pvmissing">⚠ ${esc(fgt("pv_missing", { path: (full && ((full.files || [])[0] || full.path)) || name }))}</div>` : ""}
               ${vBox}${mkSection(h, pmk, lite, full)}
               ${full && full.locations && full.locations.length ? `<div class="reflib-ib-pvcrumbs">${full.locations.map(locCrumbs).join("")}</div>` : ""}
@@ -2162,7 +2168,7 @@
         host.innerHTML = `<div class="reflib-ib-foot ${n ? "" : "nosel"} ${stale ? "stale" : ""}">
               <span class="reflib-ib-count">${esc(n ? it("sel_n", { n }) : countText())}</span>
               <button type="button" class="reflib-ib-btn" data-act="selall">${esc(it("sel_visible"))}</button>
-              ${n ? `<button type="button" class="reflib-ib-btn" data-act="selnone">${esc(it("sel_clear"))}</button>` : ""}
+              ${n ? `<button type="button" class="reflib-ib-btn" data-act="selnone">${esc(it("sel_clear"))}</button>` + extHtml("selbar", n) : ""}
               <span class="reflib-ib-spacer"></span>
               ${n ? `<span class="reflib-ib-seltags">${(inf.tags || []).map(tg => `<span class="reflib-ib-chip static">${esc(tg)}<button type="button" data-act="untag" data-tag="${esc(tg)}" title="${esc(it("tag_remove", { tag: tg }))}">×</button></span>`).join("")}</span>
                 <input type="text" class="reflib-ib-tagin" list="reflib-ib-taglist" placeholder="${esc(it("tag_ph"))}">
@@ -2575,7 +2581,7 @@
         m.className = "reflib-ib-ctx";
         const cv = (ilib.q.items[idx] || {}).virtual;   // 1.6.6
         m.innerHTML = revealBtn(h, "reflib-ib-ctxitem") + locateBtn(h, "reflib-ib-ctxitem") + (cv ? vBtn("vedit", h, "reflib-ib-ctxitem", "✎ " + vct("edit"), vct("edit_tip"), cv.broken) + vBtn("vorig", cv.orig, "reflib-ib-ctxitem", vct("show_orig"), vct("show_orig"), cv.broken, true) : cropBtn(h, "reflib-ib-ctxitem", (ilib.q.items[idx] || {}).kind || "image"))
-            + (cv && cv.broken ? "" : vBtn("vnew", h, "reflib-ib-ctxitem", vct("new"), vct("new_tip"), false, true)) + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + mkCtx(ilib.q.items[idx] || {}) + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
+            + (cv && cv.broken ? "" : vBtn("vnew", h, "reflib-ib-ctxitem", vct("new"), vct("new_tip"), false, true)) + (((ilib.q.items[idx] || {}).kind) === "video" ? resizeBtn(h, "reflib-ib-ctxitem") : "") + mkCtx(ilib.q.items[idx] || {}) + extHtml("ctx", h, ilib.q.items[idx] || {}) + `<button type="button" class="reflib-ib-ctxitem" data-act="ctxbig" data-idx="${idx}">🔍 ${esc(it("big_preview"))}</button>` + (viewPref().details ? "" : `<button type="button" class="reflib-ib-ctxitem" data-act="ctxdetails">☰ ${esc(it("ctx_details"))}</button>`);
         const modal = ilib.root.querySelector(".reflib-ib-modal"), r = modal.getBoundingClientRect();
         m.style.left = Math.min(e.clientX - r.left, r.width - 230) + "px"; m.style.top = Math.min(e.clientY - r.top, r.height - 90) + "px";
         modal.appendChild(m);
@@ -2911,16 +2917,17 @@
     }
     // 1.5.9 view preferences (thumbnail size, details panel): plugin settings + localStorage fallback
     const SORTS = ["date_desc", "date_asc", "name_asc", "name_desc"], SORT_KEY = "reflib_sort";   // 1.7.4
-    const sortKey = () => (ilib.f && ilib.f.used ? SORT_KEY + "_used" : SORT_KEY);   // the "used" view keeps its last-use order unless overridden
+    const sortKey = () => (ilib.f && ilib.f.sim ? SORT_KEY + "_sim" : ilib.f && ilib.f.used ? SORT_KEY + "_used" : SORT_KEY);   // 1.8.4 a similarity result: best match first unless overridden   // the "used" view keeps its last-use order unless overridden
     function sortCur() {
         let v = null; try { v = sessionStorage.getItem(sortKey()); } catch (e) {}
+        if (ilib.f && ilib.f.sim) return SORTS.includes(v) ? v : "sim";
         if (ilib.f && ilib.f.used) return SORTS.includes(v) ? v : "used";
         return SORTS.includes(v) ? v : (SORTS.includes(cfg.browser_sort) ? cfg.browser_sort : "date_desc");
     }
-    function setSort(v) { try { if (v === "used") sessionStorage.removeItem(sortKey()); else sessionStorage.setItem(sortKey(), v); } catch (e) {} }
+    function setSort(v) { try { if (v === "used" || v === "sim") sessionStorage.removeItem(sortKey()); else sessionStorage.setItem(sortKey(), v); } catch (e) {} }
     document.addEventListener("change", (e) => {
         const so = e.target && e.target.closest && e.target.closest(".reflib-ib-sort");
-        if (!so || !(SORTS.includes(so.value) || so.value === "used")) return;
+        if (!so || !(SORTS.includes(so.value) || so.value === "used" || so.value === "sim")) return;
         setSort(so.value);
         newQuery(); render();
     });
@@ -2985,6 +2992,7 @@
         if (f.q) parts.push(it("nav_q", { q: f.q.length > 30 ? f.q.slice(0, 29) + "…" : f.q }));
         const extra = (f.tags || []).length + (f.atags || []).length + (f.xtags || []).length + Object.keys(f.ranges || {}).length + (f.jst ? 1 : 0) + (f.hasmask ? 1 : 0);
         if (extra) parts.push(it("nav_tags", { n: extra }));
+        EXT.forEach(x => { try { const p = x.navLabel && x.navLabel(f); if (p) parts.push(p); } catch (e) {} });
         if (!parts.length) parts.push(it("nav_all"));
         return parts.join(" · ") + " · " + it("n_" + st.sort);
     }
@@ -3073,6 +3081,7 @@
             showPreview(hh, idx);
             return;
         }
+        for (const x of EXT) if (x.act && x.act(act, el, e)) { closeCtx(); return; }
         if (act === "reveal") { closeCtx(); doReveal(el.dataset.hash); return; }
         if (act === "locate") { closeCtx(); doLocate(el.dataset.hash); return; }
         if (act === "crop") { closeCtx(); if (!el.disabled) doCrop(el.dataset.hash); return; }
@@ -4909,6 +4918,7 @@
     window.referenceLibrary = {
         colPeekReset,
         version: VERSION,
+        extend: (x) => { EXT.push(x); }, ilibRefresh: () => { newQuery(); render(); }, esc, it,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
         openBrowser, closeBrowser, sendIlib, pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),

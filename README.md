@@ -419,10 +419,26 @@ neither UI holds business logic. `actions_list` returns the registry (names, doc
 | `forget_plan` → `forget` / `forget_undo` | `hashes`, `delete_files` | "Borrar de la librería": watched-folder / Video Library entries; `delete_files` sends files to the Recycle Bin. Both UIs show the same dialog from the plan |
 | `delete_all` / `undo_remove` | `hashes` / `token` | the library's own copies (collections + pool) |
 | `at_*`, `mask_*`, `hist_*`, `virt_*`, `resize_*`, `folder_*` | | auto-tagger, masks, history, virtual copies, resize, folders |
+| `sim_search`, `sim_index`, `sim_status`, `sim_settings`, `sim_pause`, `sim_cancel`, `sim_info` | see `SIMILARITY_API.md` | 1.9.0 pose / face similarity; results = `query` filter `{sim: sid}` |
 
 Cross-plugin media (1.8.5): the library registers in the process-wide `wan2gp_media_hooks.video_sources` registry
 (no import between plugins) the files it streams, so Vidosser 1.4.25+ can capture frames / GIFs of watched-folder videos;
 frames come back as new library items (`imagelib.pool_add_bytes`).
+
+## Similarity models (1.9.0)
+
+| Model | Use | Size | Licence |
+|---|---|---|---|
+| YOLOX-L + DWPose (reused from WanGP `ckpts/pose`) | pose | 217 + 134 MB | Apache-2.0 |
+| YuNet | face detection | 0.2 MB | MIT |
+| ArcFace w600k_r50 (InsightFace buffalo_l) — **default** | face embedding | 174 MB | **non-commercial research only** |
+| ArcFace glintr100 (InsightFace antelopev2) | face embedding | 261 MB | **non-commercial research only** |
+| AdaFace IR-101 (ONNX export) | face embedding | 261 MB | code MIT; weights **research use only** (training-data licences) |
+| SFace (OpenCV zoo) — fallback | face embedding | 37 MB | Apache-2.0 |
+
+Weights are never in the repo or the zip; they are downloaded on first use into `data/similarity/models`
+(or read from `similarity/settings.json` `models_dir`). Face vectors are stored per model id
+(`data/similarity/face-<model>.npz`) and never mixed. All processing is local.
 
 ## Data layout
 

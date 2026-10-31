@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0
+
+- **Buscar similares por pose y/o cara** (nuevo módulo `reflib_core/similarity.py`, acciones compartidas `sim_*`, ver `SIMILARITY_API.md`). Desde el menú contextual, el panel de detalles o la barra de selección (varias imágenes), o soltando fotos que no se guardan. Modos Pose / Cara / Ambas, peso, similitud mínima, «parecidas a cualquiera / a todas», ignorar espejo. El resultado es un conjunto del explorador: se puede ordenar («Más parecidas primero», nombre, fecha…) y entra en el historial de navegación.
+- Índice en `data/similarity/` calculado en segundo plano en un entorno Python aparte (onnxruntime, GPU si hay), incremental, con progreso, pausa y espera mientras WanGP genera. Botones «Calcular poses y caras», «Calcular caras (modelo)», «Recalcular todo».
+- **Modelos de caras a elegir** (Modelo de caras): ArcFace w600k_r50 (por defecto), ArcFace glintr100 (antelopev2, más grande), AdaFace IR-101 y SFace (respaldo automático si el elegido no carga). Cada modelo guarda su propio índice de caras (vectores con su id de modelo, nunca se mezclan): cambiar de modelo no borra los otros y volver a uno ya calculado es instantáneo; cambiar solo recalcula caras, no poses. Descarga al primer uso con progreso.
+- **Licencias:** ArcFace w600k_r50 / glintr100 (InsightFace) y AdaFace (pesos entrenados con datasets de investigación) son **solo para uso de investigación no comercial**; SFace es Apache-2.0; pose (YOLOX + DWPose) Apache-2.0, YuNet MIT. Todo se calcula en local: ninguna cara ni imagen sale del PC.
+- Requiere reiniciar WanGP y el entorno de similitud (`similarity/settings.json`: `python`, `models_dir`).
+
 ## 1.8.6
 
 - **Acciones compartidas** (`reflib_core/actions.py`, registro + despacho en `ilib`): la gestión de colecciones (renombrar, duplicar, borrar con Deshacer, portada, mover) sale de los callbacks de Gradio a `reflib_core/colactions.py`; la pestaña de WanGP y la Galería llaman al mismo código. Documentado en el README («Shared action API»).

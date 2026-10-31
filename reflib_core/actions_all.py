@@ -2,4 +2,4 @@
 from . import actions  # noqa: F401
 from . import colactions  # noqa: F401
 from . import tagactions  # noqa: F401
-# from . import similarity  # noqa: F401   <- e.g. the pose/face similarity module registers itself here
+from . import similarity  # noqa: F401   (1.9.0 pose / face similarity: sim_*)

@@ -64,6 +64,22 @@ El icono de cuadrícula de la barra de Reference Library (y junto al selector de
 - **⚠ archivo no encontrado:** una marca en las tarjetas cuyo archivo ya no existe, un filtro en la barra de tipos y **Quitar todas las que faltan** (con confirmación).
 - Las copias propias de la librería (colecciones, imágenes importadas) mantienen el borrado de dos clics.
 
+## Modelos de similitud (1.9.0)
+
+| Modelo | Uso | Tamaño | Licencia |
+|---|---|---|---|
+| YOLOX-L + DWPose (reutilizado de WanGP `ckpts/pose`) | pose | 217 + 134 MB | Apache-2.0 |
+| YuNet | detección de caras | 0.2 MB | MIT |
+| ArcFace w600k_r50 (InsightFace buffalo_l) — **por defecto** | embedding de cara | 174 MB | **solo investigación no comercial** |
+| ArcFace glintr100 (InsightFace antelopev2) | embedding de cara | 261 MB | **solo investigación no comercial** |
+| AdaFace IR-101 (exportación ONNX) | embedding de cara | 261 MB | código MIT; pesos **solo investigación** (licencias de datos de entrenamiento) |
+| SFace (OpenCV zoo) — alternativa | embedding de cara | 37 MB | Apache-2.0 |
+
+Los pesos no van en el repo ni en el zip; se descargan al usarlo por primera vez en `data/similarity/models`
+(o se leen de `similarity/settings.json` `models_dir`). Los vectores de cara se guardan por id de modelo
+(`data/similarity/face-<modelo>.npz`) y nunca se mezclan. Todo el procesamiento es local.
+
+
 ## Librería de máscaras por vídeo (1.7.0)
 
 Las máscaras que creas en **Video Mask** de WanGP (creador de máscaras / Matanyone, o subidas) se guardan en la librería **junto al Control Video para el que se hicieron**. Se enlazan por el contenido del vídeo (el mismo archivo cargado desde cualquier sitio es el mismo vídeo). Una copia virtual con recorte o entrada/salida tiene **sus propias** máscaras.
