@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.9.3"
+PLUGIN_VERSION = "1.9.4"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -761,7 +761,7 @@ def _coerce(key, default, value):
 def load_settings(path=None):
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     try:
-        with open(path or SETTINGS_PATH, "r", encoding="utf-8") as reader:
+        with open(path or SETTINGS_PATH, "r", encoding="utf-8-sig") as reader:   # 1.9.4: tolerate a BOM (PowerShell)
             user = json.load(reader)
     except FileNotFoundError:
         return settings
@@ -3396,8 +3396,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     elif name == storage.get_collection(cid)["name"]:
                         out = {"ok": True, "quiet": True}
                     else:
-                        col = storage.rename_collection(cid, name, fallback=tr(lang2, "default_name"))
-                        out = self._ok(lang2, "renamed_col", name=col["name"], _cid=col["id"])
+                        out = _actions.call("col_rename", {"collection_id": cid, "name": name, "fallback": tr(lang2, "default_name"), "meta": False},
+                                            self._actx(lang2))   # 1.9.4: shared action (was a direct storage call)
                 elif scope in ("vbar", "vmgr"):
                     vid = (req.get("vid") or vsel) if scope == "vmgr" else (vbar_vals[vid_tabs.index(tab)] if tab in vid_tabs else "")
                     if not vid:

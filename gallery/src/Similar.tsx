@@ -12,6 +12,10 @@ export const SIM_EVENT = "reflib:sim";
 const KICK = "reflib:sim-kick";
 const MODE_ES: Record<SimMode, string> = { pose: "Pose", face: "Cara" };
 
+export const SIM_ENV_MSG = "El entorno de similitud no está configurado (Python con onnxruntime; ver README «Similarity models»).";
+/** 1.9.4: same wording for sim_search and the progress bar; the classification (env_missing) comes from the backend. */
+export const simErr = (err: string, envMissing?: boolean) => (envMissing ? `${SIM_ENV_MSG} ${err}` : err);
+
 export async function findSimilar(hash: string, name: string, mode: SimMode) {
   try {
     const info = await call("sim_info", { hash });
@@ -23,8 +27,8 @@ export async function findSimilar(hash: string, name: string, mode: SimMode) {
       if (r.error === "no_query") toast(mode === "face" ? "No se encontró ninguna cara en esta imagen." : "No se detectó ninguna persona (pose) en esta imagen.", "err");
       else if (r.error === "engine") {
         const d = String(r.detail || "");
-        toast(/python|onnx|worker|did not start|No module/i.test(d)
-          ? `El entorno de similitud no está configurado (Python con onnxruntime; ver README «Similarity models»). ${d}`
+        toast(r.env_missing
+          ? `${SIM_ENV_MSG} ${d}`
           : `Error del motor de similitud: ${d || "?"}`, "err");
       } else toast(`Error del motor de similitud: ${r.error || "?"}`, "err");
       return;
@@ -66,7 +70,7 @@ export function SimBar() {
         const x = r.sim; setS(x);
         const busy = !!x && x.running;
         if (was.current && !busy) {
-          if (x.error) toast(`Cálculo de poses y caras detenido: ${x.error}`, "err");
+          if (x.error) toast(x.env_missing ? simErr(x.error, true) : `Cálculo de poses y caras detenido: ${x.error}`, "err");
           else toast(`Poses y caras calculadas: ${x.index?.images || 0} de ${x.library || 0} imágenes · ${x.index?.persons || 0} personas · ${x.index?.faces || 0} caras${x.failed ? ` · ${x.failed} fallidas` : ""}`);
         }
         was.current = busy;
@@ -89,7 +93,7 @@ export function SimBar() {
       <div className="atprog"><div style={{ width: pct + "%" }} /></div>
       <button onClick={async () => setS((await call("sim_pause", { paused: !s.paused })).sim)}>{s.paused ? "▶ Reanudar" : "⏸ Pausar"}</button>
       <button onClick={async () => setS((await call("sim_cancel")).sim)}>✕ Detener</button>
-      {s.error && <span className="aterr">{s.error}</span>}
+      {s.error && <span className="aterr">{simErr(s.error, s.env_missing)}</span>}
     </div>
   );
 }

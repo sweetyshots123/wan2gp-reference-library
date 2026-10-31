@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.4
+- Fix: `similarity/settings.json` saved with a UTF-8 BOM (for example by PowerShell) was silently ignored. The worker then fell back to WanGP's Python instead of the configured venv. It is now read as utf-8-sig, and a parse error shows in `sim_status.settings_error`. The plugin's settings.json is read the same way.
+- Media Library: a 🏷 tag manager (rename, merge, delete with undo) on the shared tag_rename / tag_merge / tag_delete / tag_undo_delete actions, the same as the Galería's.
+- Similarity: `env_missing` (shared rule in SimService) is returned by sim_status and sim_search. Both UIs show the friendly "environment not set up" message in the progress bar and on search, instead of the raw ModuleNotFoundError.
+- Media Library: renaming a collection from the bar now goes through the shared `col_rename` action.
+
 ## 1.9.3
 - Galería: similitud por pose y por cara, sobre las mismas acciones sim_* de la Media Library (sim_info, sim_search → filtro {sim}, sim_index, sim_status, sim_pause, sim_cancel). Sin lógica duplicada.
 - Visor y panel de edición (una imagen): «⧉ Similares: Pose / Cara» abre #/similares ordenado por parecido, con una cabecera que muestra la miniatura de referencia, un cambio Pose/Cara y «× Quitar».

@@ -13,7 +13,7 @@
               mirror: "Ignore left / right (mirrored poses match)", go: "Search", cancel: "Close", idx: "Index: {i} of {l} images · {p} people · {f} faces",
               build: "Compute poses and faces", rebuild: "Recompute all", pause: "Pause", resume: "Resume", stop: "Stop", run: "Computing {d} / {t}… {ms} ms per image",
               wait_busy: "waiting: WanGP is generating", wait_paused: "paused", dl: "downloading model {m}…", chip: "Similar to {n} · {m}", chip_files: "{n} photos",
-              none: "No query image has a detected person or face for this mode", no_q: "Choose or drop at least one image", engine: "Similarity engine error: {e}",
+              none: "No query image has a detected person or face for this mode", no_q: "Choose or drop at least one image", engine: "Similarity engine error: {e}", env: "The similarity environment is not set up (Python with onnxruntime; see README «Similarity models»). {e}",
               found: "{n} similar images ({ms} ms)", unindexed: "Not computed yet: the first search computes the query images (this can take a few seconds)",
               face_lic: "Face model: {m}", score: "Similarity {s}%",
               fm: "Face model", fm_done: "{n} of {l} images", fm_dl: "not downloaded · {mb} MB, downloads on first use", faces_build: "Compute faces ({m})",
@@ -25,7 +25,7 @@
               mirror: "Ignorar izquierda / derecha (las poses en espejo coinciden)", go: "Buscar", cancel: "Cerrar", idx: "Índice: {i} de {l} imágenes · {p} personas · {f} caras",
               build: "Calcular poses y caras", rebuild: "Recalcular todo", pause: "Pausar", resume: "Reanudar", stop: "Detener", run: "Calculando {d} / {t}… {ms} ms por imagen",
               wait_busy: "en espera: WanGP está generando", wait_paused: "en pausa", dl: "descargando el modelo {m}…", chip: "Similares a {n} · {m}", chip_files: "{n} fotos",
-              none: "Ninguna imagen de consulta tiene una persona o cara detectada para este modo", no_q: "Elige o suelta al menos una imagen", engine: "Error del motor de similitud: {e}",
+              none: "Ninguna imagen de consulta tiene una persona o cara detectada para este modo", no_q: "Elige o suelta al menos una imagen", engine: "Error del motor de similitud: {e}", env: "El entorno de similitud no está configurado (Python con onnxruntime; ver README «Similarity models»). {e}",
               found: "{n} imágenes similares ({ms} ms)", unindexed: "Aún sin calcular: la primera búsqueda calcula las imágenes de consulta (puede tardar unos segundos)",
               face_lic: "Modelo de caras: {m}", score: "Similitud {s}%",
               fm: "Modelo de caras", fm_done: "{n} de {l} imágenes", fm_dl: "sin descargar · {mb} MB, se descarga al usarlo", faces_build: "Calcular caras ({m})",
@@ -121,7 +121,7 @@
             host.innerHTML = `<div>${esc(st("idx", { i: ix.images || 0, l: s.library || 0, p: ix.persons || 0, f: ix.faces || 0 }))} · <span class="reflib-sim-lic">${esc(st("face_lic", { m: s.face_model }))}</span></div>`
                 + (s.running ? `<div class="reflib-sim-prog"><i style="width:${pct}%"></i></div><div>${esc(st("run", { d: s.done, t: s.total, ms: s.per_image_ms || "…" }))} ${wait ? "· " + esc(wait) : ""}</div>` : "")
                 + (dlTxt ? `<div class="reflib-sim-dl">${esc(dlTxt)}</div><div class="reflib-sim-prog"><i style="width:${dl.total ? Math.round(100 * dl.done / dl.total) : 0}%"></i></div>` : "")
-                + (s.error ? `<div class="reflib-sim-err">${esc(s.error)}</div>` : "")
+                + (s.error ? `<div class="reflib-sim-err">${esc(s.env_missing ? st("env", { e: s.error }) : s.error)}</div>` : "")
                 + `<div class="reflib-sim-acts">${s.running ? `<button type="button" class="reflib-ib-btn" data-s="pause" data-v="${s.paused ? 0 : 1}">${esc(st(s.paused ? "resume" : "pause"))}</button><button type="button" class="reflib-ib-btn" data-s="stop">${esc(st("stop"))}</button>`
                     : `<button type="button" class="reflib-ib-btn" data-s="build">${esc(st("build"))}</button>${ix.images ? `<button type="button" class="reflib-ib-btn" data-s="faces">${esc(st("faces_build", { m: (cur.label || sel || "").split(" (")[0] }))}</button>` : ""}${ix.images ? `<button type="button" class="reflib-ib-btn" data-s="rebuild">${esc(st("rebuild"))}</button>` : ""}`}</div>`;
             void run;
@@ -134,7 +134,7 @@
         const req = Object.assign({ action: "sim_search", files, mode: opts.mode, w_pose: opts.w_pose, threshold: opts.threshold, agg: opts.agg, mirror: opts.mirror, slow: true }, { hashes });
         RL.sendIlib(req).then(r => {
             b.disabled = false;
-            if (!r || !r.ok) { RL.toast(r && r.error === "no_query" ? st("none") : r && r.error === "no_query_input" ? st("no_q") : st("engine", { e: (r && r.error) || "?" }), "warn"); return; }
+            if (!r || !r.ok) { RL.toast(r && r.error === "no_query" ? st("none") : r && r.error === "no_query_input" ? st("no_q") : (r && r.env_missing ? st("env", { e: r.detail || "" }) : st("engine", { e: (r && (r.detail || r.error)) || "?" })), "warn"); return; }
             labels[r.sid] = st("chip", { n: hashes.length && !files.length ? (hashes.length === 1 ? (itemOf(hashes[0]).name || "1") : hashes.length) : files.length && !hashes.length ? st("chip_files", { n: files.length }) : hashes.length + files.length, m: st("m_" + opts.mode) });
             try { sessionStorage.setItem("reflib_sim_labels", JSON.stringify(labels)); } catch (e) {}
             close();

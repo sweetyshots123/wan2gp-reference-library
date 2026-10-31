@@ -1571,7 +1571,7 @@
     }
     function renderFacets() {
         const fc = ilib.at.facets, tax = ilib.at.tax;
-        const gear = `<button type="button" class="reflib-ib-atgear" data-act="atset" title="${esc(it("at_settings"))}">⚙</button>`;
+        const gear = `<button type="button" class="reflib-ib-atgear" data-act="tagmgr" title="${esc(tmt("title"))}">🏷</button><button type="button" class="reflib-ib-atgear" data-act="atset" title="${esc(it("at_settings"))}">⚙</button>`;
         if (!fc || !tax) return `<div class="reflib-ib-facets"><div class="reflib-ib-fhead"><span>${esc(it("at_facets"))}</span>${gear}</div></div>`;
         let html = `<div class="reflib-ib-facets"><div class="reflib-ib-fhead"><span>${esc(it("at_facets"))}</span>${gear}</div>`;
         html += renderJobFacet();
@@ -2030,6 +2030,7 @@
             sendIlib(req).then(r => { if (r && r.ok) { if (r.img) { ilib.at.img = r.img; const host = ilib.root.querySelector(".reflib-ib-autohost"); if (host) host.innerHTML = renderAutoPanel(ilib.preview); } loadFacets(true); } else if (r && r.error) toast(r.error, "error"); }).catch(() => {});
             return true;
         }
+        if (act === "tagmgr") { openTagMgr(); return true; }   // 1.9.4
         if (act === "atset") {
             ilib.at.setOpen = !ilib.at.setOpen;
             if (ilib.at.setOpen) sendIlib({ action: "at_settings" }).then(r => { if (r && r.ok) { ilib.at.settings = r.settings; ilib.at.models = r.models; ilib.at.cloud = r.cloud; ilib.at.policies = r.policies; renderAtSettings(); } }).catch(() => {});
@@ -3408,6 +3409,72 @@
             <button type="button" data-dact="custom">${esc(dt("rcustom"))}</button>
             <div class="reflib-del-custom" hidden><label>${esc(dt("from"))} <input type="datetime-local" class="reflib-del-from"></label><label>${esc(dt("to"))} <input type="datetime-local" class="reflib-del-to"></label>
               <button type="button" class="reflib-ib-btn reflib-ib-danger" data-dact="crange">${esc(dt("apply"))}</button></div></div></span>`;
+    }
+    // 1.9.4: global tag manager (rename / merge / delete with undo). Same shared actions as the Galería's
+    // Etiquetas → Gestionar (tag_rename / tag_merge / tag_delete / tag_undo_delete); no logic of its own.
+    const TM = {
+        en: { title: "Manage tags", filter: "Filter tags…", merge: "Merge selected ({n})", rename: "Rename", del: "Delete", close: "Close", none: "No tags yet",
+              p_rename: "New name for “{t}” (if it exists, they are merged):", p_merge: "Merge {n} tags into (final name):", c_merge: "Merge {n} tags ({u} uses) into “{t}”?",
+              c_del: "Remove the tag “{t}” from {n} items?", undo: "Undo", done: "Done", people: "Include people (persona:…)" },
+        es: { title: "Gestionar etiquetas", filter: "Filtrar etiquetas…", merge: "Fusionar seleccionadas ({n})", rename: "Renombrar", del: "Borrar", close: "Cerrar", none: "Aún no hay etiquetas",
+              p_rename: "Nuevo nombre para «{t}» (si ya existe se fusionan):", p_merge: "Fusionar {n} etiquetas en (nombre final):", c_merge: "¿Fusionar {n} etiquetas ({u} usos) en «{t}»?",
+              c_del: "¿Quitar la etiqueta «{t}» de {n} elementos?", undo: "Deshacer", done: "Hecho", people: "Incluir personas (persona:…)" },
+    };
+    function tmt(k, v) { const L = TM[String(ilib.lang || lang() || "en").slice(0, 2)] || TM.en; return String(L[k] || TM.en[k] || k).replace(/\{(\w+)\}/g, (_, x) => (v && v[x] != null ? v[x] : "")); }
+    function tmResult(r) {
+        if (!r) return;
+        if (r.ok === false) { toast(r.error || r.message || "Error", "error"); return; }
+        const acts = r.undo_token ? [{ label: tmt("undo"), onClick: () => sendIlib({ action: "tag_undo_delete", undo_token: r.undo_token }).then(x => { if (x && (x.toast || x.message)) toast(x.toast || x.message, "ok"); ilibApply(x); renderTagMgr(); }).catch(() => {}) }] : undefined;
+        toast(r.toast || r.message || tmt("done"), "ok", acts, acts ? 15000 : undefined);
+        ilibApply(r); setTimeout(renderTagMgr, 400);
+    }
+    function openTagMgr() {
+        if (ilib.root.querySelector(".reflib-tm-bg")) return;
+        const bg = document.createElement("div"); bg.className = "reflib-confirm-bg reflib-tm-bg";
+        bg.innerHTML = `<div class="reflib-confirm reflib-tm" role="dialog" aria-modal="true"><div class="reflib-tm-head"><b></b><button type="button" class="reflib-ib-btn" data-tm="close"></button></div>
+            <div class="reflib-tm-bar"><input type="text" class="reflib-tm-q"><label><input type="checkbox" class="reflib-tm-ppl"> <span></span></label><button type="button" class="reflib-ib-btn" data-tm="merge" disabled></button></div>
+            <div class="reflib-tm-list"></div></div>`;
+        ilib.tm = { sel: new Set() };
+        const close = () => { bg.remove(); window.removeEventListener("keydown", key, true); ilib.tm = null; };
+        const key = e => { if (e.key === "Escape" && !document.querySelector(".reflib-confirm-bg:not(.reflib-tm-bg)")) { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
+        bg.addEventListener("input", () => renderTagMgr());
+        bg.addEventListener("change", e => { const c = e.target.closest("[data-tmsel]"); if (c) { c.checked ? ilib.tm.sel.add(c.dataset.tmsel) : ilib.tm.sel.delete(c.dataset.tmsel); renderTagMgr(true); } else renderTagMgr(); });
+        bg.addEventListener("click", async e => {
+            if (e.target === bg) { close(); return; }
+            const b = e.target.closest("[data-tm]"); if (!b) return;
+            const op = b.dataset.tm, t = b.dataset.t, n = Number(b.dataset.n || 0);
+            if (op === "close") close();
+            else if (op === "rename") {
+                const to = window.prompt(tmt("p_rename", { t }), t);
+                if (to && to.trim() && to.trim() !== t) tmResult(await sendIlib({ action: "tag_rename", tag: t, to: to.trim() }).catch(() => null));
+            } else if (op === "del") {
+                if (await confirmDlg(tmt("c_del", { t, n }), tmt("del"))) tmResult(await sendIlib({ action: "tag_delete", tag: t }).catch(() => null));
+            } else if (op === "merge") {
+                const keys = [...ilib.tm.sel]; if (keys.length < 2) return;
+                const to = window.prompt(tmt("p_merge", { n: keys.length }), keys[0]); if (!to || !to.trim()) return;
+                const cnt = Object.fromEntries(((ilib.data && ilib.data.tags) || []).map(x => [x.tag, x.count]));
+                if (!(await confirmDlg(tmt("c_merge", { n: keys.length, u: keys.reduce((a, k) => a + (cnt[k] || 0), 0), t: to.trim() }), tmt("merge", { n: keys.length })))) return;
+                ilib.tm.sel = new Set();
+                tmResult(await sendIlib({ action: "tag_merge", tags: keys, to: to.trim() }).catch(() => null));
+            }
+        });
+        window.addEventListener("keydown", key, true);
+        (ilib.root.querySelector(".reflib-ib-modal") || ilib.root).appendChild(bg);
+        renderTagMgr(); bg.querySelector(".reflib-tm-q").focus();
+    }
+    function renderTagMgr(selOnly) {
+        const bg = ilib.root && ilib.root.querySelector(".reflib-tm-bg"); if (!bg || !ilib.tm) return;
+        bg.querySelector(".reflib-tm-head b").textContent = tmt("title");
+        bg.querySelector('[data-tm="close"]').textContent = "× " + tmt("close");
+        const q = bg.querySelector(".reflib-tm-q"); q.placeholder = tmt("filter");
+        bg.querySelector(".reflib-tm-ppl + span").textContent = tmt("people");
+        const mb = bg.querySelector('[data-tm="merge"]'); mb.textContent = tmt("merge", { n: ilib.tm.sel.size }); mb.disabled = ilib.tm.sel.size < 2;
+        if (selOnly) return;
+        const ppl = bg.querySelector(".reflib-tm-ppl").checked, fq = q.value.trim().toLowerCase();
+        const rows = ((ilib.data && ilib.data.tags) || []).filter(x => (ppl || !/^persona:/i.test(x.tag)) && (!fq || x.tag.toLowerCase().includes(fq)));
+        bg.querySelector(".reflib-tm-list").innerHTML = rows.length ? `<table>${rows.map(x => `<tr><td><input type="checkbox" data-tmsel="${esc(x.tag)}"${ilib.tm.sel.has(x.tag) ? " checked" : ""}></td><td class="reflib-tm-name">${esc(x.tag)}</td><td class="reflib-ib-muted">${x.count}</td>
+            <td><button type="button" class="reflib-ib-btn" data-tm="rename" data-t="${esc(x.tag)}" title="${esc(tmt("rename"))}">✎</button><button type="button" class="reflib-ib-btn reflib-ib-danger" data-tm="del" data-t="${esc(x.tag)}" data-n="${x.count}" title="${esc(tmt("del"))}">🗑</button></td></tr>`).join("")}</table>`
+            : `<div class="reflib-ib-muted">${esc(tmt("none"))}</div>`;
     }
     function confirmDlg(text, okLabel) {
         return new Promise(res => {

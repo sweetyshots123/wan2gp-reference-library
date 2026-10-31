@@ -340,9 +340,17 @@ class SimService:
 
     def settings(self) -> Dict[str, Any]:
         try:
-            with open(self.settings_path, encoding="utf-8") as fh:
-                return dict(DEFAULTS, **json.load(fh))
-        except Exception:
+            # 1.9.4: utf-8-sig — files written by PowerShell/other tools carry a BOM, which made json.load fail and
+            # silently fall back to DEFAULTS (python="" -> WanGP's own interpreter instead of the configured venv).
+            with open(self.settings_path, encoding="utf-8-sig") as fh:
+                s = dict(DEFAULTS, **json.load(fh))
+            self.st.pop("settings_error", None) if hasattr(self, "st") else None
+            return s
+        except FileNotFoundError:
+            return dict(DEFAULTS)
+        except Exception as e:
+            if hasattr(self, "st"):
+                self.st["settings_error"] = f"{self.settings_path}: {e}"
             return dict(DEFAULTS)
 
     def save_settings(self, upd: Dict[str, Any]) -> Dict[str, Any]:
@@ -505,13 +513,19 @@ class SimService:
             self.cancel_flag = True
             self.pending.clear()
 
+    @staticmethod
+    def env_missing(err: str) -> bool:
+        """1.9.4: one shared rule for 'the similarity Python env is not set up' (both UIs show their own wording for it)."""
+        e = (err or "").lower()
+        return any(k in e for k in ("no module named", "onnxruntime", "worker exited", "worker did not start", "dll load failed"))
+
     def status(self) -> Dict[str, Any]:
         self.maybe_sync()
         s = self.settings()
         return dict(self.st, pending=len(self.pending), paused=self.paused, index=self.index.stats(), library=len(self.image_hashes()),
                     worker=bool(self.worker and self.worker.alive()), python=self.python(), face_model=self.index.active, face_model_setting=s["face_model"],
                     face_fallback=self.st.get("face_fallback", ""), face_models=self.face_models(),
-                    missing_models=self.missing_models(), settings=s)
+                    missing_models=self.missing_models(), settings=s, env_missing=self.env_missing(self.st.get("error", "")))
 
     def maybe_sync(self):
         """Auto mode: new library images are queued (once indexing was started at least once)."""
@@ -706,7 +720,7 @@ def handle(action: str, req: Dict[str, Any], hashes: List[str]) -> Dict[str, Any
             return svc.run_search(hashes, tmp, req.get("mode") or "both", req.get("w_pose"), req.get("threshold"), req.get("agg") or "any",
                                   req.get("mirror"), req.get("limit"))
         except Exception as e:
-            return {"ok": False, "error": "engine", "detail": str(e)[:300]}
+            return {"ok": False, "error": "engine", "detail": str(e)[:300], "env_missing": SimService.env_missing(str(e))}
         finally:
             for p in tmp:
                 try:

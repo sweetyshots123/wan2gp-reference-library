@@ -939,3 +939,12 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .dark .reflib-ib-navmenu { background: #111827; color: #e5e7eb; border-color: #374151; }
 .dark .reflib-ib-navit:hover, .dark .reflib-ib-navit:focus-visible { background: #1f2937; }
 .dark .reflib-ib-navb { color: #e5e7eb; }
+
+/* 1.9.4 tag manager */
+.reflib-tm { width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; gap: 8px; }
+.reflib-tm-head, .reflib-tm-bar { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.reflib-tm-q { flex: 1; }
+.reflib-tm-list { overflow: auto; }
+.reflib-tm-list table { width: 100%; border-collapse: collapse; }
+.reflib-tm-list td { padding: 2px 4px; }
+.reflib-tm-name { width: 100%; word-break: break-all; }

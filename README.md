@@ -56,6 +56,7 @@ The grid icon in the Reference Library bar (and next to the manager's collection
 - **Borrar de la librería** works for every entry. For files from watched folders, videos/audios linked from disk and entries whose file is gone, it removes only the library entry: metadata, tags, thumbnails/cache, collection copies, masks and virtual copies. **The file on disk is not deleted or moved.** The confirmation lists what goes and offers Undo. The folder remembers the removed files, so rescans skip them: **⊘n** on the folder in the tree → **Mostrar excluidos** → **Restaurar** / **Restaurar todos**.
 - **Video Library videos (1.7.3)** (the **🎬 Librería de vídeos** folder: webcam recordings, crops, resizes, saved inputs) can be deleted here too. Their Video Library entry goes, with its masks and virtual copies (listed in the confirmation); **Undo** brings everything back for 15 min. After that the video file goes to the **Recycle Bin** (never a permanent delete; if it can't be recycled it is kept).
 - **Collection preview (1.7.3):** in the collection dropdown above the inputs, hover a collection to see up to 8 of its thumbnails (+N), its name and count; empty collections say *Empty*. Clicks and keyboard work as usual.
+- **Tag manager (1.9.4):** the 🏷 button in the Media Library's auto-tag panel renames, merges and deletes tags (with undo), the same as the Galería's Etiquetas → Gestionar.
 - **Galería (1.8.0):** a second, very visual web UI on the same library at `http://localhost:7860/reflib/gallery/` (models, tags, favorites, zoom viewer, full editing). Favorites are the tag `favorita`, models the tags `modelo:<Name>`. See `gallery/README.md`.
 - **Sorting (1.7.4):** the sort menu in the explorer header orders any folder, collection, filter or search by date modified (newest first by default, or oldest first) or by file name (A–Z / Z–A). It is remembered for the session; set the default in the plugin settings (**Default sort order in the media browser**).
 - **Navigation history (1.7.4):** ◀ / ▶ in the explorer header (or Alt+←/Alt+→, or the mouse back/forward buttons) step back and forward through the places you visited (folder, collection, filters, search, sort, scroll). 🕘 lists the last 50 states; click one to jump. Kept for the browser session.
@@ -441,6 +442,11 @@ Auto-tagging (1.8.7): the Galería uses the existing `at_*` ilib actions unchang
 Weights are never in the repo or the zip; they are downloaded on first use into `data/similarity/models`
 (or read from `similarity/settings.json` `models_dir`). Face vectors are stored per model id
 (`data/similarity/face-<model>.npz`) and never mixed. All processing is local.
+
+Both UIs use the same `sim_*` actions (1.9.3). In the Galería, open an image and use **⧉ Similares: Pose / Cara**, or start
+**⧉ Calcular poses y caras** from the toolbar or a selection. The similarity worker runs in the Python set as `python` in
+`similarity/settings.json` (for example a venv with onnxruntime-gpu). The file may be saved with a UTF-8 BOM (1.9.4).
+If the worker cannot import onnxruntime, both UIs say the environment is not set up.
 
 ## Data layout
 
