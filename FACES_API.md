@@ -23,7 +23,8 @@ Assignments, rejections and covers are stored **per model**. Switching `sim_sett
 * clusters and suggestions are recomputed for the new model (new `clusters-<model>.json`); the old model's files stay.
 
 ## Settings (`similarity/settings.json`, merged, unknown keys preserved)
-`face_cluster_threshold` cosine 0..1 (default per model: arcface 0.42, glintr100 0.40, adaface 0.40, sface 0.50),
+`face_auto_cluster` (default true: new faces reported by simperf's `on_faces()` are grouped automatically by a
+debounced incremental run ~4 s after the last batch), `face_cluster_threshold` cosine 0..1 (default per model: arcface 0.42, glintr100 0.40, adaface 0.40, sface 0.50),
 `face_suggest_threshold` (default threshold − 0.05), `face_min_cluster` (default 2), `face_min_size` px (default 40;
 smaller faces are skipped when bbox is known). Change via `face_settings`.
 
@@ -52,14 +53,22 @@ smaller faces are skipped when bbox is known). Change via `face_settings`.
 | `face_settings` | `{settings?:{face_cluster_threshold, …}}` | `{ok, settings}` |
 | `face_thumb` (fast) | `{id}` or `{hash, n, model?}` (+ `size=160` 32–1024, `margin=0.4` 0–2, `data?:bool`) | `{ok, id, url, data?:"data:image/jpeg;base64,…"}`; `face_not_found` when the id is bad or no source file is readable |
 
-FACE = `{id, hash, n, model, bbox:[x,y,w,h]|null (pixels of the original image), w, h, score?, person?:pid,
-cluster?:cid, thumb:url}` — `thumb` is the shared face-thumbnail URL (see below), used by both the Media Library and the Galería. `bbox` is filled when the index has face boxes (simperf face
-records, see SIMILARITY_API.md); UIs draw overlays with it.
+FACE = `{id, hash, n, model, box:[x,y,w,h]|null (0..1 of the image, simperf face record), bbox:[x,y,w,h]|null (= box in
+pixels of the indexed image, null when w/h unknown), w, h, score?, person?:pid,
+cluster?:cid, thumb:url}` — `thumb` is the shared face-thumbnail URL (see below), used by both the Media Library and the Galería. `box`/`bbox` come from simperf's face records
+(SIMILARITY_API.md "Face records"); legacy rows (indexed before simperf) have `box:null` until recomputed. UIs draw
+overlays from `box`.
+
+### Data source (simperf 9b0ed21)
+`faces.py` reads `SimService.face_matrix(model)` (ids, face_i, vec, box, det) — face id = `<ids[k]>:<face_i[k]>@<model>`
+— cached per `SimIndex.rev`, and the per-item pack `items[h]["faces"][model] = {vec, box, det}` for one item's boxes.
+It subscribes to `SimService.on_faces(cb)`: on each batch it drops assignments/rejections that point past a
+re-indexed item's new face count and schedules the incremental clustering above.
 
 ### Face thumbnails (shared URL)
 `GET /reflib/face_thumb/<urlencoded face id>.jpg?size=160&margin=0.4` (gallery_routes.py, same FastAPI router and
 WanGP login check as `/reflib/api`), e.g. `/reflib/face_thumb/9f..e1%3A0%40arcface.jpg?size=160&margin=0.4`.
-Square JPEG: bbox enlarged by `margin` (0.4 = 40 % larger side), centred on the face, clamped to the image, resized to
+Square JPEG: `box` (0..1, scaled to the actual source file) enlarged by `margin` (0.4 = 40 % larger side), centred on the face, clamped to the image, resized to
 `size`. No bbox (older index) → centred square of the whole image. 404 when there's no readable source.
 Cache: `data/faces/thumbs/<hash>_<n>_<model>_<size>_<margin×100>_<source mtime>[_full].jpg`. A changed source (new mtime)
 makes a new file and removes older variants for that face and size. The cache can be deleted at any time.
@@ -97,8 +106,10 @@ person_rename/delete/undo_delete/set_cover/face_settings — is refused instead 
 * Centroids are recomputed in memory (L2-normalised mean of a person's faces).
 
 ## Re-index
-If `sim_index force` changes an item's face count for a model, assignments/rejections of `<hash>:*@<model>` are matched
-again by best cosine (≥ 0.8) to the new rows; unmatched ones are dropped and the item is re-clustered.
+Face ids are row positions (`face_i`). When an item is re-indexed (`on_faces` batch), assignments/rejections whose
+`face_i` is past the new face count are dropped; the others are kept by position. Faces not yet seen are clustered by
+the next incremental run. (Re-matching moved rows by embedding is not done; a forced re-index that reorders faces can
+leave a wrong assignment, which `face_unassign` fixes.)
 Items removed from the library drop their faces (tags go with the item).
 
 ## Algorithm

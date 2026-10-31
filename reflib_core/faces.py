@@ -16,7 +16,7 @@ from .actions import ActionError
 VERSION = 1
 UNDO_S = 5 * 60
 THRESH = {"arcface": 0.42, "glintr100": 0.40, "adaface": 0.40, "sface": 0.50}
-DEFAULTS = {"face_cluster_threshold": None, "face_suggest_threshold": None, "face_min_cluster": 2, "face_min_size": 40}
+DEFAULTS = {"face_auto_cluster": True, "face_cluster_threshold": None, "face_suggest_threshold": None, "face_min_cluster": 2, "face_min_size": 40}
 _FID = re.compile(r"^([0-9A-Za-z_\-]+):(\d+)@([a-z0-9_]+)$")
 
 
@@ -51,33 +51,42 @@ def _norm(m: np.ndarray) -> np.ndarray:
 
 
 class FaceSource:
-    """Adapter over similarity.SimIndex: vectors(model) -> {fid: vec}, boxes, image size. Tests pass a fake."""
+    """Adapter over simperf's SimService/SimIndex face records (SIMILARITY_API.md "Face records"):
+    faces(model) via face_matrix(), per-face bbox (xywh 0..1, None when unknown) via the in-memory pack,
+    on_faces() for incremental clustering. Tests pass a fake with the same methods."""
 
-    def __init__(self, index):
+    def __init__(self, index, service=None):
         self.index = index
+        self.svc = service if service is not None and hasattr(service, "face_matrix") else index
 
     @property
     def model(self) -> str:
         return self.index.active
 
     def faces(self, model: str) -> Tuple[List[str], np.ndarray]:
-        ids, vecs = [], []
-        with self.index.lock:
-            for h, e in self.index.items.items():
-                v = e["faces"].get(model)
-                if v is not None and len(v):
-                    ids += [fid(h, i, model) for i in range(len(v))]
-                    vecs.append(np.asarray(v, np.float32))
+        fm = self.svc.face_matrix(model)
+        ids = [fid(h, int(i), model) for h, i in zip(fm["ids"], fm["face_i"])]
         from .similarity import FACE_DIM
-        return ids, (_norm(np.concatenate(vecs)) if vecs else np.zeros((0, FACE_DIM.get(model, 512)), np.float32))
+        V = np.asarray(fm["vec"], np.float32)
+        return ids, (_norm(V) if len(ids) else np.zeros((0, FACE_DIM.get(model, 512)), np.float32))
+
+    def on_faces(self, cb):
+        return self.svc.on_faces(cb)
 
     def item(self, h: str, model: str) -> Dict[str, Any]:
         e = self.index.items.get(h) or {}
-        fa = (e.get("faces") or {}).get(model)
-        n = 0 if fa is None else len(fa)
-        boxes = (e.get("boxes") or {}).get(model)   # simperf face records (bbox per face) when present
-        return {"w": e.get("w", 0), "h": e.get("h", 0), "n": n,
-                "boxes": [list(map(float, b[:4])) for b in boxes] if boxes is not None and len(boxes) == n else [None] * n}
+        pack = (e.get("faces") or {}).get(model)
+        vec = pack.get("vec") if isinstance(pack, dict) else pack
+        n = 0 if vec is None else len(vec)
+        box = pack.get("box") if isinstance(pack, dict) else None
+        nb = [None] * n
+        if box is not None and len(box) == n:
+            nb = [None if not np.all(np.isfinite(b[:4])) else [round(float(x), 5) for x in b[:4]] for b in box]
+        return {"w": e.get("w", 0) or 0, "h": e.get("h", 0) or 0, "n": n, "nbox": nb}
+
+
+def _px(nb, w, hh):
+    return [round(nb[0] * w, 1), round(nb[1] * hh, 1), round(nb[2] * w, 1), round(nb[3] * hh, 1)] if nb and w and hh else None
 
 
 class Faces:
@@ -93,6 +102,9 @@ class Faces:
         self._cache: Dict[str, Any] = {}
         self.undo: Dict[str, Any] = {}
         self.db = self._load_json("persons.json") or {"version": VERSION, "persons": {}, "assign": {}, "reject": {}}
+        # simperf on_faces(): new faces -> debounced incremental run() (only unseen faces are clustered)
+        self._auto_timer = None
+        self._unsub = source.on_faces(self._on_faces) if hasattr(source, "on_faces") else None
         for k in ("persons", "assign", "reject"):
             self.db.setdefault(k, {})
         self.cl: Dict[str, Dict[str, Any]] = {}
@@ -108,6 +120,54 @@ class Faces:
     def _save_db(self):
         _atomic_json(os.path.join(self.dir, "persons.json"), self.db, bak=True)
         self.rev += 1
+
+    AUTO_DELAY = 4.0
+
+    def _on_faces(self, records) -> None:
+        try:
+            if not self.settings().get("face_auto_cluster", True):
+                return
+            if not any(r.get("model") == self.src.model for r in records or []):
+                return
+            self._drop_stale({str(r.get("id")) for r in records if r.get("model") == self.src.model}, self.src.model)
+            if True:
+                if self._auto_timer is not None:
+                    self._auto_timer.cancel()
+                t = threading.Timer(self.AUTO_DELAY, self._auto_run)
+                t.daemon = True
+                self._auto_timer = t
+                t.start()
+        except Exception:
+            pass
+
+    def _drop_stale(self, hashes, m) -> None:
+        """Re-indexed items: drop assignments / rejections that point past the item's new face count."""
+        with self.lock:
+            n = {h: self.src.item(h, m)["n"] for h in hashes}
+            ch = False
+            for f in [f for f in self.assign(m) if parse_fid(f) and parse_fid(f)[0] in n and parse_fid(f)[1] >= n[parse_fid(f)[0]]]:
+                del self.assign(m)[f]; ch = True
+            for pid, fs in (self.db["reject"].get(m) or {}).items():
+                keep = [f for f in fs if not (parse_fid(f) and parse_fid(f)[0] in n and parse_fid(f)[1] >= n[parse_fid(f)[0]])]
+                if len(keep) != len(fs):
+                    self.db["reject"][m][pid] = keep; ch = True
+            if ch:
+                self._save_db()
+
+    def _auto_run(self) -> None:
+        self._auto_timer = None
+        if self.st.get("running"):
+            return self._on_faces([{"model": self.src.model}])   # try again after the running job
+        try:
+            self.run()
+        except Exception as e:
+            print("[Reference Library] faces: auto-cluster failed: %s" % e)
+
+    def close(self) -> None:
+        if self._auto_timer is not None:
+            self._auto_timer.cancel()
+        if self._unsub:
+            self._unsub()
 
     def clusters(self, model: Optional[str] = None) -> Dict[str, Any]:
         m = model or self.src.model
@@ -133,8 +193,22 @@ class Faces:
 
     # ------------------------------------------------------------------ data helpers
     def _mat(self, m: str):
+        rev = getattr(getattr(self.src, "index", None), "rev", None)
+        ms = int(self.settings().get("face_min_size") or 0)
+        if rev is not None and self._cache.get("key", (None,))[0:3] == (m, rev, ms):
+            return self._cache
         ids, M = self.src.faces(m)
-        key = (m, len(ids), getattr(self.src.index, "rev", None) if hasattr(self.src, "index") else id(M))
+        if ms > 0 and len(ids):   # skip tiny faces when their bbox and the image size are known
+            keep = []
+            for i, f in enumerate(ids):
+                h, n, _ = parse_fid(f)
+                it = self.src.item(h, m)
+                b = it["nbox"][n] if n < len(it["nbox"]) else None
+                keep.append(not (b and it["w"] and it["h"]) or min(b[2] * it["w"], b[3] * it["h"]) >= ms)
+            if not all(keep):
+                k = np.array(keep)
+                ids, M = [f for f, x in zip(ids, keep) if x], M[k]
+        key = (m, rev, ms, len(ids), id(M) if rev is None else 0)
         if self._cache.get("key") != key:
             self._cache = {"key": key, "ids": ids, "M": M, "pos": {f: i for i, f in enumerate(ids)}}
         return self._cache
@@ -167,7 +241,7 @@ class Faces:
             return None
         mt = int(os.path.getmtime(src))
         it = self.src.item(h, m)
-        box = it["boxes"][n] if n < len(it["boxes"]) else None
+        box = it["nbox"][n] if n < len(it["nbox"]) else None
         key = f"{h}_{n}_{m}_{size}_{int(round(margin * 100))}_{mt}{'' if box else '_full'}"
         d = os.path.join(self.dir, "thumbs")
         out = os.path.join(d, key + ".jpg")
@@ -178,8 +252,7 @@ class Faces:
             im = ImageOps.exif_transpose(im).convert("RGB")
             W, H = im.size
             if box:
-                sx, sy = (W / it["w"], H / it["h"]) if it.get("w") and it.get("h") else (1.0, 1.0)
-                x, y, w, hh = box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy
+                x, y, w, hh = box[0] * W, box[1] * H, box[2] * W, box[3] * H   # xywh 0..1 -> pixels of this file
                 side = min(max(w, hh) * (1 + margin), W, H)
                 cx, cy = x + w / 2, y + hh / 2
             else:
@@ -201,7 +274,8 @@ class Faces:
     def face_obj(self, f: str, m: str, extra=None) -> Dict[str, Any]:
         h, n, _ = parse_fid(f)
         it = self.src.item(h, m)
-        o = {"id": f, "hash": h, "n": n, "model": m, "bbox": it["boxes"][n] if n < len(it["boxes"]) else None,
+        o = {"id": f, "hash": h, "n": n, "model": m, "box": it["nbox"][n] if n < len(it["nbox"]) else None,
+             "bbox": _px(it["nbox"][n], it["w"], it["h"]) if n < len(it["nbox"]) else None,
              "w": it["w"], "h": it["h"], "thumb": thumb_url(f)}
         pid = self.assign(m).get(f)
         if pid:
@@ -229,6 +303,13 @@ class Faces:
 
     # ------------------------------------------------------------------ clustering
     def run(self, full: bool = False, threshold: Optional[float] = None) -> Dict[str, Any]:
+        try:
+            return self._run(full, threshold)
+        finally:
+            if self.st.get("running"):
+                self.st = {**self.st, "running": False}
+
+    def _run(self, full: bool = False, threshold: Optional[float] = None) -> Dict[str, Any]:
         with self.lock:
             m = self.src.model
             s = self.settings()
@@ -655,7 +736,7 @@ def service() -> Faces:
                 cur.update(upd)
                 _atomic_json(svc.settings_path, cur)
             return cur
-        _F = Faces(os.path.dirname(svc.dir), FaceSource(svc.index), settings=svc.settings, save_settings=save,
+        _F = Faces(os.path.dirname(svc.dir), FaceSource(svc.index, svc), settings=svc.settings, save_settings=save,
                    tagger=_ImagelibTagger())
     return _F
 

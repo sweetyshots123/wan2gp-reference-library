@@ -16,7 +16,7 @@ class Src:
         return ids, F._norm(np.concatenate(V)) if V else np.zeros((0, 8), np.float32)
     def item(self, h, m):
         n = len(self.data.get(m, {}).get(h, ()))
-        return {"w": 100, "h": 100, "n": n, "boxes": [[10, 10, 20, 20]] * n}
+        return {"w": 1000, "h": 1000, "n": n, "nbox": [[0.1, 0.1, 0.2, 0.2]] * n}
 
 
 class Tags:
@@ -79,7 +79,7 @@ def test_assign_suggest_reject_tags():
     sug = f.suggest(pid, limit=5)
     assert {s["id"] for s in sug[:3]} == set(fs[:3]), sug
     assert all(truth[s["id"]] == 0 for s in sug)
-    assert sug[0]["bbox"] == [10, 10, 20, 20]
+    assert sug[0]["bbox"] == [100.0, 100.0, 200.0, 200.0] and sug[0]["box"] == [0.1, 0.1, 0.2, 0.2]
     f.reject(pid, [fs[0]])
     assert fs[0] not in {s["id"] for s in f.suggest(pid, limit=50, threshold=-1)}
     g = F.Faces(f.dir[:-6], f.src)   # rejection persisted
@@ -163,7 +163,7 @@ def test_face_thumb_crop_cache_invalidate():
     os.utime(img, (os.path.getmtime(img) + 10,) * 2)
     p2 = f.thumb_file(fid, 64, 0.0, sources=src)
     assert p2 != p and not os.path.exists(p)                      # source changed -> new file, old removed
-    f.src.item = lambda h, m: {"w": 100, "h": 100, "n": 1, "boxes": [None]}   # old index: no bbox -> whole image
+    f.src.item = lambda h, m: {"w": 100, "h": 100, "n": 1, "nbox": [None]}   # old index: no bbox -> whole image
     p3 = f.thumb_file(fid, 64, 0.4, sources=src)
     assert p3.endswith("_full.jpg")
     with Image.open(p3) as t:
@@ -187,6 +187,58 @@ def test_busy_and_translated_errors():
         assert F._ok(C(), "face_assigned", n=2, name="Ana")["toast"] == "2 cara(s) asignada(s) a Ana"
     finally:
         F._F = old
+
+
+def test_real_source_face_matrix_bbox_and_on_faces():
+    """FaceSource over a minimal simperf-like index (face_matrix / on_faces / packs with box+det)."""
+    import time
+    data, _ = synth(people=2, per=4)
+    V = data["arcface"]
+    class Idx:
+        active = "arcface"; rev = 0
+        def __init__(self):
+            self.items, self.cbs = {}, []
+            for h, v in V.items():
+                self.items[h] = {"w": 200, "h": 100, "faces": {"arcface": {"vec": v.astype(np.float16), "box": np.array([[0.25, 0.1, 0.2, 0.4]] * len(v), np.float32), "det": np.ones(len(v), np.float32)}}}
+            h0 = next(iter(V)); self.items[h0]["faces"]["arcface"]["box"][:] = np.nan   # legacy row
+        def face_matrix(self, fm=None):
+            ids, fi, vec = [], [], []
+            for h, e in self.items.items():
+                p = e["faces"][fm]; ids += [h] * len(p["vec"]); fi += list(range(len(p["vec"]))); vec.append(p["vec"])
+            return {"ids": np.array(ids, object), "face_i": np.array(fi, np.int32), "vec": np.concatenate(vec).astype(np.float32), "model": fm}
+        def on_faces(self, cb):
+            self.cbs.append(cb); return lambda: self.cbs.remove(cb)
+    idx = Idx()
+    f = F.Faces(tempfile.mkdtemp(), F.FaceSource(idx), tagger=Tags()); f.AUTO_DELAY = 0.05
+    ids, M = f.src.faces("arcface")
+    assert len(ids) == 8 and abs(float(np.linalg.norm(M[0])) - 1) < 1e-3
+    h0, h1 = list(V)[:2]
+    assert f.face_obj(F.fid(h0, 0, "arcface"), "arcface")["bbox"] is None
+    o = f.face_obj(F.fid(h1, 0, "arcface"), "arcface")
+    assert o["box"] == [0.25, 0.1, 0.2, 0.4] and o["bbox"] == [50.0, 10.0, 40.0, 40.0], o
+    # on_faces -> debounced incremental clustering
+    idx.cbs[0]([{"id": h1, "face_i": 0, "model": "arcface"}])
+    for _ in range(100):
+        if f.cl.get("arcface", {}).get("seen"): break
+        time.sleep(0.02)
+    assert len(f.clusters("arcface")["seen"]) == 8
+    idx.rev += 1
+    rng = np.random.default_rng(5)
+    idx.items["new1"] = {"w": 10, "h": 10, "faces": {"arcface": {"vec": (V[h1] + 0.01 * rng.normal(size=V[h1].shape)).astype(np.float16), "box": np.full((1, 4), np.nan, np.float32), "det": np.ones(1, np.float32)}}}
+    idx.cbs[0]([{"id": "new1", "face_i": 0, "model": "arcface"}])
+    for _ in range(100):
+        if len(f.clusters("arcface")["seen"]) == 9: break
+        time.sleep(0.02)
+    cl = f.clusters("arcface")["clusters"]
+    assert any({F.fid("new1", 0, "arcface"), F.fid(h1, 0, "arcface")} <= set(c["faces"]) for c in cl.values())
+    # face_min_size: a 10x10 px face (box 0.05 of 200x100 -> 10x5) is skipped
+    idx.items[h1]["faces"]["arcface"]["box"][:] = [0.1, 0.1, 0.05, 0.05]; idx.rev += 1
+    assert F.fid(h1, 0, "arcface") not in f._mat("arcface")["pos"]
+    # re-index shrinking an item's rows drops stale assignments
+    f.assign("arcface")[F.fid(h1, 3, "arcface")] = "p_x"
+    idx.cbs[0]([{"id": h1, "face_i": 0, "model": "arcface"}])
+    assert F.fid(h1, 3, "arcface") not in f.assign("arcface")
+    f.close(); assert not idx.cbs
 
 
 if __name__ == "__main__":

@@ -160,7 +160,7 @@
             const ov = document.createElement("div"); ov.className = "reflib-fc-ov";
             const ir = img.getBoundingClientRect(), br = box.getBoundingClientRect();
             Object.assign(ov.style, { left: (ir.left - br.left) + "px", top: (ir.top - br.top) + "px", width: ir.width + "px", height: ir.height + "px" });
-            ov.innerHTML = it.faces.map(f => f.bbox && it.w ? `<div class="reflib-fc-bb" style="left:${100 * f.bbox[0] / it.w}%;top:${100 * f.bbox[1] / it.h}%;width:${100 * f.bbox[2] / it.w}%;height:${100 * f.bbox[3] / it.h}%"><span>${esc(names.get(f.person) || ft("unknown"))}</span></div>` : "").join("")
+            ov.innerHTML = it.faces.map(f => f.box ? `<div class="reflib-fc-bb" style="left:${100 * f.box[0]}%;top:${100 * f.box[1]}%;width:${100 * f.box[2]}%;height:${100 * f.box[3]}%"><span>${esc(names.get(f.person) || ft("unknown"))}</span></div>` : "").join("")
                 + `<div class="reflib-fc-ovlist">${it.faces.map((f, i) => `<span>${i + 1}: ${esc(names.get(f.person) || ft("unknown"))}</span>`).join("")}</div>`;
             box.style.position = "relative"; box.appendChild(ov);
         }).catch(() => {});
