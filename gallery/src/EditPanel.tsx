@@ -3,7 +3,7 @@ import { FAV, Item, Meta, isPerson, personName, personTag } from "./api";
 import { renameOne } from "./Manage";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { act } from "./actions";
-import { startAutotag } from "./AutoTag";
+import { AutoTags, startAutotag } from "./AutoTag";
 
 interface Props {
   items: Item[];                 // los elementos a editar (1 = ficha, N = edición en bloque)
@@ -112,6 +112,10 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
           <datalist id="dl-tags">{allTags.filter((t) => !isPerson(t)).map((t) => <option key={t} value={t} />)}</datalist>
         </form>
       </section>
+
+      {one && (one.kind || "image") === "image" && <AutoTags hash={one.hash} onSearch={(id, label) => {
+        window.dispatchEvent(new CustomEvent("reflib:search-chip", { detail: { k: "auto", v: id, label } }));
+      }} />}
 
       <section>
         <h4>Colecciones</h4>

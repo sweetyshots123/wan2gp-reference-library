@@ -6,6 +6,19 @@ import { call } from "./api";
 import { toast } from "./ui";
 
 const KICK = "reflib:at-kick";
+export const AT_DONE = "reflib:at-done";   // 1.9.2: la cola terminó (o cambió una imagen): recargar etiquetas automáticas
+
+// 1.9.2: taxonomía (nombres ES de las etiquetas automáticas), la misma que usa la Media Library (at_facets tax:true)
+let TAX: Map<string, any> | null = null;
+let taxP: Promise<void> | null = null;
+export function setTax(list: any[] | undefined) { if (list && list.length) TAX = new Map(list.map((n) => [n.id, n])); }
+export function loadTax(): Promise<void> {
+  if (TAX) return Promise.resolve();
+  if (!taxP) taxP = call("at_facets", { f: {}, tax: true }).then((r) => setTax(r.tax)).catch(() => { taxP = null; });
+  return taxP;
+}
+export const autoLabel = (id: string) => { const n = TAX?.get(id); return n ? n.es || n.en || id : id; };
+export const isLeafTag = (id: string) => { const n = TAX?.get(id); return !!n && n.k === "t" && id !== "appears_minor" && id !== "needs_review"; };
 
 export async function startAutotag(hashes: string[], force = false) {
   let r = await call("at_enqueue", { hashes, force });
@@ -37,7 +50,13 @@ export function AutoTagBar({ onDone }: { onDone: () => void }) {
         if (!alive) return;
         const s = r.at; setAt(s);
         const busy = !!s && (s.running || s.queued > 0);
-        if (was.current && !busy) done.current();
+        if (was.current && !busy) {
+          done.current(); window.dispatchEvent(new Event(AT_DONE));
+          if (s.error) toast(`Autoetiquetado detenido: ${s.error}`, "err");
+          else if (s.failed) toast(`Autoetiquetado terminado: ${s.done} hecha(s), ${s.failed} fallida(s)`, "err");
+          else if (s.done) toast(`Autoetiquetado terminado: ${s.done} imagen(es). Las etiquetas están en «Etiquetas automáticas».`);
+          else if (s.skipped) toast("Ya estaban etiquetadas (usa ↻ Reetiquetar para repetir)");
+        }
         was.current = busy;
         timer = setTimeout(poll, busy ? 1500 : 15000);
       } catch { timer = setTimeout(poll, 5000); }
@@ -55,7 +74,51 @@ export function AutoTagBar({ onDone }: { onDone: () => void }) {
       <div className="atprog"><div style={{ width: pct + "%" }} /></div>
       <button onClick={async () => setAt((await call("at_pause", { paused: !at.paused })).at)}>{at.paused ? "▶ Seguir" : "⏸ Pausa"}</button>
       <button onClick={async () => setAt((await call("at_cancel")).at)}>✕ Cancelar</button>
+      {!at.loaded && !at.done && <span className="muted">{at.waiting ? "" : "cargando / descargando el modelo… (la primera vez puede tardar)"}</span>}
       {at.error && <span className="aterr">{at.error}</span>}
     </div>
+  );
+}
+
+/** 1.9.2: «Etiquetas automáticas» de una imagen, como en la Media Library: at_image (lectura) y at_edit
+ *  (accept = ✓ confirmar, remove = × quitar, restore = ↺ recuperar). Se guardan aparte de las etiquetas manuales. */
+export function AutoTags({ hash, onSearch }: { hash: string; onSearch?: (id: string, label: string) => void }) {
+  const [img, setImg] = useState<any>(null);
+  const [st, setSt] = useState<any>(null);
+  const [more, setMore] = useState(false);
+  const load = () => call("at_image", { hash }).then((r) => r.ok && setImg(r.img)).catch(() => {});
+  useEffect(() => {
+    setImg(null); setMore(false); load();
+    const h = () => load();
+    const k = () => setSt({ queued: true });
+    window.addEventListener(AT_DONE, h); window.addEventListener(KICK, k);
+    return () => { window.removeEventListener(AT_DONE, h); window.removeEventListener(KICK, k); };
+  }, [hash]);
+  const edit = async (tag: string, op: string) => {
+    const r = await call("at_edit", { hash, tag, op });
+    if (r.ok) { setImg(r.img); window.dispatchEvent(new Event(AT_DONE)); } else toast(r.error || "Error", "err");
+  };
+  if (!img) return null;
+  const tags: any[] = img.tags || [];
+  const shown = tags.filter((t) => t.shown && !t.rejected);
+  const hidden = tags.filter((t) => !t.shown || t.rejected);
+  const chip = (t: any) => (
+    <span key={t.id} className={`chip auto ${t.shown && !t.rejected ? "" : "off"} ${t.accepted ? "acc" : ""}`} title={`Confianza ${Math.round(t.conf * 100)} % · ${t.src}${t.accepted ? " · confirmada" : ""}`}>
+      <span className="clk" onClick={() => onSearch?.(t.id, t.label)} title="Clic: ver todas las imágenes con esta etiqueta">{t.label}</span><small> {Math.round(t.conf * 100)}</small>
+      {t.rejected ? <button title="Recuperar" onClick={() => edit(t.id, "restore")}>↺</button>
+        : <>{!t.accepted && <button title="Confirmar (la etiqueta se queda y entrena el modelo)" onClick={() => edit(t.id, "accept")}>✓</button>}
+          <button title="Quitar esta etiqueta automática" onClick={() => edit(t.id, "remove")}>×</button></>}
+    </span>);
+  return (
+    <section>
+      <h4>Etiquetas automáticas {img.model && <small className="muted">{img.model}</small>}</h4>
+      {img.review && <p className="aterr">⚠ Marcada para revisión: sin etiquetas automáticas visibles.</p>}
+      <div className="chips">
+        {shown.map(chip)}
+        {!tags.length && <span className="muted">{st?.queued ? "En cola… aparecerán aquí al terminar." : img.model ? "El modelo no encontró etiquetas." : "Aún sin autoetiquetar."}</span>}
+      </div>
+      {hidden.length > 0 && <p><button className="link" onClick={() => setMore(!more)}>{more ? "Ocultar" : `+ ${hidden.length} con poca confianza o quitadas`}</button></p>}
+      {more && <div className="chips">{hidden.map(chip)}</div>}
+    </section>
   );
 }

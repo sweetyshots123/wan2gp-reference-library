@@ -5,13 +5,15 @@ import { Thumb } from "./ui";
 // Búsqueda universal: un solo cuadro para personas, colecciones, etiquetas y archivos (nombre o carpeta).
 // Sugerencias agrupadas + vista previa en vivo mientras escribes; cada sugerencia elegida pasa a ser un filtro (chip)
 // y todos los filtros se combinan con Y. Sin acentos ni mayúsculas.
-export type ChipKind = "persona" | "tag" | "col" | "text";
+export type ChipKind = "persona" | "tag" | "col" | "text" | "auto";   // 1.9.2: "auto" = etiqueta automática (f.atags, como la Media Library)
 export interface Chip { k: ChipKind; v: string; label: string }
 export const chipsFilter = (chips: Chip[], extraText = ""): Filter => {
   const f: Filter = {};
   const tags = chips.filter((c) => c.k === "persona" || c.k === "tag").map((c) => c.v);
   const cols = chips.filter((c) => c.k === "col").map((c) => c.v);
   const qall = [...chips.filter((c) => c.k === "text").map((c) => c.v), ...extraText.split(/\s+/).filter(Boolean)];
+  const atags = chips.filter((c) => c.k === "auto").map((c) => c.v);
+  if (atags.length) f.atags = atags;
   if (tags.length) f.tags = tags; if (cols.length) f.cols = cols; if (qall.length) f.qall = qall;
   return f;
 };
@@ -68,8 +70,24 @@ export default function Omni({ meta, chips, setChips, text, setText, onSearch, o
     return () => window.clearTimeout(t);
   }, [text, chips, open]);
 
+  // 1.9.2: etiquetas automáticas: la misma acción de sugerencias que la Media Library (at_suggest, con sinónimos ES/EN)
+  const [autoS, setAutoS] = useState<Sug[]>([]);
+  useEffect(() => {
+    if (!open || text.trim().length < 2) { setAutoS([]); return; }
+    let on = true;
+    const t = window.setTimeout(() => {
+      call("at_suggest", { text, f: chipsFilter(chips) }).then((r) => {
+        if (!on || !r.ok) return;
+        const taken = new Set(chips.filter((c) => c.k === "auto").map((c) => c.v));
+        setAutoS((r.sug || []).filter((x: any) => x.kind === "at" && x.n > 0 && !taken.has(x.id)).slice(0, 6)
+          .map((x: any) => ({ k: "auto", v: x.id, label: x.label, count: x.n, f: { atags: [x.id] } })));
+      }).catch(() => {});
+    }, 160);
+    return () => { on = false; window.clearTimeout(t); };
+  }, [text, chips, open]);
+
   const files: Sug[] = ws.length ? (prev?.items || []).filter((i) => score(i.name, ws) > 0).slice(0, 5).map((i) => ({ k: "file", v: i.hash, label: i.name, item: i })) : [];
-  const flat = [...groups.personas, ...groups.cols, ...groups.tags, ...files];
+  const flat = [...groups.personas, ...groups.cols, ...groups.tags, ...autoS, ...files];
   useEffect(() => setHi(0), [text]);
   useEffect(() => { const d = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); }; addEventListener("mousedown", d); return () => removeEventListener("mousedown", d); }, []);
 
@@ -92,14 +110,14 @@ export default function Omni({ meta, chips, setChips, text, setText, onSearch, o
   const row = (s: Sug) => { const k = ++n; return (
     <li key={s.k + s.v} className={hi === k ? "hi" : ""} onMouseEnter={() => setHi(k)} onMouseDown={(e) => { e.preventDefault(); choose(s); }}>
       {s.item ? <Thumb hash={s.item.hash} className="sthumb" /> : s.f ? <Cover f={s.f} /> : null}
-      <span className="sl">{s.k === "tag" ? "#" : ""}{s.label}</span>{s.count != null && <small>{s.count}</small>}
+      <span className="sl">{s.k === "tag" ? "#" : s.k === "auto" ? "🏷 " : ""}{s.label}</span>{s.count != null && <small>{s.count}</small>}
     </li>); };
   const group = (title: string, xs: Sug[]) => xs.length ? <div className="og"><h5>{title}</h5><ul>{xs.map(row)}</ul></div> : null;
   const show = open && (ws.length > 0 || chips.length > 0);
   return (
     <div className="omni" ref={box}>
       <div className="obox" onClick={() => inp.current?.focus()}>
-        {chips.map((c, i) => <span key={c.k + c.v} className={`chip on ${c.k}`}>{c.k === "tag" ? "#" : c.k === "col" ? "▣ " : c.k === "persona" ? "👤 " : ""}{c.label}
+        {chips.map((c, i) => <span key={c.k + c.v} className={`chip on ${c.k}`}>{c.k === "tag" ? "#" : c.k === "col" ? "▣ " : c.k === "persona" ? "👤 " : c.k === "auto" ? "🏷 " : ""}{c.label}
           <button onClick={(e) => { e.stopPropagation(); setChips(chips.filter((_, j) => j !== i)); }} title="Quitar">×</button></span>)}
         <input id="q" ref={inp} value={text} placeholder={chips.length ? "Añadir más…" : "Buscar personas, colecciones, etiquetas, archivos…  ( / )"}
           onChange={(e) => { setText(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey} autoComplete="off" />
@@ -107,7 +125,7 @@ export default function Omni({ meta, chips, setChips, text, setText, onSearch, o
       {show && (
         <div className="odrop">
           <div className="ocols">
-            {group("Personas", groups.personas)}{group("Colecciones", groups.cols)}{group("Etiquetas", groups.tags)}{group("Archivos", files)}
+            {group("Personas", groups.personas)}{group("Colecciones", groups.cols)}{group("Etiquetas", groups.tags)}{group("Etiquetas automáticas", autoS)}{group("Archivos", files)}
             {ws.length > 0 && !flat.length && <p className="muted">Ningún nombre coincide; Enter busca «{text}» en archivos y carpetas.</p>}
           </div>
           <div className="oprev">

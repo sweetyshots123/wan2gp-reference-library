@@ -10,7 +10,7 @@ export interface TagCount { tag: string; count: number }
 export interface Meta { rev: number; total: number; collections: Collection[]; tags: TagCount[]; folders: any[]; tree?: Record<string, Record<string, number[]>>; n_unassigned?: number; kinds: Record<string, number> }
 export interface Filter {
   kinds?: string[];
-  cols?: string[]; tags?: string[]; q?: string; qall?: string[]; kind?: string; sort?: string; none?: boolean; recent?: boolean;
+  cols?: string[]; tags?: string[]; atags?: string[]; q?: string; qall?: string[]; kind?: string; sort?: string; none?: boolean; recent?: boolean;
   node?: { fid: string; rel: string }; sub?: boolean;
 }
 export interface Resp { ok: boolean; message?: string; toast?: string; kind?: string; error?: string; [k: string]: any }

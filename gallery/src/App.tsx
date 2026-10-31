@@ -5,6 +5,7 @@ import { FAV, Filter, Item, Meta, PERSON, call, fold, isPerson, metaOf, personNa
 import { ManageList } from "./Manage";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
+import { AT_DONE, autoLabel, isLeafTag, loadTax, setTax } from "./AutoTag";
 import Viewer from "./Viewer";
 import Grid, { Section } from "./Grid";
 import Omni, { Chip, chipsFilter } from "./Omni";
@@ -14,7 +15,7 @@ import { Thumb, Toasts, fmtDur, toast } from "./ui";
 type Route =
   | { v: "explorar" } | { v: "favoritas" } | { v: "videos" } | { v: "sin" } | { v: "buscar" }
   | { v: "personas" } | { v: "persona"; name: string }
-  | { v: "tags" } | { v: "tag"; tag: string }
+  | { v: "tags" } | { v: "tag"; tag: string } | { v: "auto"; id: string }
   | { v: "colecciones" } | { v: "coleccion"; id: string }
   | { v: "carpetas" } | { v: "carpeta"; fid: string; rel: string };
 
@@ -29,6 +30,7 @@ function parseRoute(): Route {
     case "persona": case "modelo": return b ? { v: "persona", name: b } : { v: "personas" };
     case "etiquetas": return { v: "tags" };
     case "tag": return b ? { v: "tag", tag: b } : { v: "tags" };
+    case "auto": return b ? { v: "auto", id: b } : { v: "tags" };   // 1.9.2: etiqueta automática
     case "colecciones": return { v: "colecciones" };
     case "coleccion": return b ? { v: "coleccion", id: b } : { v: "colecciones" };
     case "carpetas": return { v: "carpetas" };
@@ -55,6 +57,9 @@ export default function App() {
   const [kc, setKc] = useState<Record<string, number>>({});
   const [sort, setSort] = useState(() => localStorage.getItem("gal.sort") || "date_desc");
   const [extraTags, setExtraTags] = useState<string[]>([]);
+  const [, setTaxOk] = useState(false);
+  useEffect(() => { const h = (e: any) => { setChips([e.detail]); setText(""); location.hash = "#/buscar"; }; window.addEventListener("reflib:search-chip", h); return () => window.removeEventListener("reflib:search-chip", h); }, []);
+  useEffect(() => { loadTax().then(() => setTaxOk(true)); }, []);   // 1.9.2: nombres de las etiquetas automáticas
   const [viewer, setViewer] = useState<number | null>(null);
   const [solo, setSolo] = useState<{ list: Item[]; i: number } | null>(null);   // visor abierto desde la búsqueda
   const [selMode, setSelMode] = useState(false);
@@ -83,6 +88,7 @@ export default function App() {
       case "buscar": return chipsFilter(chips);
       case "persona": return { tags: [personTag(r.name, meta?.tags || [])] };
       case "tag": return { tags: [r.tag] };
+      case "auto": return { atags: [r.id] };
       case "coleccion": return { cols: [r.id] };
       case "carpetas": return {};
       case "carpeta": return { node: { fid: r.fid, rel: r.rel }, sub: true };
@@ -181,6 +187,7 @@ export default function App() {
       case "persona": return route.name;
       case "tags": return "Etiquetas";
       case "tag": return `#${route.tag}`;
+      case "auto": return `🏷 ${autoLabel(route.id)}`;
       case "colecciones": return "Colecciones";
       case "carpetas": return "Carpetas";
       case "carpeta": { const f = meta?.folders.find((x: any) => x.id === route.fid); return route.rel ? route.rel.split("/").pop() || "" : folderLabel(f); }
@@ -225,7 +232,7 @@ export default function App() {
         <nav>
           {nav("#/", "Explorar", v === "explorar")}
           {nav("#/personas", "Personas", v === "personas" || v === "persona")}
-          {nav("#/etiquetas", "Etiquetas", v === "tags" || v === "tag")}
+          {nav("#/etiquetas", "Etiquetas", v === "tags" || v === "tag" || v === "auto")}
           {nav("#/colecciones", "Colecciones", v === "colecciones" || v === "coleccion")}
           {nav("#/carpetas", "Carpetas", v === "carpetas" || v === "carpeta")}
           {nav("#/favoritas", "♥ Favoritas", v === "favoritas")}
@@ -258,7 +265,7 @@ export default function App() {
           </div>
           {v === "buscar" && chips.length > 0 && (
             <div className="facets">
-              {chips.map((c, i) => <button key={c.k + c.v} className="chip on" onClick={() => setChips(chips.filter((_, j) => j !== i))}>{c.k === "tag" ? "#" : c.k === "col" ? "▣ " : c.k === "persona" ? "👤 " : ""}{c.label} ×</button>)}
+              {chips.map((c, i) => <button key={c.k + c.v} className="chip on" onClick={() => setChips(chips.filter((_, j) => j !== i))}>{c.k === "tag" ? "#" : c.k === "col" ? "▣ " : c.k === "persona" ? "👤 " : c.k === "auto" ? "🏷 " : ""}{c.label} ×</button>)}
               {matches.length > 0 && <span className="muted">· también coinciden:</span>}
               {matches.map((m: any) => <button key={m.k + m.v} className={`chip ${m.k === "persona" ? "model" : ""}`} onClick={() => setChips([...chips, { k: m.k, v: m.v, label: m.label }])}>{m.k === "tag" ? "#" : m.k === "col" ? "▣ " : "👤 "}{m.label} <small>{m.n}</small></button>)}
             </div>
@@ -290,6 +297,7 @@ export default function App() {
           {meta && manage && v === "colecciones" && <ManageList kind="col" rows={meta.collections.filter((c) => !tq || fold(c.name).includes(tq)).map((c) => ({ key: c.id, label: c.name, count: c.count }))} after={refresh} />}
           {meta && !manage && v === "personas" && <IndexCards entries={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count, href: `#/persona/${encodeURIComponent(personName(t.tag))}`, f: { tags: [t.tag] } }))} empty="Aún no hay personas. Añade una desde el panel de edición (o etiqueta con «persona:Nombre» en la Media Library)." />}
           {meta && !manage && v === "tags" && <IndexCards entries={meta.tags.filter((t) => !isPerson(t.tag) && t.tag.toLowerCase() !== FAV).filter((t) => !tq || fold(t.tag).includes(tq)).map((t) => ({ key: t.tag, label: `#${t.tag}`, count: t.count, href: `#/tag/${encodeURIComponent(t.tag)}`, f: { tags: [t.tag] } }))} empty="Aún no hay etiquetas." />}
+          {meta && !manage && v === "tags" && <AutoIndex tq={tq} rev={meta.rev} />}
           {meta && !manage && v === "colecciones" && <IndexCards entries={[{ key: "__none", label: "Sin colección", count: (meta as any).n_unassigned ?? 0, href: "#/sin-coleccion", f: { none: true } as Filter }, ...meta.collections.filter((c) => !tq || fold(c.name).includes(tq)).map((c) => ({ key: c.id, label: c.name, count: c.count, href: `#/coleccion/${c.id}`, f: { cols: [c.id] } }))]} empty="" />}
         </main>
       )}
@@ -333,6 +341,30 @@ function Tile({ it, sel, selMode, onOpen, onSel, onFav }: { it: Item; sel: boole
       <figcaption>{people.length ? <b>{people.join(", ")}</b> : null}<span>{it.name}</span></figcaption>
     </figure>
   );
+}
+
+// 1.9.2: etiquetas automáticas (las del autoetiquetado, guardadas aparte de las manuales): mismos recuentos que el
+// panel de facetas de la Media Library (at_facets). Clic = filtrar por esa etiqueta (f.atags).
+function AutoIndex({ tq, rev }: { tq: string; rev: number }) {
+  const [rows, setRows] = useState<Entry[] | null>(null);
+  const [all, setAll] = useState(false);
+  const [atRev, setAtRev] = useState(0);
+  useEffect(() => { const h = () => setAtRev((x) => x + 1); window.addEventListener(AT_DONE, h); return () => window.removeEventListener(AT_DONE, h); }, []);
+  useEffect(() => {
+    call("at_facets", { f: {}, tax: true }).then((r) => {
+      if (!r.ok) return;
+      setTax(r.tax);
+      setRows(Object.entries(r.facets || {}).filter(([id]) => isLeafTag(id)).sort((a: any, b: any) => b[1] - a[1])
+        .map(([id, n]: any) => ({ key: "auto:" + id, label: autoLabel(id), count: n, href: `#/auto/${encodeURIComponent(id)}`, f: { atags: [id] } })));
+    }).catch(() => setRows([]));
+  }, [rev, atRev]);
+  if (!rows || !rows.length) return null;
+  const vis = rows.filter((e) => !tq || fold(e.label).includes(tq));
+  return (<>
+    <div className="bar"><h2>🏷 Etiquetas automáticas <small className="muted">{rows.length}</small></h2></div>
+    <IndexCards entries={all || tq ? vis : vis.slice(0, 48)} empty="Ninguna coincide." />
+    {!all && !tq && vis.length > 48 && <p><button onClick={() => setAll(true)}>Ver las {vis.length}</button></p>}
+  </>);
 }
 
 interface Entry { key: string; label: string; count: number; href: string; f: Filter }

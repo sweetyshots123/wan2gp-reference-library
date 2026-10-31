@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.2
+
+- **Galería · etiquetas automáticas visibles:** tras «Autoetiquetar», el panel seguía diciendo «Sin etiquetas» porque solo mostraba las etiquetas manuales; las del autoetiquetado se guardan aparte (`autotags.json`, como en la Media Library). Ahora el panel de una imagen tiene un grupo «Etiquetas automáticas» (`at_image`) con la confianza, ✓ confirmar, × quitar y ↺ recuperar (`at_edit`), y las de poca confianza o quitadas tras «+ N». Se recarga solo al terminar la cola.
+- **Búsqueda y filtros:** la búsqueda sugiere etiquetas automáticas (`at_suggest`, con sinónimos) y filtra por ellas (`f.atags`, igual que las facetas de la Media Library); clic en una etiqueta automática = ver todas las imágenes con ella. La página Etiquetas añade «🏷 Etiquetas automáticas» con sus recuentos (`at_facets`) y la ruta `#/auto/<id>`.
+- **Avisos:** al terminar la cola, un aviso con el resultado (hechas, fallidas, ya etiquetadas o el error); mientras el modelo se carga o descarga, la barra lo indica. Sin cambios en el backend.
+
 ## 1.9.1
 
 - **Galería · Autoetiquetar:** botones «🏷 Autoetiquetar» (uno o varios elementos; solo imágenes, omite las ya etiquetadas) y «↻ Reetiquetar» (forzar) en el panel de edición, y una barra de progreso fija con Pausa / Seguir / Cancelar. Usa las mismas acciones `ilib` que la Media Library (`at_enqueue`, `at_status`, `at_pause`, `at_cancel` → `reflib_core.autotag.AutoTagService`): misma cola, mismo modelo y el mismo aviso de descarga / coste en la nube antes de empezar. Al terminar, la Galería se refresca. Sin cambios en el backend.

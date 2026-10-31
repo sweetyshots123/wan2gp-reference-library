@@ -187,3 +187,9 @@ p.crumbs a { color: inherit; }
 .atbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:60;display:flex;gap:10px;align-items:center;background:#1c1c22;border:1px solid #333;border-radius:10px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008}
 .atprog{width:180px;height:6px;background:#333;border-radius:3px;overflow:hidden}.atprog>div{height:100%;background:#e8b04a;transition:width .4s}
 .atbar button{font-size:12px}.aterr{color:#f77}
+/* 1.9.2: etiquetas automáticas */
+.chip.auto { border-style: dashed; }
+.chip.auto.acc { border-style: solid; }
+.chip.auto.off { opacity: .5; }
+.chip.auto small { opacity: .6; font-size: .75em; }
+button.link { background: none; border: 0; padding: 0; color: inherit; opacity: .7; text-decoration: underline; cursor: pointer; }
