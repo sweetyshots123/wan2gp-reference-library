@@ -59,6 +59,27 @@ export default function Grid({ total, sections, size, version, getItem, ensure, 
   while (lo < hi) { const m = (lo + hi) >> 1; if (lay.rows[m].top + rowH < from) lo = m + 1; else hi = m; }
   const vis: typeof lay.rows = [];
   for (let k = lo; k < lay.rows.length && lay.rows[k].top < to; k++) vis.push(lay.rows[k]);
+  // 1.11.0: anclaje al cambiar el número de columnas (abrir/cerrar un panel, redimensionar): el primer elemento
+  // visible se queda en la misma posición de pantalla en vez de saltar a otra parte de la lista.
+  const anchor = useRef<{ cols: number; idx: number; frac: number } | null>(null);
+  const L = useRef({ lay, cols, rowH }); L.current = { lay, cols, rowH };
+  // el ancla solo se toma al desplazar el usuario (no en cada render: un render con el panel ya abierto
+  // mediría una posición ya reajustada por el navegador).
+  const base = () => { const el = wrap.current; const hdr = Math.max(0, (document.querySelector(".top") as HTMLElement | null)?.getBoundingClientRect().bottom || 0); return el ? el.getBoundingClientRect().top + scrollY - hdr : 0; };
+  const rec = () => {
+    const { lay, cols, rowH } = L.current; const rl = scrollY - base();
+    const r0 = rl > 0 ? lay.rows.find((r) => !r.head && r.top + rowH > rl) : undefined;
+    anchor.current = r0 ? { cols, idx: r0.first, frac: Math.max(0, Math.min(1, (rl - r0.top) / rowH)) } : null;
+  };
+  useEffect(() => { addEventListener("scroll", rec, { passive: true }); return () => removeEventListener("scroll", rec); }, []);
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    if (!a) { rec(); return; }
+    if (a.cols === cols) return;
+    const row = lay.rows.find((r) => !r.head && a.idx >= r.first && a.idx < r.first + r.n);
+    if (row) { const y = Math.round(base() + row.top + a.frac * rowH); if (Math.abs(y - scrollY) > 1) scrollTo({ top: y, behavior: "instant" as ScrollBehavior }); }
+    anchor.current = { ...a, cols };
+  });
   useEffect(() => {
     const t = vis.filter((r) => !r.head);
     if (t.length) ensure(t[0].first, t[t.length - 1].first + t[t.length - 1].n);

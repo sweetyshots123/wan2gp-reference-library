@@ -10,6 +10,7 @@ import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
+import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
 import { AT_DONE, autoLabel, isLeafTag, loadTax, setTax } from "./AutoTag";
 import Viewer from "./Viewer";
@@ -78,6 +79,9 @@ export default function App() {
   const [solo, setSolo] = useState<{ list: Item[]; i: number } | null>(null);   // visor abierto desde la búsqueda
   const [selMode, setSelMode] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [editOpen, setEditOpen] = useState(false);   // 1.11.0: el panel de edición solo se abre a petición
+  const [delPlan, setDelPlan] = useState<any>(null);
+  useEffect(() => { if (sel.size === 0) setEditOpen(false); }, [sel.size]);
   const [size, setSize] = useState(() => +(localStorage.getItem("gal.size") || 220));
   const [drag, setDrag] = useState(false);
   const rev = useRef(0);
@@ -359,17 +363,25 @@ export default function App() {
         </main>
       )}
 
+      {/* 1.11.0: seleccionar NO abre el panel: barra compacta abajo; el panel solo con «Editar selección» */}
       {sel.size > 0 && meta && !open && (
-        <div className="bulk">
-          <div className="bulkbar">
-            <b>{sel.size} seleccionados</b>
-            <button onClick={() => selection.selectAll()} title="Ctrl+A">Todas ({total})</button>
-            <button onClick={() => setSel(new Set())}>Ninguno</button>
-            {route.v === "coleccion" && <button onClick={() => act("remove_from", { hashes: [...sel], collection_id: (route as any).id }, () => { setSel(new Set()); refresh(); })}>Quitar de esta colección</button>}
-          </div>
-          <EditPanel items={selItems} meta={meta} onChanged={refresh} onClose={() => setSel(new Set())} />
+        <div className="selbar">
+          <b>{sel.size} seleccionados</b>
+          <button onClick={() => selection.selectAll()} title="Ctrl+A">Todas ({total})</button>
+          <button onClick={() => setSel(new Set())}>Ninguno</button>
+          <button onClick={() => act("tag", { hashes: [...sel], add: [FAV] }, refresh)} title="Marcar como favoritas">♥ Favorita</button>
+          <button onClick={() => setEditOpen(true)}>Etiquetar</button>
+          {route.v === "coleccion" && <button onClick={() => act("remove_from", { hashes: [...sel], collection_id: (route as any).id }, () => { setSel(new Set()); refresh(); })}>Quitar de esta colección</button>}
+          <button className="danger" onClick={() => startDelete([...sel], setDelPlan, () => { setSel(new Set()); refresh(); })}>Borrar</button>
+          <button className="primary" onClick={() => setEditOpen((o) => !o)}>{editOpen ? "Cerrar panel" : "Editar selección"}</button>
         </div>
       )}
+      {sel.size > 0 && meta && !open && editOpen && (
+        <div className="bulk">
+          <EditPanel items={selItems} meta={meta} onChanged={refresh} onClose={() => setEditOpen(false)} />
+        </div>
+      )}
+      {delPlan && <DeleteDialog plan={delPlan} hashes={[...sel]} close={() => setDelPlan(null)} after={() => { setSel(new Set()); refresh(); }} />}
 
       {viewer !== null && meta && !solo && (
         <Viewer items={items} index={viewer} total={total} meta={meta} setIndex={setViewer} close={closeViewer} onChanged={refresh} ensure={ensure} />

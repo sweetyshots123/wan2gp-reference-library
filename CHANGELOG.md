@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.11.0
+- Galería: seleccionar (círculo, Ctrl, Mayús) ya no abre el panel lateral en ninguna vista; aparece una barra compacta (n seleccionados, Todas/Ninguno, ♥ Favorita, Etiquetar, Quitar de la colección, Borrar con diálogo). El panel solo se abre con «Editar selección» y se actualiza si ya está abierto. Seleccionar no mueve el scroll (solo se re-renderiza la miniatura afectada); al abrir/cerrar el panel la primera fila visible queda anclada.
 - Galería, visor: rueda = 1 muesca → exactamente 1 foto (nuevo `wheel_rules.js` compartido, igual que selection_rules.js): calibra la muesca por dispositivo (mínimo |deltaY|, normalmente 100 / 120 px; LINE en líneas), acumula y conserva el resto, se reinicia al cambiar de sentido o tras 150 ms, trackpad acumula hasta una muesca, sin descartar muescas al girar rápido (precarga + LRU de 1.9.7 intactos). Antes, con muescas de 120 px y paso fijo de 100 px, se colaba una foto de más cada 5 muescas. Test `tests/test_wheel_rules.mjs`.
 - Galería: la ayuda del visor («Clic: zoom · Rueda…») aparece ~3 s solo la primera vez que se abre el visor y se desvanece; después no vuelve a salir nunca (localStorage). No bloquea clics.
 - Duplicados (`reflib_core/dupes.py`, acciones `dup_scan` / `dup_status` / `dup_groups` / `dup_resolve`, ver DUPES_API.md): idénticos por hash de contenido (mismo elemento en varios archivos) y casi iguales por pHash + dHash con umbral ajustable (0–16). Análisis en segundo plano, incremental, con caché `dupes.json`.

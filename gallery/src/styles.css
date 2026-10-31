@@ -77,7 +77,7 @@ main { padding:18px 22px 80px; }
 .vedit h3 { margin:0; } .vedit label { display:flex; flex-direction:column; gap:4px; } .vedit .io { display:flex; gap:6px; margin-bottom:6px; } .vedit .io button { white-space:nowrap; }
 .vedit .row { display:flex; gap:8px; } .primary { background:var(--acc); color:#111; border-color:var(--acc); font-weight:700; }
 /* selección en bloque */
-.bulk { position:fixed; right:16px; bottom:16px; top:76px; width:340px; z-index:30; background:var(--bg2); border:1px solid #2c2c34; border-radius:12px; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+.bulk { position:fixed; right:16px; bottom:70px; top:76px; width:340px; z-index:30; background:var(--bg2); border:1px solid #2c2c34; border-radius:12px; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.6); }
 .bulkbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:12px 16px 0; }
 .toasts { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:100; display:flex; flex-direction:column; gap:8px; align-items:center; }
 .toast { background:#26262e; border:1px solid #3a3a44; padding:9px 14px; border-radius:10px; display:flex; gap:12px; align-items:center; box-shadow:0 6px 20px rgba(0,0,0,.5); }
@@ -287,3 +287,8 @@ kbd{font-size:10px;opacity:.7;border:1px solid #666;border-radius:3px;padding:0 
 .dinfo { margin-top: 6px; line-height: 1.45; } .dinfo b { font-size: 14px; }
 .dpath { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .dkeep { margin-top: 4px; font-weight: 600; } .drow.keep .dkeep { color: #22c55e; }
+/* 1.11.0: barra compacta de selección (no tapa la rejilla; el panel solo con «Editar selección») */
+.selbar { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:31; display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 32px); padding:6px 10px; background:var(--bg2); border:1px solid #2c2c34; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.5); }
+.selbar b { margin-right:4px; font-size:13px; }
+.selbar button.danger { color:#f87171; }
+html{overflow-anchor:none}
