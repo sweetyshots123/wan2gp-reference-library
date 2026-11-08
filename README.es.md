@@ -1,5 +1,12 @@
 # Reference Library para Wan2GP
 
+## Imágenes iniciales desde la librería (1.12.4)
+
+En **Start with Image**, la galería de imágenes iniciales incorpora **Elegir de la librería** junto a Add/Remove/Left/Right/Clear. Abre el mismo explorador de Media Library, filtrado a imágenes. Haz doble clic en una imagen, o selecciona una y pulsa **Añadir a imágenes iniciales**. Conserva las existentes e inserta la nueva después de la seleccionada, como Add de WanGP. Admite recortes virtuales de imágenes. Esc/Cancelar no modifica los inputs.
+
+El destino es solo `image_start`, nunca Reference Images (`image_refs`). No inicia generación ni crea tareas en la cola. Se elige una imagen cada vez, sin reemplazos implícitos. El botón sigue la visibilidad y el tema de su galería, con textos EN/ES. Si WanGP no expone el estado y los componentes Add compatibles, no se instala el botón. [Detalles de integración](docs/FEATURES.md).
+
+
 Guarda las **Referencias** de WanGP como colecciones con nombre y los **vídeos de control** en una librería de vídeos, y cárgalos de nuevo con un clic.
 
 **Versión:** 1.7.2 ([cambios](CHANGELOG.md)) · **Autor:** [sweetyshots123](https://github.com/sweetyshots123) · **Licencia:** MIT · **Requiere:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)

@@ -1,5 +1,12 @@
 # Reference Library for Wan2GP
 
+## Starting images from the library (1.12.4)
+
+In **Start with Image**, the starting-images gallery has **Choose from library** beside its normal Add/Remove/Left/Right/Clear controls. It opens the same Media Library explorer, filtered to images. Double-click an image, or select one and press **Add to starting images**. Existing images are kept; the new image is inserted after the selected image, just like WanGP's Add. Virtual image crops are supported. Esc/Cancel leaves inputs unchanged.
+
+This targets `image_start` only, not Reference Images (`image_refs`). It does not start generation or create queue entries. Choose one image at a time; no implicit replacement. The control follows its gallery's visibility and theme, with English/Spanish labels. If an older WanGP does not expose the gallery's state/Add components, no button is installed. See [feature/integration details](docs/FEATURES.md).
+
+
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.
 
 **Version:** 1.7.2 ([changelog](CHANGELOG.md)) · **Author:** [sweetyshots123](https://github.com/sweetyshots123) · **License:** MIT · **Requires:** [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) (Gradio plugin)

@@ -2134,7 +2134,8 @@
         if (pk && pk.mode === "assign") { const ok = n === 1 && (k.video || 0) === 1 && ![...ilib.sel].includes(pk.src);   // 1.7.0
             html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? mkt("assign_here_tip", { label: pk.label }) : pkt("want_v"))}">🎭 ${esc(mkt("assign_here"))}</button>`; }
         else if (pk) { const ok = n === 1 && ((k[pk.kind] || 0) + (pk.kind === "mask" ? (k.video || 0) : 0)) === 1;
-            html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? pkt("load_tip", { label: pk.label }) : pkt(pk.kind === "audio" ? "want_a" : "want_v"))}">${GRID_SVG}${esc(pkt("load", { label: pk.label }))}</button>`; }
+            html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? pkt(pk.kind === "image" ? "tip_i" : "load_tip", { label: pk.label }) : pkt(pk.kind === "image" ? "want_i" : pk.kind === "audio" ? "want_a" : "want_v"))}">${GRID_SVG}${esc(pkt(pk.kind === "image" ? "add_i" : "load", { label: pk.label }))}</button>`; }
+        if (pk && pk.kind === "image") return html;
         if (k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
         if (k.video) {
             if (wanInput("reflib-vt-generate")) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="tovctl" ${n === 1 && k.video === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_vctl_tip") : it("to_one"))}">🎬 ${esc(it("to_vctl"))}</button>`;
@@ -4255,12 +4256,18 @@
     // toolbar before "📚 Guardar en librería". Nothing else in the toolbar moves.
     var FILM_SVG = '<svg class="reflib-pk-film" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false"><rect x="1.5" y="2.5" width="13" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 2.5v11M11.5 2.5v11M1.5 5.5h3M1.5 8h3M1.5 10.5h3M11.5 5.5h3M11.5 8h3M11.5 10.5h3" stroke="currentColor" stroke-width="1.2"/></svg>';
     const PKT = {
-        en: { tip_v: "Choose a video from the library for “{label}” (folders, Video Library, virtual copies)", tip_a: "Choose an audio from the library for “{label}”",
+        en: { start_btn: "Choose from library", start_label: "Starting images", tip_i: "Add an image from the library to the starting images (keeps existing images)",
+              banner_i: "Choose an image to add to the starting images", hint_i: "Double-click an image, or select one and press Add. Existing images are kept. Esc cancels.",
+              add_i: "Add to starting images", added_i: "Image added to starting images", want_i: "Select one image", gone_i: "Starting-image input is not available",
+              tip_v: "Choose a video from the library for “{label}” (folders, Video Library, virtual copies)", tip_a: "Choose an audio from the library for “{label}”",
               banner_v: "Choose a video for “{label}”", banner_a: "Choose an audio for “{label}”", hint: "Double-click it, or select it and press “Load into…”. Esc cancels.",
               load: "Load into “{label}”", load_tip: "Load the selected item into “{label}”", want_v: "Select one video", want_a: "Select one audio", cancel: "Cancel",
               loaded: "“{name}” loaded into “{label}”", gone: "“{label}” is not shown by the current model", vlib: "Video Library", vl_badge: "video lib.", vlib_tip: "The Video Library's own videos (saved with 📚, Media Editor crops, imports)",
               preparing: "Preparing “{name}”…" },
-        es: { tip_v: "Elegir un vídeo de la librería para «{label}» (carpetas, Librería de vídeos, copias virtuales)", tip_a: "Elegir un audio de la librería para «{label}»",
+        es: { start_btn: "Elegir de la librería", start_label: "Imágenes iniciales", tip_i: "Añadir una imagen de la librería a las imágenes iniciales (conserva las existentes)",
+              banner_i: "Elige una imagen para añadir a las imágenes iniciales", hint_i: "Doble clic sobre una imagen, o selecciona una y pulsa Añadir. Se conservan las existentes. Esc cancela.",
+              add_i: "Añadir a imágenes iniciales", added_i: "Imagen añadida a imágenes iniciales", want_i: "Selecciona una imagen", gone_i: "El input de imágenes iniciales no está disponible",
+              tip_v: "Elegir un vídeo de la librería para «{label}» (carpetas, Librería de vídeos, copias virtuales)", tip_a: "Elegir un audio de la librería para «{label}»",
               banner_v: "Elige un vídeo para «{label}»", banner_a: "Elige un audio para «{label}»", hint: "Doble clic sobre él, o selecciónalo y pulsa «Cargar en…». Esc cancela.",
               load: "Cargar en «{label}»", load_tip: "Cargar el elemento seleccionado en «{label}»", want_v: "Selecciona un vídeo", want_a: "Selecciona un audio", cancel: "Cancelar",
               loaded: "«{name}» cargado en «{label}»", gone: "«{label}» no aparece con el modelo actual", vlib: "Librería de vídeos", vl_badge: "lib. vídeos", vlib_tip: "Los vídeos propios de la Librería de vídeos (guardados con 📚, recortes de Media Editor, importados)",
@@ -4272,7 +4279,30 @@
         const t = ((l && l.textContent) || "").replace(/\s+/g, " ").trim().replace(/\s*\(\d+\s*[x×]\s*\d+[^)]*\)$/, "");   // WanGP appends "(640x360, 24 fps, 144 frames)"
         return !t ? field : t.length > 48 ? t.slice(0, 46).replace(/[\s,;:(]+$/, "") + "…" : t;
     }
+    function startPickField(block) {
+        const m = /\breflib-start-(generate|edit)\b/.exec(block.className || "");
+        return m ? { field: "image_start", tab: m[1] } : null;
+    }
+    function mountStartPickButtons() {
+        for (const block of document.querySelectorAll(".reflib-start-add")) {
+            const f = startPickField(block);
+            if (!f || !bridgeButton(`${f.tab}:image_start`)) continue;
+            const host = block.closest(".amg-controls"); if (!host) continue;
+            let b = host.querySelector(".reflib-start-pick");
+            if (!b) {
+                b = document.createElement("button"); b.type = "button"; b.className = "reflib-start-pick";
+                b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); pickOpen(block); });
+                b.addEventListener("pointerdown", e => e.stopPropagation());
+                // A sibling of UploadButton, never nested inside its file-picker click target.
+                host.appendChild(b);
+            }
+            const label = pkt("start_btn"), tip = pkt("tip_i");
+            if (b.textContent !== label) b.textContent = label;
+            b.title = tip; b.setAttribute("aria-label", tip);
+        }
+    }
     function mountPickButtons() {
+        mountStartPickButtons();
         for (const block of document.querySelectorAll(".reflib-savein")) {
             const f = svField(block); if (!f) continue;
             if (!bridgeButton(`${f.tab}:history`)) continue;   // no loading bridge on this tab -> no button
@@ -4294,11 +4324,11 @@
     }
     setInterval(mountPickButtons, 700);
     function pickOpen(block) {
-        const f = svField(block); if (!f) return;
-        const kind = SV_AUDIO.test(f.field) ? "audio" : f.field === "video_mask" ? "mask" : "video";   // 1.7.0 Video Mask: the masks first
+        const f = startPickField(block) || svField(block); if (!f) return;
+        const kind = f.field === "image_start" ? "image" : SV_AUDIO.test(f.field) ? "audio" : f.field === "video_mask" ? "mask" : "video";   // 1.7.0 Video Mask: the masks first
         // the whole library, filtered to that kind (not the folder / tags the browser was last left on); restored on close
         const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
-        ilib.pick = { tab: f.tab, field: f.field, kind, label: pkLabel(block, f.field), prevF: prev };
+        ilib.pick = { tab: f.tab, field: f.field, kind, label: kind === "image" ? pkt("start_label") : pkLabel(block, f.field), prevF: prev };
         Object.assign(ilib.f, { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false,
                                 atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind });
         const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
@@ -4318,7 +4348,7 @@
         const pk = ilib.pick;
         el.hidden = !pk;
         if (!pk) { el.innerHTML = ""; return; }
-        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pk.mode === "assign" ? mkt("assign_banner", { label: pk.label }) : pkt(pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt("hint"))}</small>
+        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pk.mode === "assign" ? mkt("assign_banner", { label: pk.label }) : pkt(pk.kind === "image" ? "banner_i" : pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt(pk.kind === "image" ? "hint_i" : "hint"))}</small>
             <button type="button" class="reflib-ib-btn" data-act="pkcancel">${esc(pkt("cancel"))}</button>`;
         if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
     }
@@ -4326,16 +4356,16 @@
         const pk = ilib.pick; if (!pk || !h) return;
         const x = ilib.q.items.find(i => i && i.hash === h) || {};
         if (pk.mode === "assign") return mkAssignTo(h, x);   // 1.7.0 "Asignar como máscara de…"
-        if (x.kind && x.kind !== pk.kind && !(pk.kind === "mask" && x.kind === "video")) { toast(pkt(pk.kind === "audio" ? "want_a" : "want_v"), "info"); return; }
+        if (x.kind && x.kind !== pk.kind && !(pk.kind === "mask" && x.kind === "video")) { toast(pkt(pk.kind === "image" ? "want_i" : pk.kind === "audio" ? "want_a" : "want_v"), "info"); return; }
         if (x.virtual && x.virtual.broken) { toast(vct("broken_tip"), "error"); return; }
         const name = x.name || "";
         if (x.virtual) toast(pkt("preparing", { name }), "info", [], 3000);   // a virtual copy is rendered first
-        const req = { hash: h, to: pk.field, target: `${pk.tab}:history` };
+        const req = { hash: h, to: pk.field, target: `${pk.tab}:${pk.field === "image_start" ? "image_start" : "history"}` };
         return sendBridge(req).then(r => {
             if (r && r.ok && (r.restored || []).includes(pk.field)) {
-                toast(pkt("loaded", { name: name.replace(/\.[A-Za-z0-9]{1,5}$/, ""), label: pk.label }), "ok");
+                toast(pkt(pk.kind === "image" ? "added_i" : "loaded", { name: name.replace(/\.[A-Za-z0-9]{1,5}$/, ""), label: pk.label }), "ok");
                 closeBrowser();
-            } else toast((r && r.error) || pkt("gone", { label: pk.label }), "error");
+            } else toast((r && r.error) || pkt(pk.kind === "image" ? "gone_i" : "gone", { label: pk.label }), "error");
             return r;
         }).catch(() => {});
     }

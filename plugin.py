@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.3"
+PLUGIN_VERSION = "1.12.4"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -197,6 +197,7 @@ TEXT = {
         "at_height_bad": "Height must be between 120 and 220 cm.",
         "unknown_action": "unknown action",
         "not_found": "collection not found",
+        "start_pick_failed": "Could not add the starting image. Select an available library image in multi-image mode.",
         "gallery_missing": "Reference Images gallery not available",
         "default_name": "Collection",
         "copy_suffix": "copy",
@@ -569,6 +570,7 @@ TEXT = {
         "ilib_folder_kept": "{k} de carpetas vigiladas se quedan en el disco",
         "ilib_folder_only": "Las imágenes de carpetas vigiladas nunca se borran del disco ({k} omitidas)",
         "err_undo_expired": "Ya no se puede deshacer",
+        "start_pick_failed": "No se pudo añadir la imagen inicial. Elige una imagen disponible de la librería en modo de varias imágenes.",
         "refs_used": "{n} imagen(es) cargadas en Reference Images",
         "refs_appended": "{n} imagen(es) añadidas a Reference Images ({total} en total)",
         "refs_appended_skip": "{n} imagen(es) añadidas a Reference Images ({skipped} ya estaban)",
@@ -1291,6 +1293,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         self.version = PLUGIN_VERSION
         self.description = "Named collections of Reference Images: save, load, manage."
         self.targets = {}   # "generate:image_refs" -> {tab, gallery, state, row}
+        self.start_targets = {}  # tab -> image_start gallery + its own AMG state
         self._amg = None
         self._lock = threading.Lock()
         self._last_applied = {}  # tab -> collection_id (session memory)
@@ -1309,6 +1312,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         self.request_component("image_refs")
         self.request_component("image_refs_extra")
         self.request_component("image_refs_row")
+        self.request_component("image_start_extra")
         self.request_component("tab_id")
         for name in ("video_mask", "image_mask") + AUDIO_TARGETS:
             self.request_component(name)
@@ -1343,6 +1347,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             self._setup_save_targets(tab, components)
         except Exception:
             traceback.print_exc()
+        self._setup_start_target(tab, components)
         gallery, extra = components.get("image_refs"), components.get("image_refs_extra")
         row = components.get("image_refs_row")
         if gallery is None or not isinstance(extra, (list, tuple)) or len(extra) < 2:
@@ -1366,6 +1371,49 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             # Capture tab/gallery/state in the closure for the insert_after constructor.
             self.insert_after("image_refs_row", lambda t=tab, g=gallery, s=state: self.create_bar(t, g, s))
         return {}
+
+    def _setup_start_target(self, tab, components):
+        """Use component identity, never translated labels, to distinguish start images from references."""
+        gallery, extra = components.get("image_start"), components.get("image_start_extra")
+        if (not isinstance(gallery, gr.Gallery) or not isinstance(extra, (list, tuple)) or len(extra) < 3
+                or extra[-2] is not gallery or not isinstance(extra[-1], gr.State)):
+            return  # older/incompatible WanGP: no button rather than a wrong destination
+        upload = extra[1]  # [gallery_row, upload, left, right, clear, gallery, state]
+        if not isinstance(upload, gr.UploadButton):
+            return
+        cl = upload.elem_classes or []
+        cl = cl if isinstance(cl, list) else [cl]
+        upload.elem_classes = cl + ["reflib-start-add", f"reflib-start-{tab}"]
+        self.start_targets[tab] = {"gallery": gallery, "state": extra[-1]}
+
+    def start_image_bridge(self, tab, raw, gallery, state):
+        """Library image -> image_start only, through AMG Add with CURRENT gallery/state; never generate."""
+        from shared.gradio.gallery import get_state
+        target = f"{tab}:image_start"
+        req = {}
+        try:
+            req = json.loads(raw or "{}")
+            if not isinstance(req, dict):
+                req = {}
+            if req.get("target") != target or req.get("to") != "image_start" or tab not in self.start_targets:
+                raise ValueError("destination")
+            h = str(req.get("hash") or "")
+            ent = imagelib.entry_for(h) or {}
+            if not ent or ent.get("kind", "image") != "image":
+                raise ValueError("image required")
+            src = imagelib.media_path(h)  # includes rendered virtual image crops
+            if not src or not os.path.isfile(src):
+                raise ValueError("missing image")
+            st = dict(get_state(state))
+            if st.get("single"):
+                raise ValueError("single-image replacement is not allowed here")
+            gal, st = self.amg()._on_add(_stage_for_gallery([src]), st, gallery)
+            out = {"ok": True, "id": req.get("id"), "target": target, "restored": ["image_start"]}
+            return json.dumps(out), gal, st
+        except Exception:
+            out = {"ok": False, "id": req.get("id"), "target": target,
+                   "error": tr(req.get("lang", "en"), "start_pick_failed")}
+            return json.dumps(out), gr.skip(), gr.skip()
 
     def _setup_video_target(self, tab, components):
         video = components.get("video_guide")
@@ -2665,6 +2713,15 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 btn.click(fn=self._bridge_fn(key, with_bar=bool(bar)), inputs=[bridge_req, target["gallery"], target["state"]],
                           outputs=[bridge_resp, target["gallery"], target["state"]] + extra_outs, show_progress="hidden",
                           trigger_mode="multiple", queue=True).then(
+                    fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
+                    js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
+            # Start images use a dedicated Add bridge: never the Reference Images/history replace bridge.
+            for tab, target in self.start_targets.items():
+                sbtn = gr.Button("startbridge", elem_id=f"reflib_bridge_{tab}_image_start")
+                sbtn.click(fn=lambda raw, gal, st, t=tab: self.start_image_bridge(t, raw, gal, st),
+                           inputs=[bridge_req, target["gallery"], target["state"]],
+                           outputs=[bridge_resp, target["gallery"], target["state"]],
+                           show_progress="hidden", queue=True).then(
                     fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
                     js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
             # Video bridges (target "<tab>:video_guide"): manager Load, reflib:video-apply / reflib:video-add, Save offers.

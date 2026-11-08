@@ -957,3 +957,13 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-tnode:hover .reflib-og-tbtn, .reflib-og-tbtn.on { opacity: 1; }
 .reflib-og-tbtn.on.own { background: #6d3bd8; color: #fff; }
 .reflib-og-tbtn.on:not(.own) { border-color: #6d3bd8; color: #a98bf0; }
+
+/* 1.12.4: lives inside WanGP's starting-gallery controls, follows its visibility and theme. */
+.amg-controls .reflib-start-pick {
+    flex: 1 1 155px; min-width: 1px; padding: 6px 10px; border-radius: var(--button-small-radius, 6px);
+    border: 1px solid var(--button-secondary-border-color, #64748b);
+    background: var(--button-secondary-background-fill, #334155);
+    color: var(--button-secondary-text-color, #f8fafc); font: inherit; font-size: 13px; cursor: pointer;
+}
+.amg-controls .reflib-start-pick:hover { filter: brightness(1.1); }
+.amg-controls .reflib-start-pick:focus-visible { outline: 2px solid var(--color-accent, #60a5fa); outline-offset: 2px; }
