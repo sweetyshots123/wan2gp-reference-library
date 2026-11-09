@@ -32,7 +32,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const [panel, setPanel] = useState(() => localStorage.getItem("gal.panel") === "1");
   const [ve, setVe] = useState<VEdit | null>(null);
   const [vbad, setVbad] = useState(false);   // 1.12.2: el navegador no puede reproducir este vídeo (p. ej. mp4v)
-  const [resumeOffer, setResumeOffer] = useState<number | null>(null);   // 1.12.7
+  const [offerSt, setOfferSt] = useState<{ hash: string; t: number } | null>(null);   // 1.12.7 / 1.12.12: oferta ligada a su hash
   const [settled, setSettled] = useState<string | null>(null);
   const panelIt = useRef<Item | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
@@ -90,10 +90,18 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     return () => { on = false; window.clearTimeout(settle); full?.abort(); };
   }, [it?.hash]);
 
-  const go = useCallback((d: number) => { dirRef.current = d > 0 ? 1 : -1; const j = index + d; if (j >= 0 && j < total) { if (FS) FS.navigate(stage.current, () => setIndex(j)); else setIndex(j); } }, [index, total]);
+  // 1.12.12: ÚNICO camino para cambiar de elemento (teclas, ‹ ›, rueda, tira de miniaturas): mueve la pantalla
+  // completa del <video> al contenedor estable antes de cambiar (ReflibFullscreen.navigate, compartido con la Media Library)
+  const setIndexRef = useRef(setIndex); setIndexRef.current = setIndex;
+  const navTo = useCallback((j: number) => {
+    if (FS) FS.navigate(stage.current, () => setIndexRef.current(j)); else setIndexRef.current(j);
+  }, []);
+  const go = useCallback((d: number) => { dirRef.current = d > 0 ? 1 : -1; const j = index + d; if (j >= 0 && j < total) navTo(j); }, [index, total, navTo]);
   // 1.12.11: si el botón nativo del <video> lo pone en pantalla completa, se pasa al contenedor estable
   const [fsOn, setFsOn] = useState(false);
-  useEffect(() => { if (!FS) return; const off1 = FS.keep(stage.current); const off2 = FS.onChange(document, () => setFsOn(FS.owns(stage.current))); return () => { off1(); off2(); }; }, []);
+  // 1.12.12: se vuelve a enganchar cuando cambia el nodo .stage (el primer render puede ser el «Cargando…» sin elemento)
+  const hasIt = !!it;
+  useEffect(() => { if (!FS || !stage.current) return; const st = stage.current; const off1 = FS.keep(st); const off2 = FS.onChange(document, () => setFsOn(FS.owns(st))); setFsOn(FS.owns(st)); return () => { off1(); off2(); }; }, [hasIt]);
   const isFav = favOpt && favOpt.h === it?.hash ? favOpt.v : !!it?.tags.some((t) => t.toLowerCase() === FAV);
   const toggleFav = () => {
     if (!it) return;
@@ -145,24 +153,28 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     return () => { v.removeEventListener("error", bad); v.removeEventListener("loadedmetadata", meta); };
   });
 
+  // 1.12.12: la oferta solo vale para el elemento que la pidió (al cambiar de vídeo no se pinta la del anterior)
+  const resumeOffer = Playback ? Playback.offerFor(offerSt, it?.hash) : (offerSt && it && offerSt.hash === it.hash ? offerSt.t : null);
+  const setResumeOffer = (t: number | null) => setOfferSt(t == null || !it ? null : { hash: it.hash, t });
   // pause when resumeOffer appears (async after autoplay may have started)
   useEffect(() => {
     if (resumeOffer == null) return;
     const v = media.current as HTMLVideoElement | null;
     if (v && v.tagName === "VIDEO") { try { v.pause(); } catch {} }
-  }, [resumeOffer]);
+  }, [resumeOffer, it?.hash]);
   // 1.12.7: resume offer for long videos (shared playback rules)
   useEffect(() => {
     setResumeOffer(null);
     if (!it?.hash || (it.kind || "image") !== "video") return;
     let gone = false;
+    const h = it.hash;
     (async () => {
       const thr = await resumeMinS();
-      const pos = await getPos(it.hash);
+      const pos = await getPos(h);
       if (gone || !pos || !Playback) return;
       const t = Number(pos.t), dur = Number(pos.dur || 0);
       if (!Playback.shouldTrack(dur, t, thr)) return;
-      setResumeOffer(t);
+      setOfferSt({ hash: h, t });
     })();
     const flush = () => {
       const v = media.current as HTMLVideoElement | null;
@@ -237,7 +249,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const goRef = useRef(go); goRef.current = go;
   const stepper = useRef(new WheelStepper());
   const totalRef = useRef(total); totalRef.current = total;
-  const setIndexRef = useRef(setIndex); setIndexRef.current = setIndex;
+  const navToRef = useRef(navTo); navToRef.current = navTo;
   useEffect(() => {
     const el = stage.current; if (!el) return;
     const w = (e: WheelEvent) => {
@@ -252,11 +264,11 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       if (!n) return;
       const j = clamp(idxRef.current + n, 0, totalRef.current - 1);
       if (j === idxRef.current) return;
-      dirRef.current = n > 0 ? 1 : -1; idxRef.current = j; setIndexRef.current(j);
+      dirRef.current = n > 0 ? 1 : -1; idxRef.current = j; navToRef.current(j);
     };
     el.addEventListener("wheel", w, { passive: false });
     return () => el.removeEventListener("wheel", w);
-  }, [ve]);
+  }, [ve, hasIt]);
 
   const onDown = (e: React.PointerEvent) => {
     if (ve) return;
@@ -465,8 +477,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       <div className="filmstrip">
         {Array.from({ length: Math.min(total, index + 13) - Math.max(0, index - 12) }, (_, k) => {
           const j = Math.max(0, index - 12) + k, x = items[j];
-          if (!x) return <button key={"p" + j} onClick={() => setIndex(j)}><span className="ph" /></button>;
-          return <button key={x.hash} className={j === index ? "cur" : ""} onClick={() => setIndex(j)}><Thumb hash={x.hash} /></button>;
+          if (!x) return <button key={"p" + j} onClick={() => navTo(j)}><span className="ph" /></button>;
+          return <button key={x.hash} className={j === index ? "cur" : ""} onClick={() => navTo(j)}><Thumb hash={x.hash} /></button>;
         })}
       </div>
     </div>

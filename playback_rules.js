@@ -31,8 +31,16 @@
                     : "Only on long videos; not near the start or the end.",
         };
     }
+    /** 1.12.12: a resume offer {hash, t} only applies to the item it was fetched for (stepping to another video
+     *  must never show / act on the previous one). Returns t or null. Shared by Galería and Media Library. */
+    function offerFor(offer, hash) {
+        if (!offer || hash == null || hash === "") return null;
+        if (String(offer.hash) !== String(hash)) return null;
+        const t = Number(offer.t);
+        return isFinite(t) ? t : null;
+    }
     root.ReflibPlayback = {
         version: 1, DEFAULT_MIN_S, HEAD_S, TAIL_S, TAIL_FRAC,
-        minS, shouldTrack, fmt, offerLabels,
+        minS, shouldTrack, fmt, offerLabels, offerFor,
     };
 })(typeof globalThis !== "undefined" ? globalThis : window);

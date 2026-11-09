@@ -6,6 +6,12 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.12 — All navigation paths keep fullscreen; resume offer per item
+
+- Galería: single `navTo(j)` (keys, ‹ ›, wheel, strip) → `ReflibFullscreen.navigate`. Media Library: single `openLightbox()` wrapper → `openLightboxNow()`.
+- `ReflibPlayback.offerFor` scopes the resume offer to its hash in both UIs; ML clears old offers on step.
+- Tests: `node tests/test_nav_paths.mjs` (every path through the choke point + offer scoping).
+
 ## 1.12.11 — Fullscreen kept across next/prev
 
 - Shared `fullscreen_rules.js`: fullscreen on a stable container (Galería `.stage`, ML `.reflib-ib-lightbox`); `navigate(container, step)` inside the key/click gesture first moves a native `<video>` fullscreen to the container and only then steps (removing the fullscreen `<video>` before the move completes drops it — checked in headless Chrome); `keep()` tries the move on `fullscreenchange`; `escAction` leaves Esc to the browser while fullscreen.

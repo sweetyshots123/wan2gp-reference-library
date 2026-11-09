@@ -9,6 +9,7 @@ type PB = {
   fmt: (t: number) => string;
   offerLabels: (t: number, lang?: string) => { continue: string; restart: string; tip: string };
   minS: (v: any) => number;
+  offerFor: (offer: { hash: string; t: number } | null, hash: string | null | undefined) => number | null;
 };
 export const Playback: PB = (globalThis as any).ReflibPlayback;
 

@@ -2687,7 +2687,15 @@
     // 1.5.2 large preview (double-click): the full image over the browser; ←/→ step through the results, Esc / click closes
     // 1.5.9 full-screen viewer: fixed over the whole window; ←/→ previous/next in the filtered results, Esc closes,
     // "Ajustar" (fit) / "1:1" (actual size, scrollable), click on the image toggles them. Works without the details panel.
+    // 1.12.12: EVERY lightbox open/step goes through here. While the lightbox is open, the old <video> is about to be
+    // replaced, so fullscreen is first moved to the stable box (shared ReflibFullscreen.navigate), then the item opens.
+    // Returns a Promise only when it had to wait for that move (callers that touch the new media must chain on it).
     function openLightbox(idx) {
+        const box = ilib.lightbox;
+        if (box && window.ReflibFullscreen) return ReflibFullscreen.navigate(box, () => { if (ilib.lightbox === box) openLightboxNow(idx); });
+        return openLightboxNow(idx);
+    }
+    function openLightboxNow(idx) {
         const it2 = ilib.q.items[idx]; if (!it2) return;
         let box = ilib.lightbox;
         if (!box) {
@@ -2733,6 +2741,7 @@
         const stage = box.querySelector(".reflib-ib-lbstage");
         stage.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); } catch (e) {} });
         stage.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} m.remove(); });
+        stage.querySelectorAll(".reflib-ib-resume").forEach(o => o.remove());   // 1.12.12: offers belong to the item being left
         const mk = it2.kind || "image";
         box.dataset.kind = mk;
         img.hidden = mk === "video";
@@ -2780,9 +2789,8 @@
         if (i < 0 || i >= ilib.q.total) return;
         ensurePages(i, i);
         const go = () => { const it2 = ilib.q.items[i]; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
-        const step = () => { if (ilib.lightbox !== box) return; if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); } };
-        // 1.12.11: inside the key/click gesture, move a native <video> fullscreen to the stable box first, then step
-        if (window.ReflibFullscreen) ReflibFullscreen.navigate(box, step); else step();
+        // 1.12.12: fullscreen is kept by openLightbox() (single choke point, ReflibFullscreen.navigate inside it)
+        if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
     }
     function closeLightbox(silent) {
         if (ilib.lightbox) {
@@ -5246,9 +5254,13 @@
         m.dataset.resumeHash = hash || "";
         const P = window.ReflibPlayback; if (!P) { m.play().catch(() => {}); return; }
         const offer = document.createElement("div");
-        offer.className = "reflib-ib-resume"; offer.hidden = true;
+        offer.className = "reflib-ib-resume"; offer.hidden = true; offer.dataset.hash = hash || "";
         box.querySelector(".reflib-ib-lbstage").appendChild(offer);
+        // 1.12.12: only for the media still shown (stepping replaces m; a late playback_get must not show an old offer)
+        const current = () => m.isConnected && ilib.lightbox === box && offer.isConnected
+            && P.offerFor({ hash: offer.dataset.hash, t: 0 }, m.dataset.resumeHash) != null;   // same item (shared rule)
         const showOffer = (t) => {
+            if (!current()) { offer.remove(); return; }
             const L = P.offerLabels(t, lang());
             offer.innerHTML = `<button type="button" class="reflib-ib-resume-go" data-r="go">${esc(L.continue)}</button>` +
                 `<button type="button" class="reflib-ib-resume-restart" data-r="rst">${esc(L.restart)}</button>`;
@@ -5266,7 +5278,8 @@
             };
         };
         ensureResumeMin().then(() => sendIlib({ action: "playback_get", hash })).then(r => {
-            if (!r || !r.ok || !r.pos || ilib.lightbox !== box) { m.play().catch(() => {}); return; }
+            if (!current()) { offer.remove(); return; }
+            if (!r || !r.ok || !r.pos) { m.play().catch(() => {}); return; }
             if (r.min_s != null) _resumeMinS = Number(r.min_s);
             const t = Number(r.pos.t), dur = Number(r.pos.dur || m.duration || 0);
             if (!P.shouldTrack(dur || m.duration, t, _resumeMinS)) { m.play().catch(() => {}); return; }
@@ -5329,9 +5342,9 @@
             const reanchor = () => {
                 const i = ilib.q.items.findIndex(x => x && x.hash === keep);
                 const go = (idx) => {
-                    if (pin.lb) openLightbox(idx);
-                    else showPreview(keep, idx);
-                    restoreMedia(pin);
+                    const p = pin.lb ? openLightbox(idx) : showPreview(keep, idx);
+                    if (pin.lb && p && typeof p.then === "function") p.then(() => restoreMedia(pin));   // 1.12.12: waited for fullscreen move
+                    else restoreMedia(pin);
                 };
                 if (i >= 0) { go(i); return; }
                 sendIlib({ action: "index_of", f: filterSnap(), hash: keep }).then(r => {

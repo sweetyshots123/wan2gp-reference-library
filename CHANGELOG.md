@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.12
+
+- **Fullscreen on every navigation path:** Galería wheel and thumbnail strip now go through the same `navTo()` → `ReflibFullscreen.navigate` as ←/→ and ‹ › (before, they called `setIndex` directly and could drop a native `<video>` fullscreen). Media Library: `openLightbox()` is the single choke point (arrows, ‹ ›, double-click, context menu, frame-capture re-anchor) and moves fullscreen to the lightbox before replacing the `<video>`.
+- **Resume offer scoped to its item:** shared `ReflibPlayback.offerFor(offer, hash)`; Galería keeps the offer as `{hash, t}` (no flash of the previous video's offer, no stale pause on load). Media Library removes `.reflib-ib-resume` offers when stepping and ignores late `playback_get` replies for media no longer shown.
+- Galería re-attaches the fullscreen keeper when the `.stage` node changes (first render can be the loading placeholder).
+
 ## 1.12.11
 
 - **Fullscreen stays on across videos** (Galería viewer + Media Library lightbox, also standalone `/reflib/media-library/`): moving to the next/previous item (←/→, ‹ › buttons) no longer drops fullscreen. Cause: fullscreen belonged to the `<video>` element, which was unmounted/replaced on navigation (Galería `key={src}` + unmount while loading; Media Library removes the old `<video>`). Now fullscreen lives on a stable container (Galería `.stage`, Media Library lightbox); a native video-button fullscreen is moved there. Shared rule `fullscreen_rules.js` (`ReflibFullscreen`). New ⛶ button in both viewers. Esc while fullscreen only exits fullscreen; resume offer and frame-capture stay keep working inside fullscreen.
