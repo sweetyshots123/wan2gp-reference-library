@@ -1,15 +1,21 @@
 # Changelog
 
+## 1.12.8
+
+- **Standalone:** hide WanGP/Gradio-bridge actions (add to references, control video, audio inputs, generation history). A leftover bridge call shows a **one-time** translated notice — never repeating «bridge missing (reload)». Shared `standalone_rules.js`.
+- **Galería resume i18n:** continue/restart labels follow the UI language (`uiLang()`), not a hard-coded Spanish string.
+- **Docs:** «Open Media Library» / FEATURES point at `/reflib/media-library/` (not Galería).
+
 ## 1.12.7
 
-- **Standalone Media Library** at `/reflib/media-library/`: same explorer as WanGP's Media Library, opened alone in a new tab (not Galería, not full WanGP). Top **Open Media Library** button points here. Uses `fetch /reflib/api` when the Gradio bridge is absent; WanGP-only actions show a one-time notice.
+- **Standalone Media Library** at `/reflib/media-library/`: same explorer as WanGP's Media Library, opened alone in a new tab (not Galería, not full WanGP). Top **Open Media Library** button points here. Uses `fetch /reflib/api` when the Gradio bridge is absent; WanGP-only actions are hidden (1.12.8 completes the one-time notice for any leftover bridge call).
 - **Resume playback** (Media Library, Galería, standalone): leaving a video saves position by hash in `playback.json`; reopening offers discreet **Continue from mm:ss** / **Start from the beginning**. Skips the first ~5 s and last ~5 s / 95%. Clips use their own relative time. Shared `reflib_core/playback.py` + `playback_rules.js`.
 - **Configurable threshold** (default 5 minutes): setting in Reference Library accordion, Galería (⏱ header + Personas settings), and standalone (⏱). Stored in `playback.json` — installing the plugin does **not** write or touch `settings.json`.
 
 ## 1.12.6
 
 - **Frame capture stays on the video** (Galería + Media Library): capturing a frame with Vidosser (D / middle click) no longer jumps the viewer to the new photo when the catalog refreshes (`date_desc`). Shared contract in `reflib_core/framecap.py` + `frame_capture_rules.js` (`ReflibFrameCapture`); both UIs listen for `vidosser:frame-saved`, soft-refresh the grid, re-anchor by hash, and resume playback when it was playing.
-- **Open Media Library** button at the top of the Reference Library tab opens Galería (`/reflib/gallery/`) in a new browser tab. Media Library header has **Open in Galería**; Galería links back to Reference Library in WanGP.
+- **Open Media Library** button at the top of the Reference Library tab opened Galería (`/reflib/gallery/`) in a new browser tab (moved to `/reflib/media-library/` in 1.12.7). Media Library header has **Open in Galería**; Galería links back to Reference Library in WanGP.
 
 ## 1.12.5
 - Thumbnails: allow truncated JPEGs while generating a preview (`ImageFile.LOAD_TRUNCATED_IMAGES` only for that open, restored afterwards under a lock).

@@ -586,8 +586,18 @@
         setText("reflib_bridge_req", JSON.stringify(req));
         const btn = bridgeButton(target);
         if (!btn) {
-            toast(t("error", { e: "bridge missing (reload)" }), "error");
-            return Promise.reject(new Error("bridge missing"));
+            // 1.12.8: standalone / no Gradio — one-time clear notice (never "bridge missing (reload)" spam)
+            const RS = window.ReflibStandalone;
+            let msg = null;
+            if (RS && typeof RS.takeBridgeNotice === "function") msg = RS.takeBridgeNotice(lang());
+            else {
+                const es = String(lang() || "").toLowerCase().startsWith("es");
+                msg = es
+                    ? "Esta acción necesita WanGP (pestaña Reference Library en el generador)."
+                    : "This action needs WanGP (Reference Library tab in the generator).";
+            }
+            if (msg) toast(msg, "error");
+            return Promise.reject(new Error("wan_bridge_unavailable"));
         }
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => { pending.delete(req.id); reject(new Error("timeout")); }, 60000);
@@ -1133,7 +1143,12 @@
         root.querySelectorAll(".reflib-ib-vsz").forEach(b => { const on = b.dataset.v === vp.thumb; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = it("v_" + b.dataset.v); b.setAttribute("aria-label", it("v_" + b.dataset.v)); });
         const vd = root.querySelector(".reflib-ib-vdet"); vd.textContent = "☰ " + it("v_details"); vd.title = it("v_details_tip"); vd.classList.toggle("on", vp.details); vd.setAttribute("aria-pressed", vp.details ? "true" : "false");
         root.classList.toggle("reflib-ib-nodetails", !vp.details);
-        const hb = root.querySelector(".reflib-ib-histbtn"); hb.textContent = "🕘 " + ht("title"); hb.title = ht("tip");
+        const hb = root.querySelector(".reflib-ib-histbtn");
+        if (hb) {
+            const showHist = !(window.ReflibStandalone) || window.ReflibStandalone.showWanBridgeActions();
+            hb.hidden = !showHist;
+            hb.textContent = "🕘 " + ht("title"); hb.title = ht("tip");
+        }
         const af = root.querySelector(".reflib-ib-addfolder");
         af.textContent = it("add_folder"); af.title = it("add_folder_tip");
         const far = root.querySelector(".reflib-ib-faddrow");
@@ -2157,12 +2172,14 @@
         else if (pk) { const ok = n === 1 && ((k[pk.kind] || 0) + (pk.kind === "mask" ? (k.video || 0) : 0)) === 1;
             html += `<button type="button" class="reflib-ib-btn reflib-ib-primary reflib-pk-load" data-act="topick" ${ok ? "" : "disabled"} title="${esc(ok ? pkt(pk.kind === "image" ? "tip_i" : "load_tip", { label: pk.label }) : pkt(pk.kind === "image" ? "want_i" : pk.kind === "audio" ? "want_a" : "want_v"))}">${GRID_SVG}${esc(pkt(pk.kind === "image" ? "add_i" : "load", { label: pk.label }))}</button>`; }
         if (pk && pk.kind === "image") return html;
-        if (k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
+        const wanBridge = !(window.ReflibStandalone) || window.ReflibStandalone.showWanBridgeActions();
+        // 1.12.8: hide Gradio-bridge actions on the standalone Media Library page (no WanGP)
+        if (wanBridge && k.image) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="torefs" title="${esc(it("to_refs_tip") + (k.video || k.audio ? " — " + it("only_images_refs", { n: k.video + k.audio }) : ""))}">${esc(it("to_refs"))}</button>`;
         if (k.video) {
-            if (wanInput("reflib-vt-generate")) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="tovctl" ${n === 1 && k.video === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_vctl_tip") : it("to_one"))}">🎬 ${esc(it("to_vctl"))}</button>`;
+            if (wanBridge && wanInput("reflib-vt-generate")) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="tovctl" ${n === 1 && k.video === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_vctl_tip") : it("to_one"))}">🎬 ${esc(it("to_vctl"))}</button>`;
             html += `<button type="button" class="reflib-ib-btn" data-act="tovlib" title="${esc(it("to_vlib_tip"))}">${esc(it("to_vlib"))}</button>`;
         }
-        if (k.audio) for (const a of audioTargets()) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="toaudio" data-to="${a.to}" ${n === 1 && k.audio === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_audio_tip", { label: a.label }) : it("to_one"))}">🎵 ${esc(it("to_audio", { label: a.label }))}</button>`;
+        if (wanBridge && k.audio) for (const a of audioTargets()) html += `<button type="button" class="reflib-ib-btn reflib-ib-primary" data-act="toaudio" data-to="${a.to}" ${n === 1 && k.audio === 1 ? "" : "disabled"} title="${esc(n === 1 ? it("to_audio_tip", { label: a.label }) : it("to_one"))}">🎵 ${esc(it("to_audio", { label: a.label }))}</button>`;
         return html;
     }
     function renderFooter() {
@@ -2415,10 +2432,19 @@
     }
     function sendToRefs() {
         if (!ilib.sel.size) return;
+        if (window.ReflibStandalone && !window.ReflibStandalone.showWanBridgeActions()) {
+            const msg = window.ReflibStandalone.takeBridgeNotice(lang());
+            if (msg) toast(msg, "error");
+            return;
+        }
         if (!refsAvailable()) { toast(it("refs_hidden"), "error"); return; }
         sendBridge(Object.assign({ action: "apply_images", mode: "append", target: "generate:image_refs" }, ilib.sel.payload())).then(r => {
             if (r && r.ok !== false && localStorage.getItem("reflib_ib_close_after") === "1") closeBrowser();
-        }).catch(e => toast(t("error", { e: (e && e.message) || e }), "error"));
+        }).catch(e => {
+            // sendBridge already toasted a one-time notice when the bridge is absent
+            if (e && e.message === "wan_bridge_unavailable") return;
+            toast(t("error", { e: (e && e.message) || e }), "error");
+        });
     }
     // Folder picker ("Browse…"): served by the WanGP server, read-only, one folder level at a time.
     function pickerGo(path) {
@@ -5310,8 +5336,8 @@
             tip.className = "reflib-standalone-tip";
             const es = String(lang() || "").toLowerCase().startsWith("es");
             tip.textContent = es
-                ? "Media Library independiente. Acciones que requieren WanGP (vídeo de control, historial de generaciones…) no están disponibles aquí."
-                : "Standalone Media Library. Actions that need WanGP (control video, generation history…) are not available here.";
+                ? "Media Library independiente. Acciones de WanGP (añadir a referencias, vídeo de control, historial…) están ocultas aquí."
+                : "Standalone Media Library. WanGP actions (add to references, control video, history…) are hidden here.";
             document.body.appendChild(tip);
             setTimeout(() => tip.remove(), 8000);
             // Close button leaves the page

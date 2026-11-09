@@ -52,3 +52,15 @@ export async function savePos(hash: string, t: number, duration: number) {
 export async function clearPos(hash: string) {
   await call("playback_set", { hash, clear: 1 }).catch(() => {});
 }
+
+/** Current UI language for resume labels (Galería / document lang). */
+export function uiLang(): string {
+  try {
+    const d = typeof document !== "undefined" ? document.documentElement?.lang : "";
+    if (d) return d;
+  } catch {}
+  try {
+    if (typeof navigator !== "undefined" && navigator.language) return navigator.language;
+  } catch {}
+  return "es";
+}

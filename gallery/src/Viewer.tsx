@@ -7,7 +7,7 @@ import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
 import { Thumb, toast, fmtDur } from "./ui";
 import { FrameCap, wasWantPlay } from "./frameCapture";
-import { Playback, getPos, savePos, clearPos, resumeMinS } from "./playback";
+import { Playback, getPos, savePos, clearPos, resumeMinS, uiLang } from "./playback";
 
 interface Props {
   items: Item[]; index: number; meta: Meta; total: number;
@@ -378,8 +378,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
               <video ref={media} src={src} controls autoPlay={resumeOffer == null} loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
               {resumeOffer != null && Playback && (
                 <div className="vresume" onPointerDown={(e) => e.stopPropagation()}>
-                  <button className="primary" onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = resumeOffer; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, "es").continue}</button>
-                  <button onClick={() => { clearPos(it.hash); const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = 0; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, "es").restart}</button>
+                  <button className="primary" onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = resumeOffer; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, uiLang()).continue}</button>
+                  <button onClick={() => { clearPos(it.hash); const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = 0; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, uiLang()).restart}</button>
                 </div>
               )}
             </div>

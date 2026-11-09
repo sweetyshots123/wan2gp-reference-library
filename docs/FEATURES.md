@@ -3,8 +3,14 @@
 
 - **User flow (capture):** open a video in Galería viewer or Media Library lightbox → play → D or middle-click (Vidosser) → frame is saved to the unassigned pool → stay on the same video at the same time (resume if it was playing); at most Vidosser's brief toast. Never navigate to the captured photo.
 - **Shared:** `imagelib.pool_add_bytes` (existing) + `reflib_core/framecap.save_result` annotates `{stay:true, navigate:false}`; clients use `frame_capture_rules.js` / `vidosser:frame-saved`.
-- **Open Media Library:** Reference Library tab top link → `/reflib/gallery/` (new tab). Media Library header → same URL. Galería header → WanGP / Reference Library (`/`).
+- **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
+
+## 1.12.8 — Standalone WanGP-action gating + resume i18n
+
+- Standalone Media Library hides Gradio-bridge actions (add to references, control video, audio targets, generation history). Any leftover bridge call shows a **one-time** translated notice (never «bridge missing (reload)» spam). Shared `standalone_rules.js`.
+- Galería resume buttons use the current UI language (`uiLang()`), not a hard-coded `"es"`.
+- Docs: «Abrir Media Library» → `/reflib/media-library/`.
 
 ## 1.12.7 — Standalone Media Library & resume playback
 
@@ -17,14 +23,17 @@
 
 ```sh
 node tests/test_frame_capture_rules.mjs
+node tests/test_playback_rules.mjs
+node tests/test_standalone_rules.mjs
 PYTHONPATH=. python tests/test_framecap.py
+PYTHONPATH=. python tests/test_playback.py
 ```
 
 ## Browser retest (pending)
 
 1. Galería: open a recent video, play, capture several frames with D; viewer must stay on the video; photos appear in Recientes / Sin colección after leaving the viewer.
 2. Media Library lightbox: same.
-3. Reference Library tab: top button «Abrir Media Library» opens Galería in a new tab; Media Library header «Abrir en Galería» works; Galería «Reference Library ↗» returns to WanGP.
+3. Reference Library tab: top button «Abrir Media Library» opens `/reflib/media-library/` in a new tab; Media Library header «Abrir en Galería» works; Galería links to Media Library and Reference Library.
 
 # Reference Library: starting-image picker (1.12.4)
 
