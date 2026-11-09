@@ -916,34 +916,51 @@
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
     const FAST_ACTIONS = new Set(["forget_status", "col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "playback_get", "playback_settings", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
-    const chains = { main: Promise.resolve(), fast: Promise.resolve() };
+    // 1.12.9: priority scheduler (viewer ahead of thumbs) + pause thumbs while lightbox is open
+    const Net = window.ReflibNet || null;
+    const sched = {
+        main: (Net && Net.createScheduler) ? Net.createScheduler() : null,
+        fast: (Net && Net.createScheduler) ? Net.createScheduler() : null,
+    };
+    const thumbGate = (Net && Net.createThumbGate) ? Net.createThumbGate() : { enterViewer() {}, leaveViewer() {}, blocked: false, whenFree() { return Promise.resolve(); } };
+    const chains = { main: Promise.resolve(), fast: Promise.resolve() };   // fallback if request_priority.js missing
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
         const useFetch = !!window.__REFLIB_STANDALONE__ || !document.getElementById("reflib_ilib_btn");
-        if (useFetch) {
-            const body = Object.assign({ tz: -new Date().getTimezoneOffset() }, req);
-            return fetch("/reflib/api", {
-                method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-                body: JSON.stringify(body),
-            }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-              .then(data => {
-                  if (data && data.v && data.v !== VERSION) staleTab(data.v);
-                  return data;
-              });
-        }
-        const fast = !req.slow && FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
-        const ch = fast ? "fast" : "main";
-        const run = () => new Promise((resolve, reject) => {
-            setText(fast ? "reflib_ilib_fast_req" : "reflib_ilib_req", JSON.stringify(req));
-            const btn = document.getElementById(fast ? "reflib_ilib_fast_btn" : "reflib_ilib_btn");
-            if (!btn) { toast(t("error", { e: "bridge missing (reload)" }), "error"); reject(new Error("bridge missing")); return; }
-            const timer = setTimeout(() => { pending.delete(req.id); reject(new Error("timeout")); }, req.action === "thumbs" ? 30000 : 120000);
-            pending.set(req.id, { resolve, reject, timer });
-            setTimeout(() => btn.click(), 0);   // let Gradio take the new textbox value first
-        });
-        const p = chains[ch].then(run, run);
-        chains[ch] = p.catch(() => {});
-        return p;
+        const chName = Net ? Net.channel(req.action) : (req.action === "thumbs" ? "thumb" : "normal");
+        const prio = chName === "view" ? 10 : chName === "thumb" ? 0 : 5;
+        // Wait for the thumb gate OUTSIDE the scheduler so a parked thumb never blocks preview/media_url.
+        const start = async () => {
+            if (chName === "thumb") await thumbGate.whenFree();
+            if (useFetch) {
+                const body = Object.assign({ tz: -new Date().getTimezoneOffset() }, req);
+                const run = () => fetch("/reflib/api", {
+                    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                    body: JSON.stringify(body),
+                }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+                  .then(data => {
+                      if (data && data.v && data.v !== VERSION) staleTab(data.v);
+                      return data;
+                  });
+                if (sched.fast) return sched.fast.enqueue(run, prio);
+                return run();
+            }
+            const fast = !req.slow && FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
+            const ch = fast ? "fast" : "main";
+            const run = () => new Promise((resolve, reject) => {
+                setText(fast ? "reflib_ilib_fast_req" : "reflib_ilib_req", JSON.stringify(req));
+                const btn = document.getElementById(fast ? "reflib_ilib_fast_btn" : "reflib_ilib_btn");
+                if (!btn) { toast(t("error", { e: "bridge missing (reload)" }), "error"); reject(new Error("bridge missing")); return; }
+                const timer = setTimeout(() => { pending.delete(req.id); reject(new Error("timeout")); }, req.action === "thumbs" ? 30000 : 120000);
+                pending.set(req.id, { resolve, reject, timer });
+                setTimeout(() => btn.click(), 0);   // let Gradio take the new textbox value first
+            });
+            if (sched[ch]) return sched[ch].enqueue(run, prio);
+            const p = chains[ch].then(run, run);
+            chains[ch] = p.catch(() => {});
+            return p;
+        };
+        return start();
     }
     let staleShown = false;
     function staleTab(srv) {   // 1.8.4: an old tab (loaded before an update/restart) silently runs old code
@@ -1349,6 +1366,10 @@
     async function flushThumbs() {
         thumbFlush = null;
         if (thumbBusy || !ilib.open) return;
+        if (thumbGate.blocked || ilib.lightbox) {   // 1.12.9: viewer/zoom wins over thumb backlog
+            thumbFlush = setTimeout(flushThumbs, 200);
+            return;
+        }
         const batch = wantedThumbs().slice(0, THUMB_BATCH);
         if (!batch.length) {
             if (thumbRetry.size) { const next = Math.min(...thumbRetry.values()) - Date.now(); thumbFlush = setTimeout(flushThumbs, Math.max(100, next)); }
@@ -2698,6 +2719,7 @@
         ve.textContent = "✎ " + vct("edit"); ve.title = vct("edit_tip"); ve.hidden = !it2.virtual; ve.disabled = vbr;
         fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
+        if (!ilib._lbGate) { thumbGate.enterViewer(); ilib._lbGate = true; }   // 1.12.9: pause thumbs while lightbox open
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
         // 1.6.0: videos and audio play in the viewer (audio over its waveform)
         const stage = box.querySelector(".reflib-ib-lbstage");
@@ -2723,7 +2745,21 @@
             });
         }
         showPreview(it2.hash, idx);
-        sendIlib({ action: "preview", hash: it2.hash }).then(r => { if (ilib.lightbox === box && img.dataset.hash === it2.hash && r && r.image && r.image.src) img.src = r.image.src; }).catch(() => {});
+        // 1.12.9: progressive — medium preview first (zooms immediately), then full media_url swap without resetting fit/1:1
+        const hh = it2.hash;
+        sendIlib({ action: "preview", hash: hh }).then(r => {
+            if (ilib.lightbox !== box || img.dataset.hash !== hh || !r || !r.image || !r.image.src) return;
+            img.src = r.image.src;
+        }).catch(() => {});
+        if (mk === "image") {
+            mediaUrl(hh).then(u => {
+                if (!u || ilib.lightbox !== box || img.dataset.hash !== hh) return;
+                const job = (window.ReflibProgressive && ReflibProgressive.loadDecode)
+                    ? ReflibProgressive.loadDecode(u)
+                    : { p: Promise.resolve(true), abort() {} };
+                job.p.then(ok => { if (ok && ilib.lightbox === box && img.dataset.hash === hh) img.src = u; });
+            }).catch(() => {});
+        }
     }
     function lightboxZoom(one) {
         const box = ilib.lightbox; if (!box) return;
@@ -2740,6 +2776,7 @@
     }
     function closeLightbox(silent) {
         if (ilib.lightbox) {
+            if (ilib._lbGate) { thumbGate.leaveViewer(); ilib._lbGate = false; queueThumbs(); }
             ilib.lightbox.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); m.pause(); } catch (e) {} });
             ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} });
             ilib.lightbox.remove(); ilib.lightbox = null;

@@ -2,6 +2,8 @@ import { takeSeek, segChips } from "./videoT";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from "./api";
 import { WheelStepper, normDelta, medium, loadFull } from "./viewerNav";
+import { viewerNet } from "./api";
+import "../../progressive_media.js";
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
@@ -38,6 +40,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const clickStart = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   useEffect(() => { localStorage.setItem("gal.panel", panel ? "1" : "0"); }, [panel]);
+  // 1.12.9: pause Galería thumb backlog while the viewer is open so zoom/full-res stay immediate after a big scan
+  useEffect(() => { viewerNet.enter(); return () => viewerNet.leave(); }, []);
   // 1.9.7: índice "vivo" (la rueda puede dar varios pasos antes del siguiente render) y dirección del giro
   const idxRef = useRef(index); idxRef.current = index;
   const dirRef = useRef(1);
@@ -79,7 +83,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     });
     // 1.9.7: la resolución completa (y el panel de edición) solo cuando el índice se asienta; girando rápido
     // no se encola nada y la carga en curso se cancela
-    const settle = window.setTimeout(() => { if (!on) return; setSettled(it.hash); load(); }, 130);
+    const settle = window.setTimeout(() => { if (!on) return; setSettled(it.hash); load(); }, 40);
     return () => { on = false; window.clearTimeout(settle); full?.abort(); };
   }, [it?.hash]);
 
@@ -367,7 +371,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       <div className="vbody">
         <div className={`stage ${z.s > 1 ? "zoomed" : ""} ${ve ? "cropping" : ""}`} ref={stage}
           onPointerDown={ve ? cropDown : onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          {!src && (ph && !rendering ? <img className="phimg" src={ph} alt="" draggable={false} />
+          {!src && (ph && !rendering ? <img className="phimg" ref={(el) => { tgt.current = el; }} src={ph} alt="" draggable={false} style={{ transform: xf(z) }} />
             : <div className="loading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}<Thumb hash={it.hash} className="blur" /></div>)}
           {src && kind === "image" && (
             <img ref={(el) => { (media as any).current = el; tgt.current = el; }} src={src} alt={it.name} draggable={false} onLoad={() => setDraft((d) => d && [...d] as Rect)}

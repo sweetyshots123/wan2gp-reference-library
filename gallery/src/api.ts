@@ -1,4 +1,9 @@
 // Cliente del puente de la Media Library: cada llamada es exactamente una acción de plugin.ilib(...)
+import "../../request_priority.js";
+const Net: any = (globalThis as any).ReflibNet;
+const viewSched = Net?.createScheduler?.() || null;
+const thumbGate = Net?.createThumbGate?.() || { enterViewer() {}, leaveViewer() {}, blocked: false, whenFree() { return Promise.resolve(); } };
+export const viewerNet = { enter: () => thumbGate.enterViewer(), leave: () => thumbGate.leaveViewer(), blocked: () => !!thumbGate.blocked };
 export type Kind = "image" | "video" | "audio" | "mask";
 export interface Item {
   hash: string; name: string; names?: string[]; cols: string[]; pool: boolean; folders: string[];
@@ -31,13 +36,24 @@ export function personTag(name: string, tags: { tag: string }[] | string[] = [])
   return all.find((t) => t.toLowerCase().startsWith(PERSON)) || all[0] || PERSON + name.trim();
 }
 
-export async function call<T = Resp>(action: string, body: Record<string, any> = {}): Promise<T & Resp> {
+async function rawCall<T = Resp>(action: string, body: Record<string, any> = {}): Promise<T & Resp> {
   const r = await fetch("/reflib/api", {
     method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
     body: JSON.stringify({ action, lang: "es", tz: -new Date().getTimezoneOffset(), ...body }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+/** 1.12.9: viewer actions (preview/media_url/…) jump the queue; thumbs wait while the viewer is open. */
+export async function call<T = Resp>(action: string, body: Record<string, any> = {}): Promise<T & Resp> {
+  const ch = Net?.channel?.(action) || (action === "thumbs" ? "thumb" : "normal");
+  const prio = ch === "view" ? 10 : ch === "thumb" ? 0 : 5;
+  // Gate wait is outside the scheduler so parked thumbs never block preview/media_url.
+  if (ch === "thumb") await thumbGate.whenFree();
+  const run = () => rawCall<T>(action, body);
+  if (viewSched) return viewSched.enqueue(run, prio);
+  return run();
 }
 
 /** 1.9.5: descarga un archivo escrito por col_export / v_export (servido por GET /reflib/export/<rel>). */
@@ -82,8 +98,12 @@ export function thumb(hash: string): Promise<string> {
 
 async function flush() {
   timer = undefined;
+  if (thumbGate.blocked) {   // 1.12.9: defer off-screen thumb backlog while viewer/zoom is active
+    if (queue.length) timer = window.setTimeout(flush, 250);
+    return;
+  }
   const batch = queue.splice(0, 24);
-  if (queue.length) timer = window.setTimeout(flush, 0);
+  if (queue.length) timer = window.setTimeout(flush, thumbGate.blocked ? 250 : 40);
   if (!batch.length) return;
   try {
     const r = await call<{ thumbs: Record<string, string>; pending: string[] }>("thumbs", { hashes: batch });

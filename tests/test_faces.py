@@ -384,3 +384,48 @@ if __name__ == "__main__":
     for k, v in list(globals().items()):
         if k.startswith("test_"):
             v(); print("ok", k)
+
+
+def test_assign_skips_obsolete_faces():
+    """1.12.9: naming a group with stale face ids (left the matrix after reindex) assigns the live ones
+    and prunes the dead — never face_not_found on the whole group."""
+    data, _ = synth(people=1, per=6)
+    f, t, _ = mk(data)
+    f.run()
+    cid = list(f.clusters()["clusters"])[0]
+    live = list(f.clusters()["clusters"][cid]["faces"])
+    # inject an obsolete id into the cluster (hash gone from the matrix)
+    stale = "deadhash:0@arcface"
+    f.clusters()["clusters"][cid]["faces"] = live + [stale]
+    r = f.assign_faces(name="Lucía", clusters=[cid])
+    assert r["assigned"] == len(live)
+    assert r["skipped"] == 1
+    assert stale in r["skipped_ids"]
+    assert stale not in (f.clusters().get("clusters") or {})
+    # all-obsolete → clear error
+    f2, _, _ = mk(data)
+    f2.run()
+    cid2 = list(f2.clusters()["clusters"])[0]
+    f2.clusters()["clusters"][cid2]["faces"] = [stale]
+    try:
+        f2.assign_faces(name="X", clusters=[cid2])
+        assert False
+    except ActionError as e:
+        assert e.key == "face_all_obsolete"
+
+
+def test_match_persons_fold_prefix_substring():
+    data, _ = synth(people=1, per=3)
+    f, _, _ = mk(data)
+    f.run()
+    f.assign_faces(name="María José", clusters=[list(f.clusters()["clusters"])[0]])
+    # rebuild a second person via new_person
+    f.new_person("Mario")
+    f.new_person("Ana")
+    m = f.match_persons("mar", 10)
+    names = [x["name"] for x in m]
+    assert names[0] in ("María José", "Mario")
+    assert "Ana" not in names
+    assert [x["name"] for x in f.match_persons("josé", 5)] == ["María José"]
+    # fold-equal resolve via find
+    assert f.find_person("maria jose") == f.find_person("María José")

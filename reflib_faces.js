@@ -205,8 +205,15 @@
         }).catch(() => {});
     }
     function nameCluster(c, name) {
-        name = String(name || "").trim(); if (!name) return;
-        call({ action: "face_assign", name, clusters: [c] }).then(r => { RL.toast(ft("assigned", { n: r.assigned, x: r.person.name }), "ok"); sel.clear(); view = { p: "person", id: r.person.id }; draw(); }).catch(() => {});
+        // 1.12.9: fold-resolve against known persons (shared ReflibPersonMatch); toast reports skipped obsolete faces
+        const raw = String(name || "").trim(); if (!raw) return;
+        const known = [...(pan ? pan.querySelectorAll("#reflib-fc-names option") : [])].map(o => o.value).filter(Boolean);
+        name = (window.ReflibPersonMatch ? ReflibPersonMatch.resolve(raw, known) : raw);
+        call({ action: "face_assign", name, clusters: [c] }).then(r => {
+            const msg = (r && r.skipped) ? (r.message || r.toast || ft("assigned", { n: r.assigned, x: r.person.name }))
+                : ft("assigned", { n: r.assigned, x: r.person.name });
+            RL.toast(msg, "ok"); sel.clear(); view = { p: "person", id: r.person.id }; draw();
+        }).catch(() => {});
     }
     function onChange(e) {
         const k = e.target.dataset.f;

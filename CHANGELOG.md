@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.9
+
+- **Personas naming:** assigning a face group no longer fails with «Cara no encontrada: …:1@arcface» when some face ids left the index after a recompute. Live faces are assigned; obsolete ones are pruned and reported (`face_assigned_skip` / `face_all_obsolete`). Shared `reflib_core/faces.py` for Galería + Media Library.
+- **Autocomplete «¿Quién es?»:** shared `person_match.js` (folded prefix then substring, no fold-dupes) + `person_suggest`; Galería NameBox with ↑↓ / Enter / Tab; Media Library resolves typed names the same way.
+- **Viewer / zoom after a large-folder scan:** shared `request_priority.js` puts `preview` / `media_url` / playback ahead of `thumbs`; thumbs pause while the lightbox/viewer is open. Progressive full-res (`progressive_media.js`): zoom works on the medium/thumb placeholder immediately; full decode swaps in without resetting zoom. Galería `phimg` carries the live transform.
+
 ## 1.12.8
 
 - **Standalone:** hide WanGP/Gradio-bridge actions (add to references, control video, audio inputs, generation history). A leftover bridge call shows a **one-time** translated notice — never repeating «bridge missing (reload)». Shared `standalone_rules.js`.

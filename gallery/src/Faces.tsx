@@ -5,6 +5,8 @@ import { call, fold, mediaUrl } from "./api";
 import { openAt, segChips } from "./videoT";
 import "../../selection_rules.js";
 import "../../review_rules.js";
+import "../../person_match.js";
+const PM: any = (globalThis as any).ReflibPersonMatch;
 import { act } from "./actions";
 import { toast, Thumb } from "./ui";
 import { resumeMinS, setResumeMinM } from "./playback";
@@ -62,7 +64,7 @@ export function PersonasPage({ tq, rev, after }: { tq: string; rev: number; afte
   }, [limit, tick, rev]);
   const names = persons.map((p) => p.name);
   const assign = async (cids: string[], name: string) => {
-    name = name.trim(); if (!name) return;
+    name = (PM ? PM.resolve(name, names) : name.trim()); if (!name) return;
     const p = persons.find((x) => fold(x.name) === fold(name));
     setClusters((cs) => cs.filter((c) => !cids.includes(c.id)));   // optimista
     const r = await act("face_assign", p ? { person: p.id, clusters: cids } : { name, clusters: cids }, refresh);
@@ -109,10 +111,37 @@ export function PersonasPage({ tq, rev, after }: { tq: string; rev: number; afte
 }
 
 function NameBox({ names, placeholder, onName }: { names: string[]; placeholder: string; onName: (n: string) => void }) {
+  // 1.12.9: shared ReflibPersonMatch — folded prefix/substring, keyboard, no fold-dupes
   const [v, setV] = useState("");
-  return <input className="namebox" list="pnames" value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)}
-    onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onName(v); setV(""); } }}
-    onBlur={() => { if (v.trim() && names.some((n) => fold(n) === fold(v))) { onName(v); setV(""); } }} />;
+  const [hi, setHi] = useState(0);
+  const [open, setOpen] = useState(false);
+  const hits: string[] = (PM ? PM.match(v, names, 8) : names.filter((n) => fold(n).includes(fold(v))).slice(0, 8));
+  const commit = (raw?: string) => {
+    const name = PM ? PM.resolve(raw ?? v, names) : String(raw ?? v).trim();
+    if (!name) return;
+    onName(name); setV(""); setOpen(false); setHi(0);
+  };
+  return (
+    <div className="namebox-wrap">
+      <input className="namebox" value={v} placeholder={placeholder} autoComplete="off"
+        onChange={(e) => { setV(e.target.value); setOpen(true); setHi(0); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { window.setTimeout(() => setOpen(false), 120); if (v.trim() && names.some((n) => fold(n) === fold(v))) commit(v); }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && hits.length) { e.preventDefault(); setHi((h) => (h + 1) % hits.length); setOpen(true); }
+          else if (e.key === "ArrowUp" && hits.length) { e.preventDefault(); setHi((h) => (h - 1 + hits.length) % hits.length); setOpen(true); }
+          else if ((e.key === "Enter" || e.key === "Tab") && v.trim()) { e.preventDefault(); commit(open && hits[hi] ? hits[hi] : v); }
+          else if (e.key === "Escape") { setOpen(false); }
+        }} />
+      {open && v.trim() && hits.length > 0 && (
+        <ul className="namebox-sug" role="listbox">
+          {hits.map((n, i) => (
+            <li key={n} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); commit(n); }}>{n}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------- cabecera de una persona
@@ -229,15 +258,14 @@ export function ItemFaces({ hash, onChanged }: { hash: string; onChanged: () => 
   return (
     <div className="ifaces"><h4>Caras</h4>
       <FaceBoxes hash={hash} faces={faces} hot={hot} />
-      <datalist id="pnames-i">{persons.map((p) => <option key={p.id} value={p.name} />)}</datalist>
       {faces.map((f) => { const who = f.person ? byId.get(f.person) : null; return (
         <div key={f.id} className="iface" onMouseEnter={() => setHot(f.id)} onMouseLeave={() => setHot("")}>
           <FaceImg f={f} size={64} className="round" />
           {who ? <><a href={`#/persona/${encodeURIComponent(who.name)}`}>{who.name}</a><button title="Quitar esta cara de la persona" onClick={() => act("face_unassign", { faces: [f.id] }, done, { quiet: true })}>×</button></>
-            : <input className="namebox" list="pnames-i" placeholder="¿Quién es?" onKeyDown={(e) => {
-                const v = (e.target as HTMLInputElement).value.trim(); if (e.key !== "Enter" || !v) return;
-                const p = persons.find((x) => fold(x.name) === fold(v));
-                act("face_assign", p ? { person: p.id, faces: [f.id] } : { name: v, faces: [f.id] }, done, { quiet: true });
+            : <NameBox names={persons.map((p) => p.name)} placeholder="¿Quién es?" onName={(v) => {
+                const name = PM ? PM.resolve(v, persons.map((p) => p.name)) : v.trim();
+                const p = persons.find((x) => fold(x.name) === fold(name));
+                act("face_assign", p ? { person: p.id, faces: [f.id] } : { name, faces: [f.id] }, done, { quiet: true });
               }} />}
         </div>); })}
     </div>

@@ -557,19 +557,44 @@ class Faces:
         q = self.quality(f, m)
         return {"quality": {"score": q["score"], "ok": q["ok"], "flags": q["flags"]}, "aligned": q["aligned"]}
 
-    def _check(self, faces, m) -> List[str]:
+    def _partition(self, faces, m) -> Tuple[List[str], List[str]]:
+        """Split face ids into (alive in the current index matrix, missing/obsolete).
+        Model mismatches still raise — those are programming errors, not stale data."""
         pos = self._mat(m)["pos"]
-        out = []
+        ok, miss = [], []
         for f in faces or []:
             p = parse_fid(f)
             if not p:
-                raise ActionError("face_not_found", id=f)
+                miss.append(str(f)); continue
             if p[2] != m:
                 raise ActionError("faces_model_mismatch", id=f)
-            if f not in pos:
-                raise ActionError("face_not_found", id=f)
-            out.append(f)
-        return list(dict.fromkeys(out))
+            (ok if f in pos else miss).append(f)
+        return list(dict.fromkeys(ok)), list(dict.fromkeys(miss))
+
+    def _check(self, faces, m) -> List[str]:
+        ok, miss = self._partition(faces, m)
+        if miss:
+            raise ActionError("face_not_found", id=miss[0])
+        return ok
+
+    def _prune_missing(self, miss, m) -> int:
+        """Drop obsolete face ids from clusters/seen so naming and UI stay consistent."""
+        if not miss:
+            return 0
+        gone = set(miss)
+        cl = self.clusters(m)
+        n = 0
+        for cid in list(cl["clusters"]):
+            before = cl["clusters"][cid]["faces"]
+            after = [f for f in before if f not in gone]
+            if len(after) != len(before):
+                n += len(before) - len(after)
+                if after:
+                    cl["clusters"][cid]["faces"] = after
+                else:
+                    del cl["clusters"][cid]
+        cl["seen"] = [f for f in cl.get("seen") or [] if f not in gone]
+        return n
 
     def _cl_of(self, m) -> Dict[str, str]:
         return {f: cid for cid, c in self.clusters(m)["clusters"].items() for f in c["faces"]}
@@ -685,6 +710,25 @@ class Faces:
         f = _fold(name)
         return next((k for k, p in self.db["persons"].items() if _fold(p["name"]) == f), None)
 
+    def match_persons(self, query: str, limit: int = 12) -> List[Dict[str, Any]]:
+        """Autocomplete: case/accent-insensitive prefix then substring; never duplicates by fold."""
+        q = _fold(query)
+        if not q:
+            return []
+        pref, sub, seen = [], [], set()
+        for pid, p in self.db["persons"].items():
+            name = p["name"]
+            fn = _fold(name)
+            if fn in seen:
+                continue
+            if fn.startswith(q):
+                pref.append({"id": pid, "name": name}); seen.add(fn)
+            elif q in fn:
+                sub.append({"id": pid, "name": name}); seen.add(fn)
+        pref.sort(key=lambda x: _fold(x["name"]))
+        sub.sort(key=lambda x: _fold(x["name"]))
+        return (pref + sub)[: max(1, int(limit or 12))]
+
     def new_person(self, name: str) -> str:
         name = str(name or "").strip()
         if not name:
@@ -701,18 +745,25 @@ class Faces:
             getattr(self.tagger, op)(sorted(hashes), *a)
 
     def assign_faces(self, pid=None, name=None, clusters=(), faces=()) -> Dict[str, Any]:
+        """Name / assign a whole group. Obsolete faces (left the index after recompute) are skipped,
+        pruned from clusters, and reported — never abort the whole group (1.12.9)."""
         with self.lock:
             m = self.src.model
             if not pid:
                 pid = self.new_person(name)
             p = self._person(pid)
             cl = self.clusters(m)["clusters"]
-            fs = []
+            raw = []
             for cid in clusters or []:
                 if cid not in cl:
                     raise ActionError("cluster_not_found", cluster=cid)
-                fs += cl[cid]["faces"]
-            fs = self._check(list(fs) + self.expand_video_faces(faces or [], m, pid, "accept"), m)
+                raw += cl[cid]["faces"]
+            raw = list(raw) + self.expand_video_faces(faces or [], m, pid, "accept")
+            fs, miss = self._partition(raw, m)
+            if miss:
+                self._prune_missing(miss, m)
+            if not fs:
+                raise ActionError("face_all_obsolete", n=len(miss))
             asg = self.assign(m)
             prev = {f: asg.get(f) for f in fs}
             for f in fs:
@@ -729,7 +780,9 @@ class Faces:
             self._tag("add", hashes, "persona:" + p["name"])
             for q in {q for q in prev.values() if q and q != pid}:
                 self._retag_after_remove(q, {parse_fid(f)[0] for f, x in prev.items() if x == q})
-            return {"person": self.person_obj(pid), "assigned": len(fs), "hashes": sorted(hashes)}
+            out = {"person": self.person_obj(pid), "assigned": len(fs), "hashes": sorted(hashes),
+                   "skipped": len(miss), "skipped_ids": miss[:8]}
+            return out
 
     def _retag_after_remove(self, pid, hashes):
         p = self.db["persons"].get(pid)
@@ -1114,14 +1167,14 @@ FACE_TEXT = {
     "en": {"face_assigned": "{n} face(s) assigned to {name}",
            "faces_no_index": "No face vectors for the active face model yet. Run \"Compute faces\" first.",
            "faces_busy": "Faces are being grouped right now. Try again in a moment.",
-           "face_not_found": "Face not found: {id}", "cluster_not_found": "Group not found",
+           "face_not_found": "Face not found: {id}", "face_all_obsolete": "None of those faces are in the index anymore — regroup faces.", "face_assigned_skip": "{n} face(s) assigned to {name} ({k} outdated skipped)", "cluster_not_found": "Group not found",
            "person_not_found": "Person not found", "person_need_name": "Type a name first",
            "faces_model_mismatch": "That face belongs to another face model",
            "faces_need_two": "Pick at least two to merge", "undo_expired": "Too late to undo"},
     "es": {"face_assigned": "{n} cara(s) asignada(s) a {name}",
            "faces_no_index": "Aún no hay caras calculadas para el modelo de caras activo. Usa \"Calcular caras\" primero.",
            "faces_busy": "Se están agrupando las caras ahora mismo. Inténtalo de nuevo en un momento.",
-           "face_not_found": "Cara no encontrada: {id}", "cluster_not_found": "Grupo no encontrado",
+           "face_not_found": "Cara no encontrada: {id}", "face_all_obsolete": "Ninguna de esas caras está ya en el índice — reagrupa las caras.", "face_assigned_skip": "{n} cara(s) asignada(s) a {name} ({k} obsoleta(s) omitida(s))", "cluster_not_found": "Grupo no encontrado",
            "person_not_found": "Persona no encontrada", "person_need_name": "Escribe un nombre primero",
            "faces_model_mismatch": "Esa cara pertenece a otro modelo de caras",
            "faces_need_two": "Elige al menos dos para unir", "undo_expired": "Ya no se puede deshacer"},
@@ -1217,7 +1270,15 @@ def a_for_item(req, ctx):
 def a_assign(req, ctx):
     f = _svc()
     r = f.assign_faces(req.get("person"), req.get("name"), req.get("clusters") or [], req.get("faces") or [])
-    return _meta(ctx, {**_ok(ctx, "face_assigned", n=r["assigned"], name=r["person"]["name"]), **r}, req)
+    key = "face_assigned_skip" if r.get("skipped") else "face_assigned"
+    msg = _ok(ctx, key, n=r["assigned"], name=r["person"]["name"], k=r.get("skipped") or 0)
+    return _meta(ctx, {**msg, **r}, req)
+
+
+@A("person_suggest", fast=True, doc="Autocomplete person names {q, limit}; folded prefix then substring")
+def a_psuggest(req, ctx):
+    f = _svc()
+    return {"ok": True, "names": f.match_persons(req.get("q") or req.get("query") or "", int(req.get("limit") or 12))}
 
 
 @A("face_confirm", doc="'Is this also X?' yes {person, faces}")

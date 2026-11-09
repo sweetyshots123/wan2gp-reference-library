@@ -6,6 +6,13 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.9 — Faces naming + viewer priority over thumb backlog
+
+- **Soft assign:** `Faces.assign_faces` partitions alive vs obsolete face ids; assigns alive, prunes missing from clusters, toast `face_assigned_skip` / error `face_all_obsolete`. Same path for Galería and Media Library.
+- **Name autocomplete:** `person_match.js` + `person_suggest` / `Faces.match_persons` (fold, prefix, substring). Galería NameBox keyboard; ML resolves fold-equal persons.
+- **Zoom / open during scan:** `request_priority.js` priority queue + thumb gate (viewer open ⇒ thumbs wait). Progressive placeholder zoom in Galería Viewer and Media Library lightbox; full `media_url` upgrades without blocking the UI.
+- **Tests:** `tests/test_faces.py` (obsolete assign, match_persons), `test_person_match.mjs`, `test_request_priority.mjs`, `test_progressive_media.mjs`.
+
 ## 1.12.8 — Standalone WanGP-action gating + resume i18n
 
 - Standalone Media Library hides Gradio-bridge actions (add to references, control video, audio targets, generation history). Any leftover bridge call shows a **one-time** translated notice (never «bridge missing (reload)» spam). Shared `standalone_rules.js`.
