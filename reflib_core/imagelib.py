@@ -14,7 +14,7 @@ import re
 import shutil
 import threading
 import time
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 try:
     from . import storage
@@ -482,15 +482,117 @@ def new_collection_with(hashes: Iterable[str], name: str, fallback: str = "Colle
     return {"collection": col, "added": len(col["images"]), "skipped": len(hashes) - len(col["images"])}
 
 
+MAX_SOURCE_BYTES = 200 * 1024 * 1024    # 1.4.4 guards: bigger sources get the placeholder instead of a thumbnail
+MAX_SOURCE_PIXELS = 120_000_000
+
+# 1.12.5: remember image sources that cannot produce a thumbnail so truncated / unreadable
+# files are not reopened (and not logged) on every browse refresh. Keyed by realpath+mtime+size.
+_THUMB_FAIL_LOCK = threading.Lock()
+_THUMB_FAIL: Dict[Tuple[str, int, int], str] = {}
+_THUMB_FAIL_MAX = 8000
+_PIL_TRUNC_LOCK = threading.Lock()
+
+
+def _thumb_fail_key(path: str) -> Optional[Tuple[str, int, int]]:
+    try:
+        st = os.stat(path)
+        return (os.path.realpath(path), int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1e9))), int(st.st_size))
+    except OSError:
+        return None
+
+
+def _thumb_fail_path() -> str:
+    return os.path.join(_thumbs_dir(), "_fail_cache.json")
+
+
+def _thumb_fail_load() -> None:
+    if _THUMB_FAIL:
+        return
+    try:
+        with open(_thumb_fail_path(), encoding="utf-8") as fh:
+            raw = json.load(fh)
+        items = raw.get("items") if isinstance(raw, dict) else None
+        if not isinstance(items, list):
+            return
+        with _THUMB_FAIL_LOCK:
+            for it in items[-_THUMB_FAIL_MAX:]:
+                if not isinstance(it, dict):
+                    continue
+                p, m, s = it.get("path"), it.get("mtime_ns"), it.get("size")
+                if isinstance(p, str) and isinstance(m, int) and isinstance(s, int):
+                    _THUMB_FAIL[(p, m, s)] = str(it.get("error") or "failed")
+    except Exception:
+        pass
+
+
+def _thumb_fail_save() -> None:
+    try:
+        os.makedirs(_thumbs_dir(), exist_ok=True)
+        with _THUMB_FAIL_LOCK:
+            items = [{"path": p, "mtime_ns": m, "size": s, "error": err}
+                     for (p, m, s), err in list(_THUMB_FAIL.items())[-_THUMB_FAIL_MAX:]]
+        tmp = _thumb_fail_path() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"version": 1, "items": items}, fh, ensure_ascii=False)
+        os.replace(tmp, _thumb_fail_path())
+    except Exception:
+        pass
+
+
+def _thumb_failed(path: str) -> bool:
+    key = _thumb_fail_key(path)
+    if key is None:
+        return False
+    _thumb_fail_load()
+    with _THUMB_FAIL_LOCK:
+        return key in _THUMB_FAIL
+
+
+def _thumb_mark_failed(path: str, error: str) -> bool:
+    """Record a permanent-until-change failure. Returns True if this is the first report (log once)."""
+    key = _thumb_fail_key(path)
+    if key is None:
+        return True
+    _thumb_fail_load()
+    with _THUMB_FAIL_LOCK:
+        first = key not in _THUMB_FAIL
+        _THUMB_FAIL[key] = (error or "failed")[:200]
+        while len(_THUMB_FAIL) > _THUMB_FAIL_MAX:
+            _THUMB_FAIL.pop(next(iter(_THUMB_FAIL)))
+    if first:
+        _thumb_fail_save()
+    return first
+
+
+def _open_image_for_thumb(path: str):
+    """Open an image for thumbnails, allowing truncated JPEGs only inside this call.
+
+    Uses a lock and restores ImageFile.LOAD_TRUNCATED_IMAGES so other plugins are not left
+    with a permanent process-wide change. There is still a brief window while the flag is True.
+    """
+    from PIL import Image, ImageFile
+    with _PIL_TRUNC_LOCK:
+        prev = ImageFile.LOAD_TRUNCATED_IMAGES
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        try:
+            im = Image.open(path)
+            im.load()
+            return im
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = prev
+
+
 def _img_data_uri(path: str, size: int, cache: Optional[str] = None) -> Optional[str]:
     try:
+        if _thumb_failed(path):
+            return None
         if cache and os.path.isfile(cache) and os.path.getsize(cache) > 0 and os.path.getmtime(cache) >= os.path.getmtime(path):
             with open(cache, "rb") as f:
                 return "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
         from PIL import Image
         if os.path.getsize(path) > MAX_SOURCE_BYTES:
             return None
-        with Image.open(path) as im:
+        with _open_image_for_thumb(path) as im:
             if im.width * im.height > MAX_SOURCE_PIXELS:
                 return None
             im.seek(0)
@@ -513,12 +615,9 @@ def _img_data_uri(path: str, size: int, cache: Optional[str] = None) -> Optional
             os.replace(tmp, cache)
         return "data:image/jpeg;base64," + base64.b64encode(data).decode()
     except Exception as e:
-        print(f"[Reference Library] thumbnail failed for {path}: {e}")
+        if _thumb_mark_failed(path, str(e)):
+            print(f"[Reference Library] thumbnail failed for {path}: {e}")
         return None
-
-
-MAX_SOURCE_BYTES = 200 * 1024 * 1024    # 1.4.4 guards: bigger sources get the placeholder instead of a thumbnail
-MAX_SOURCE_PIXELS = 120_000_000
 
 
 def thumb(img: Dict[str, Any], size: int = 220) -> Optional[str]:

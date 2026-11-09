@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.12.4 (prepared, not published)
+## 1.12.5
+- Thumbnails: allow truncated JPEGs while generating a preview (`ImageFile.LOAD_TRUNCATED_IMAGES` only for that open, restored afterwards under a lock).
+- Thumbnails: if a source still cannot be decoded, remember path+mtime+size (memory + `collections/.thumbs/_fail_cache.json`) and log **once**; unchanged broken files are not retried or re-logged on every refresh. Replacing or rewriting the file clears the entry automatically.
+
+## 1.12.4
 - Start with Image: **Choose from library / Elegir de la librería** beside Add/Remove/Left/Right/Clear opens the existing Media Library explorer, filtered to images (including virtual image crops).
 - Double-click one image or select it and use **Add to starting images / Añadir a imágenes iniciales**. Uses the starting gallery's own Add/state: keeps existing images and inserts after the selection. Never sends to Reference Images, generates, or queues tasks. Cancel changes nothing; single-image replacement is refused.
 - Plugin-only component identity hooks, EN/ES live labels and theme-aware/dark styling. No changes to WanGP core or Dragger. New Python AMG integration and JavaScript picker regression tests.

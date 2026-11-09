@@ -27,3 +27,6 @@ Python tests use real Gradio and core AMG Add; only the model-stack dimension-la
 5. Open again, change browser filters, then Cancel/Esc. Inputs must be unchanged; opening the regular explorer must restore its pre-picker filters.
 6. Change away from Start with Image: its controls and new button must hide together. Switch back: exactly one button, even after repeated model changes.
 7. Repeat in ES and EN (live switch), and on edit form if it exposes a compatible gallery. Smoke-test ordinary Reference Images, video and audio library pickers to confirm their original destinations still work.
+
+## 1.12.5 truncated thumbnails
+Image thumbnails tolerate truncated JPEGs for the duration of one open (flag restored under a lock). Persistent decode failures are remembered by path+mtime+size and logged once.
