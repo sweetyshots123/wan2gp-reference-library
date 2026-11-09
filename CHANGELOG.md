@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.6
+
+- **Frame capture stays on the video** (Galería + Media Library): capturing a frame with Vidosser (D / middle click) no longer jumps the viewer to the new photo when the catalog refreshes (`date_desc`). Shared contract in `reflib_core/framecap.py` + `frame_capture_rules.js` (`ReflibFrameCapture`); both UIs listen for `vidosser:frame-saved`, soft-refresh the grid, re-anchor by hash, and resume playback when it was playing.
+- **Open Media Library** button at the top of the Reference Library tab opens Galería (`/reflib/gallery/`) in a new browser tab. Media Library header has **Open in Galería**; Galería links back to Reference Library in WanGP.
+
 ## 1.12.5
 - Thumbnails: allow truncated JPEGs while generating a preview (`ImageFile.LOAD_TRUNCATED_IMAGES` only for that open, restored afterwards under a lock).
 - Thumbnails: if a source still cannot be decoded, remember path+mtime+size (memory + `collections/.thumbs/_fail_cache.json`) and log **once**; unchanged broken files are not retried or re-logged on every refresh. Replacing or rewriting the file clears the entry automatically.

@@ -83,7 +83,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.5"
+PLUGIN_VERSION = "1.12.6"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -324,6 +324,10 @@ TEXT = {
         "browser_fullscreen_info": "The media browser opens filling the whole screen (the ⛶ button in its header still switches for the current session).",
         "browser_sort": "Default sort order in the media browser",
         "browser_sort_info": "How the explorer orders what it shows (any folder, collection, filter or search). The sort menu in its header changes it for the current session.",
+        "open_ml": "Open Media Library",
+        "open_ml_tip": "Opens the Media Library (Galería) in a new browser tab — same data, same actions.",
+        "open_galeria": "Open in Galería",
+        "open_galeria_tip": "Open this library in Galería (new tab).",
         "bs_date_desc": "Date modified: newest first", "bs_date_asc": "Date modified: oldest first",
         "bs_name_asc": "File name: A–Z", "bs_name_desc": "File name: Z–A",
         "index_paused": "Pause folder indexing",
@@ -595,6 +599,10 @@ TEXT = {
         "browser_fullscreen_info": "El explorador de medios se abre ocupando toda la pantalla (el botón ⛶ de su cabecera sigue cambiándolo solo para esa vez).",
         "browser_sort": "Orden por defecto en el explorador de medios",
         "browser_sort_info": "Cómo ordena el explorador lo que muestra (cualquier carpeta, colección, filtro o búsqueda). El menú de orden de su cabecera lo cambia solo para la sesión actual.",
+        "open_ml": "Abrir Media Library",
+        "open_ml_tip": "Abre la Media Library (Galería) en una pestaña nueva del navegador — mismos datos, mismas acciones.",
+        "open_galeria": "Abrir en Galería",
+        "open_galeria_tip": "Abrir esta librería en la Galería (pestaña nueva).",
         "bs_date_desc": "Fecha de modificación: más recientes primero", "bs_date_asc": "Fecha de modificación: más antiguos primero",
         "bs_name_asc": "Nombre de archivo: A–Z", "bs_name_desc": "Nombre de archivo: Z–A",
         "index_paused": "Pausar la indexación de carpetas",
@@ -832,11 +840,12 @@ def _register_media_hooks():
 
     def save_frame(source, data, name):
         try:
+            from .reflib_core import framecap as _framecap
             res = imagelib.pool_add_bytes(data, name, source="frame")
         except storage.StorageError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, "name": res["name"], "hash": res["hash"], "path": "Media Library / " + res["name"],
-                "created": res["created"]}
+        return _framecap.save_result({"ok": True, "name": res["name"], "hash": res["hash"],
+                                      "path": "Media Library / " + res["name"], "created": res["created"]})
 
     m.video_sources[:] = [p for p in m.video_sources if p.get("name") != "reference-library"]
     m.video_sources.append({"name": "reference-library", "owns": owns, "save_frame": save_frame})
@@ -882,9 +891,10 @@ def build_js(settings=None):
     settings = settings or load_settings()
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
-    try:   # 1.9.6: selection rules shared with the Galería (one source file)
-        with open(os.path.join(_PLUGIN_DIR, "selection_rules.js"), "r", encoding="utf-8") as reader:
-            script = reader.read() + "\n" + script
+    try:   # 1.9.6 / 1.12.6: selection + frame-capture stay rules shared with the Galería
+        for _shared in ("selection_rules.js", "frame_capture_rules.js"):
+            with open(os.path.join(_PLUGIN_DIR, _shared), "r", encoding="utf-8") as reader:
+                script = reader.read() + "\n" + script
     except OSError:
         pass
     for extra in ("review_rules.js", "reflib_similarity.js", "reflib_faces.js", "reflib_dupes.js"):   # 1.11.1: + review rules   # 1.11.0: + Duplicados   # 1.10.0: + Personas   # 1.8.4: explorer extension modules (window.referenceLibrary.extend)
@@ -2555,6 +2565,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         tx = self.tab_texts(lang)
         ui = {}
         gr.HTML(f"<style>{load_css()}</style>", elem_classes=["reflib-hidden"], padding=False)
+        ui["open_ml"] = gr.HTML(
+            f'<div class="reflib-top-links" id="reflib_open_ml">'
+            f'<a class="reflib-open-ml" href="/reflib/gallery/" target="_blank" rel="noopener" '
+            f'title="{tr(lang, "open_ml_tip")}">{tr(lang, "open_ml")} ↗</a></div>',
+            elem_id="reflib_open_ml_wrap", padding=False)
         ui["intro"] = gr.Markdown(tx["intro"]["value"], elem_id="reflib_intro")
         with gr.Accordion(tx["settings_acc"]["label"], open=False, elem_id="reflib_settings_acc") as settings_acc:
             ui["settings_acc"] = settings_acc

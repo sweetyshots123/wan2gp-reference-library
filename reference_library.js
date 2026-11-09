@@ -722,6 +722,7 @@
             set_body: "Body-shape analysis", set_body_vlm: "VLM cross-check", set_cloud: "Allow cloud (sends images or descriptions)", set_key: "OpenRouter API key",
             set_key_set: "set", set_fallback: "Local fallback", set_jev_url: "Jev server URL (empty = in process)", set_latest: "Jev: use latest instead of pinned 1.13", set_save: "Save",
             browse: "Media browser", browse_tip: "Browse all images, videos and audio (collections, unassigned pool, folders)", close: "Close (Esc)",
+            open_galeria: "Open in Galería", open_galeria_tip: "Open this library in Galería (new tab)",
             search_ph: "Search by name…", import: "Import", import_tip: "Upload or drop images, videos or audio here: they go to the unassigned pool",
             k_all: "All", k_image: "Photos", k_video: "Videos", k_audio: "Audio", k_mask: "Masks", k_tip: "Media type", chip_kind: "Type: {k}",
             k_tree: "{i} photos · {v} videos · {a} audio", dur_none: "duration pending…", play: "Play", pause: "Pause",
@@ -821,6 +822,7 @@
             set_body: "Análisis de la forma del cuerpo", set_body_vlm: "Comprobación con VLM", set_cloud: "Permitir nube (envía imágenes o descripciones)", set_key: "Clave API de OpenRouter",
             set_key_set: "guardada", set_fallback: "Respaldo local", set_jev_url: "URL del servidor Jev (vacío = en proceso)", set_latest: "Jev: usar la última en vez de la 1.13 fijada", set_save: "Guardar",
             browse: "Explorador de medios", browse_tip: "Examinar imágenes, vídeos y audios (colecciones, sin colección, carpetas)", close: "Cerrar (Esc)",
+            open_galeria: "Abrir en Galería", open_galeria_tip: "Abrir esta librería en la Galería (pestaña nueva)",
             search_ph: "Buscar por nombre…", import: "Importar", import_tip: "Sube o suelta aquí imágenes, vídeos o audios: van a la bolsa sin colección",
             k_all: "Todo", k_image: "Fotos", k_video: "Vídeos", k_audio: "Audios", k_mask: "Máscaras", k_tip: "Tipo de medio", chip_kind: "Tipo: {k}",
             k_tree: "{i} fotos · {v} vídeos · {a} audios", dur_none: "duración pendiente…", play: "Reproducir", pause: "Pausa",
@@ -1093,6 +1095,8 @@
         const d = ilib.data;
         const body = root.querySelector(".reflib-ib-body");
         root.querySelector(".reflib-ib-title").textContent = it("browse");
+        const gal = root.querySelector(".reflib-ib-galeria");
+        if (gal) { gal.textContent = "↗ " + it("open_galeria"); gal.title = it("open_galeria_tip"); }
         root.querySelector(".reflib-ib-x").title = it("close");
         const search = root.querySelector(".reflib-ib-q");
         search.placeholder = it("search_ph");
@@ -2262,6 +2266,7 @@
         bg.className = "reflib-ib-bg";
         bg.innerHTML = `<div class="reflib-ib-modal" role="dialog" aria-modal="true">
             <div class="reflib-ib-head"><span class="reflib-ib-ico">${GRID_SVG}</span><h3 class="reflib-ib-title"></h3>
+              <a class="reflib-ib-btn reflib-ib-galeria" href="/reflib/gallery/" target="_blank" rel="noopener"></a>
               <input type="search" class="reflib-ib-q" spellcheck="false">
               <button type="button" class="reflib-ib-btn reflib-ib-import"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-addfolder"></button>
@@ -2664,6 +2669,10 @@
                 const m = document.createElement(mk === "video" ? "video" : "audio");
                 m.className = "reflib-ib-lbmedia"; m.controls = true; m.autoplay = true; m.preload = "auto"; m.src = u;
                 if (mk === "video") { m.playsInline = true; if (th) m.poster = th; }
+                // 1.12.6: remember play-intent across Vidosser's pause-for-capture
+                m._reflibWantUntil = Infinity;
+                m.addEventListener("play", () => { m._reflibWantUntil = Infinity; });
+                m.addEventListener("pause", () => { m._reflibWantUntil = performance.now() + 2000; });
                 stage.appendChild(m); m.play().catch(() => {});
             });
         }
@@ -5107,6 +5116,80 @@
     document.addEventListener("keydown", () => cpHide(), true);
     document.addEventListener("focusout", (ev) => { if (ev.target && ev.target.closest && ev.target.closest("[id^='reflib_bar_dd_']")) cpHide(); }, true);
     function colPeekReset() { colPeek.cache.clear(); }
+
+
+    // ---- 1.12.6: after Vidosser saves a frame into the library, stay on the open video (shared ReflibFrameCapture)
+    (function frameCaptureStay() {
+        const FC = window.ReflibFrameCapture;
+        if (!FC || FC._mlBound) return;
+        FC._mlBound = true;
+        window.addEventListener(FC.EVENT, (ev) => {
+            const d = (ev && ev.detail) || {};
+            if (FC.shouldNavigate(d)) return;
+            if (!ilib.open) return;   // Vidosser already toasts; nothing to re-anchor here
+            let openH = ilib.preview || null;
+            let mediaEl = null;
+            if (ilib.lightbox) {
+                mediaEl = ilib.lightbox.querySelector("video.reflib-ib-lbmedia, audio.reflib-ib-lbmedia");
+                const img = ilib.lightbox.querySelector("img[data-hash]");
+                if (img && img.dataset.hash) openH = img.dataset.hash;
+            }
+            const pin = {
+                hash: openH,
+                lb: !!ilib.lightbox,
+                t: mediaEl && isFinite(mediaEl.currentTime) ? mediaEl.currentTime : null,
+                playing: !!(mediaEl && (mediaEl._reflibWantUntil === Infinity || performance.now() < (mediaEl._reflibWantUntil || 0) || (!mediaEl.paused && !mediaEl.ended))),
+            };
+            // Soft refresh of the grid only; re-anchor preview / lightbox to the same item (never to d.hash)
+            const keep = FC.stayHash(pin.hash, d);
+            newQuery(true);
+            if (!keep) return;
+            const reanchor = () => {
+                const i = ilib.q.items.findIndex(x => x && x.hash === keep);
+                const go = (idx) => {
+                    if (pin.lb) openLightbox(idx);
+                    else showPreview(keep, idx);
+                    restoreMedia(pin);
+                };
+                if (i >= 0) { go(i); return; }
+                sendIlib({ action: "index_of", f: filterSnap(), hash: keep }).then(r => {
+                    if (!r || !r.ok || r.index < 0) return;
+                    go(r.index);
+                }).catch(() => {});
+            };
+            setTimeout(reanchor, 80);
+        });
+        function restoreMedia(p) {
+            if (!p || !p.lb) return;
+            const tryOnce = () => {
+                const m = ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia, audio.reflib-ib-lbmedia");
+                if (!m) return false;
+                if (p.t != null && isFinite(p.t)) try { m.currentTime = p.t; } catch (e) {}
+                if (FC.resumePlayback(p.playing)) try { m.play().catch(() => {}); } catch (e) {}
+                return true;
+            };
+            if (!tryOnce()) {
+                let n = 0;
+                const iv = setInterval(() => { if (tryOnce() || ++n > 40) clearInterval(iv); }, 100);
+            }
+        }
+    })();
+
+    // 1.12.6: keep the Reference Library tab "Open Media Library" button in the current language
+    function syncOpenMlLink() {
+        const a = document.querySelector("#reflib_open_ml a.reflib-open-ml");
+        if (!a) return;
+        const es = String(lang() || "").toLowerCase().startsWith("es");
+        a.textContent = (es ? "Abrir Media Library" : "Open Media Library") + " ↗";
+        a.title = es
+            ? "Abre la Media Library (Galería) en una pestaña nueva del navegador — mismos datos, mismas acciones."
+            : "Opens the Media Library (Galería) in a new browser tab — same data, same actions.";
+        a.href = "/reflib/gallery/";
+        a.target = "_blank";
+        a.rel = "noopener";
+    }
+    setInterval(syncOpenMlLink, 1200);
+    document.addEventListener("DOMContentLoaded", syncOpenMlLink);
 
     window.referenceLibrary = {
         colPeekReset,

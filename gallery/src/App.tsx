@@ -10,6 +10,7 @@ import { DupesPage } from "./Dupes";
 import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
+import { FrameCap } from "./frameCapture";
 import EditPanel from "./EditPanel";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
@@ -178,6 +179,48 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [refresh]);
 
+  // 1.12.6: pin the open viewer by hash so a refresh (frame capture → date_desc) does not jump to the new photo
+  const viewerHash = useRef<string | null>(null);
+  useEffect(() => {
+    if (viewer == null) { viewerHash.current = null; return; }
+    const it = store.current.get(viewer);
+    if (it) viewerHash.current = it.hash;
+  }, [viewer, ver]);
+  const relocateViewer = useCallback(async (hash: string | null) => {
+    if (!hash || viewer == null || !filter) return;
+    let found: number | null = null;
+    store.current.forEach((it, i) => { if (it.hash === hash) found = i; });
+    if (found != null) { if (found !== viewer) setViewer(found); return; }
+    try {
+      const r = await call("index_of", { f: filter, hash });
+      if (r && r.ok && typeof r.index === "number" && r.index >= 0) {
+        ensure(r.index, r.index + 1);
+        setViewer(r.index);
+      }
+    } catch {}
+  }, [viewer, filter, ensure]);
+  useEffect(() => {
+    if (viewer == null || !viewerHash.current) return;
+    const h = viewerHash.current;
+    const cur = store.current.get(viewer);
+    if (cur && cur.hash === h) return;
+    void relocateViewer(h);
+  }, [ver, relocateViewer, viewer]);
+  // Vidosser frame-saved: stay on the video (shared ReflibFrameCapture); soft refresh only
+  useEffect(() => {
+    if (!FrameCap) return;
+    const onSaved = (ev: Event) => {
+      const d = (ev as CustomEvent).detail || {};
+      if (FrameCap.shouldNavigate(d)) return;
+      const keep = FrameCap.stayHash(viewerHash.current, d);
+      if (keep) viewerHash.current = keep;
+      refresh();
+      if (keep) window.setTimeout(() => { void relocateViewer(keep); }, 60);
+    };
+    window.addEventListener(FrameCap.EVENT, onSaved);
+    return () => window.removeEventListener(FrameCap.EVENT, onSaved);
+  }, [refresh, relocateViewer]);
+
   // 1.9.7: borrado optimista (optimistic.ts): se quitan de la lista cargada al instante y el visor pasa a la siguiente
   const totalNow = useRef(0); totalNow.current = total;
   const viewerNow = useRef<number | null>(null); viewerNow.current = viewer;
@@ -293,7 +336,7 @@ export default function App() {
           onOpenItem={(it, list) => setSolo({ list, i: Math.max(0, list.findIndex((x) => x.hash === it.hash)) })} />
         <button onClick={() => fileIn.current?.click()} title="O arrastra archivos a la ventana">⤒ Subir</button>
         <input ref={fileIn} type="file" multiple hidden accept="image/*,video/*,audio/*" onChange={(e) => { doUpload([...(e.target.files || [])]); e.target.value = ""; }} />
-        <a className="ml" href="/" title="Abrir WanGP / Media Library">WanGP ↗</a>
+        <a className="ml" href="/" title="Abrir Reference Library en WanGP">Reference Library ↗</a>
       </header>
 
       {filter ? (

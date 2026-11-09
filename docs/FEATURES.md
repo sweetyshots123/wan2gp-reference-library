@@ -1,3 +1,24 @@
+
+# Reference Library: stay on video after frame capture + Open Media Library (1.12.6)
+
+- **User flow (capture):** open a video in Galería viewer or Media Library lightbox → play → D or middle-click (Vidosser) → frame is saved to the unassigned pool → stay on the same video at the same time (resume if it was playing); at most Vidosser's brief toast. Never navigate to the captured photo.
+- **Shared:** `imagelib.pool_add_bytes` (existing) + `reflib_core/framecap.save_result` annotates `{stay:true, navigate:false}`; clients use `frame_capture_rules.js` / `vidosser:frame-saved`.
+- **Open Media Library:** Reference Library tab top link → `/reflib/gallery/` (new tab). Media Library header → same URL. Galería header → WanGP / Reference Library (`/`).
+- **Privacy:** frames stay on the PC in `pool/`; no new network calls.
+
+## Tests
+
+```sh
+node tests/test_frame_capture_rules.mjs
+PYTHONPATH=. python tests/test_framecap.py
+```
+
+## Browser retest (pending)
+
+1. Galería: open a recent video, play, capture several frames with D; viewer must stay on the video; photos appear in Recientes / Sin colección after leaving the viewer.
+2. Media Library lightbox: same.
+3. Reference Library tab: top button «Abrir Media Library» opens Galería in a new tab; Media Library header «Abrir en Galería» works; Galería «Reference Library ↗» returns to WanGP.
+
 # Reference Library: starting-image picker (1.12.4)
 
 - **User flow:** Start with Image → Choose from library / Elegir de la librería in the starting-gallery controls → existing Media Library explorer, image filter → double-click one image or select one + Add to starting images / Añadir a imágenes iniciales. Cancel/Esc restores the previous explorer filters and does not modify inputs.

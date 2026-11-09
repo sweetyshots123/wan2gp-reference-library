@@ -6,6 +6,7 @@ import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
 import { Thumb, toast, fmtDur } from "./ui";
+import { FrameCap, wasWantPlay } from "./frameCapture";
 
 interface Props {
   items: Item[]; index: number; meta: Meta; total: number;
@@ -131,6 +132,33 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     if (v.error) setVbad(true);
     return () => { v.removeEventListener("error", bad); v.removeEventListener("loadedmetadata", meta); };
   });
+  // 1.12.6: remember play-intent across Vidosser's pause-for-capture; on frame-saved stay & resume
+  useEffect(() => {
+    const v = media.current as HTMLVideoElement | null;
+    if (!v || v.tagName !== "VIDEO") return;
+    const markPlay = () => { (v as any)._reflibWantPlay = true; (v as any)._reflibWantUntil = Infinity; };
+    const markPause = () => { (v as any)._reflibWantUntil = performance.now() + 2000; };
+    v.addEventListener("play", markPlay);
+    v.addEventListener("pause", markPause);
+    return () => { v.removeEventListener("play", markPlay); v.removeEventListener("pause", markPause); };
+  });
+  useEffect(() => {
+    if (!FrameCap) return;
+    const onSaved = () => {
+      const v = media.current as HTMLVideoElement | null;
+      if (!v || v.tagName !== "VIDEO") return;
+      const t0 = v.currentTime;
+      const want = wasWantPlay(v) || ((v as any)._reflibWantUntil === Infinity) || (performance.now() < ((v as any)._reflibWantUntil || 0));
+      // keep exact frame time; resume if it was playing (Vidosser pauses for the exact frame)
+      const restore = () => {
+        try { if (isFinite(t0)) v.currentTime = t0; } catch {}
+        if (FrameCap.resumePlayback(want)) v.play().catch(() => {});
+      };
+      window.setTimeout(restore, 30);
+    };
+    window.addEventListener(FrameCap.EVENT, onSaved);
+    return () => window.removeEventListener(FrameCap.EVENT, onSaved);
+  }, [it?.hash]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input,textarea,select")) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }

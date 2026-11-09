@@ -967,3 +967,15 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 }
 .amg-controls .reflib-start-pick:hover { filter: brightness(1.1); }
 .amg-controls .reflib-start-pick:focus-visible { outline: 2px solid var(--color-accent, #60a5fa); outline-offset: 2px; }
+
+/* 1.12.6: top of Reference Library tab — open Media Library (Galería) in a new tab */
+.reflib-top-links { display: flex; gap: 10px; align-items: center; margin: 4px 0 10px; flex-wrap: wrap; }
+.reflib-top-links .reflib-open-ml {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+  background: var(--button-primary-background-fill, #2563eb); color: var(--button-primary-text-color, #fff) !important;
+  text-decoration: none !important; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer;
+}
+.reflib-top-links .reflib-open-ml:hover { filter: brightness(1.08); }
+.reflib-ib-head .reflib-ib-galeria {
+  margin-left: 4px; white-space: nowrap;
+}
