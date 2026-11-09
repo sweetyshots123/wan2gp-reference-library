@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.10
+
+- **BUG-A:** `assign_faces` with only obsolete face ids raises `face_all_obsolete` without creating a person or pruning (no orphan person / inconsistent singleton). Mixed alive+obsolete still assigns + prunes + saves.
+- **BUG-B:** Media Library Personas uses shared `person_match.js` `attach()` (↑↓/Enter/Tab dropdown, same fold/resolve as Galería NameBox).
+- **BUG-3b:** Standalone WanGP-bridge catches (`apply` / `vadd` / `vapply`) skip re-toast when `wan_bridge_unavailable` (one-time notice only).
+- **Hardening:** unique temp file for `_atomic_json` (`mkstemp` + `os.replace`); double-checked lock for Faces `service()` singleton.
+
 ## 1.12.9
 
 - **Personas naming:** assigning a face group no longer fails with «Cara no encontrada: …:1@arcface» when some face ids left the index after a recompute. Live faces are assigned; obsolete ones are pruned and reported (`face_assigned_skip` / `face_all_obsolete`). Shared `reflib_core/faces.py` for Galería + Media Library.

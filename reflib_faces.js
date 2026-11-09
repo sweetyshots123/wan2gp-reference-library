@@ -30,6 +30,7 @@
     const ilib = () => RL.ilibState();
     const call = (req) => RL.sendIlib(req).then(r => { if (r && r.ok === false) { RL.toast(r.code === "faces_no_index" ? ft("no_index") : (r.code ? r.error : ft("err", { e: r.error || r.message || "?" })), "warn"); throw r; } return r; });
     const thumbs = new Map();
+    let personNames = [];   // 1.12.10: shared ReflibPersonMatch.attach (same as Galería NameBox)
     function needThumbs(hs) {
         const cache = ilib().thumbs, want = [...new Set(hs)].filter(h => !thumbs.has(h) && !(cache && cache.get(h)));
         const out = [];
@@ -153,8 +154,9 @@
           <div class="reflib-fc-clusters">${cs.length ? cs.map(c => `<div class="reflib-fc-cluster${sel.has(c.id) ? " on" : ""}" data-c="${esc(c.id)}">
               <input type="checkbox" data-f="csel" data-c="${esc(c.id)}" ${sel.has(c.id) ? "checked" : ""}>
               <button type="button" class="reflib-fc-open" data-f="cluster" data-c="${esc(c.id)}">${c.cover ? face(c.cover, "round") : ""}<i>${esc(ft("faces_n", { n: c.size }))}</i></button>
-              <span class="reflib-fc-nm"><input type="text" list="reflib-fc-names" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(c.id)}"><button type="button" class="reflib-ib-btn" data-f="name" data-c="${esc(c.id)}">${esc(ft("name"))}</button></span></div>`).join("") : `<div class="reflib-fc-muted">${esc(s.faces ? ft("none_c2", { m: s.min_cluster || 2, a: s.unassigned }) : ft("none_c"))}</div>`}</div>
-          <datalist id="reflib-fc-names">${ps.map(p => `<option value="${esc(p.name)}">`).join("")}</datalist>`, ft("title"));
+              <span class="reflib-fc-nm"><input type="text" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(c.id)}" autocomplete="off"><button type="button" class="reflib-ib-btn" data-f="name" data-c="${esc(c.id)}">${esc(ft("name"))}</button></span></div>`).join("") : `<div class="reflib-fc-muted">${esc(s.faces ? ft("none_c2", { m: s.min_cluster || 2, a: s.unassigned }) : ft("none_c"))}</div>`}</div>`, ft("title"));
+        personNames = ps.map(p => p.name);
+        wirePersonNameInputs();
         if (s.running && !poll) poll = setInterval(() => call({ action: "face_status" }).then(r => { if (!r.faces.running) { clearInterval(poll); poll = null; draw(); } }).catch(() => {}), 1500);
     }
     async function drawCluster() {
@@ -162,10 +164,11 @@
         const pl = await call({ action: "person_list" });
         await needThumbs(r.faces.map(f => f.hash));
         if (!pan) return;
-        pan.innerHTML = shell(`<div class="reflib-fc-bar"><span class="reflib-fc-nm"><input type="text" list="reflib-fc-names" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(view.c)}"><button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="name" data-c="${esc(view.c)}">${esc(ft("name"))}</button></span>
+        pan.innerHTML = shell(`<div class="reflib-fc-bar"><span class="reflib-fc-nm"><input type="text" placeholder="${esc(ft("name_ph"))}" data-f="nm" data-c="${esc(view.c)}" autocomplete="off"><button type="button" class="reflib-ib-btn reflib-ib-primary" data-f="name" data-c="${esc(view.c)}">${esc(ft("name"))}</button></span>
             ${sel.size ? `<button type="button" class="reflib-ib-btn" data-f="split">${esc(ft("split", { n: sel.size }))}</button>` : ""}</div>
-          <div class="reflib-fc-grid">${r.faces.map(f => face(f, sel.has(f.id) ? "on" : "", `data-f="fsel"`)).join("")}</div>
-          <datalist id="reflib-fc-names">${(pl.persons || []).map(p => `<option value="${esc(p.name)}">`).join("")}</datalist>`, ft("faces_n", { n: r.total }));
+          <div class="reflib-fc-grid">${r.faces.map(f => face(f, sel.has(f.id) ? "on" : "", `data-f="fsel"`)).join("")}</div>`, ft("faces_n", { n: r.total }));
+        personNames = (pl.persons || []).map(p => p.name);
+        wirePersonNameInputs();
     }
     async function drawPerson() {
         const [r, sg, pl] = await Promise.all([call({ action: "person_get", person: view.id, limit: 400 }), call({ action: "face_suggest", person: view.id, limit: 40 }), call({ action: "person_list" })]);
@@ -204,11 +207,21 @@
             rv = null; draw();
         }).catch(() => {});
     }
+
+    function wirePersonNameInputs() {
+        if (!pan || !window.ReflibPersonMatch || !ReflibPersonMatch.attach) return;
+        pan.querySelectorAll('input[data-f="nm"]').forEach((inp) => {
+            ReflibPersonMatch.attach(inp, {
+                getNames: () => personNames,
+                onCommit: (name) => nameCluster(inp.dataset.c, name),
+                limit: 8,
+            });
+        });
+    }
     function nameCluster(c, name) {
-        // 1.12.9: fold-resolve against known persons (shared ReflibPersonMatch); toast reports skipped obsolete faces
+        // 1.12.10: fold-resolve via shared ReflibPersonMatch (same as Galería); toast reports skipped obsolete faces
         const raw = String(name || "").trim(); if (!raw) return;
-        const known = [...(pan ? pan.querySelectorAll("#reflib-fc-names option") : [])].map(o => o.value).filter(Boolean);
-        name = (window.ReflibPersonMatch ? ReflibPersonMatch.resolve(raw, known) : raw);
+        name = (window.ReflibPersonMatch ? ReflibPersonMatch.resolve(raw, personNames) : raw);
         call({ action: "face_assign", name, clusters: [c] }).then(r => {
             const msg = (r && r.skipped) ? (r.message || r.toast || ft("assigned", { n: r.assigned, x: r.person.name }))
                 : ft("assigned", { n: r.assigned, x: r.person.name });
@@ -334,7 +347,16 @@
 .reflib-fc-cluster { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border-radius: 10px; border: 1px solid var(--border-color-primary, #d1d5db); }
 .reflib-fc-cluster.on { border-color: #3b82f6; background: rgba(59,130,246,.12); }
 .reflib-fc-cluster input[type=checkbox] { position: absolute; top: 6px; left: 6px; }
-.reflib-fc-nm { display: inline-flex; gap: 4px; }
+.reflib-fc-nm { display: inline-flex; gap: 4px; align-items: flex-start; }
+
+.reflib-pm-wrap { position: relative; display: inline-block; }
+.reflib-pm-sug { position: absolute; z-index: 70; left: 0; right: 0; min-width: 140px; margin: 2px 0 0; padding: 4px 0; list-style: none;
+  background: var(--background-fill-primary, #fff); color: inherit; border: 1px solid var(--border-color-primary, #d1d5db);
+  border-radius: 8px; max-height: 180px; overflow: auto; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.reflib-pm-sug[hidden] { display: none !important; }
+.reflib-pm-sug li { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.reflib-pm-sug li.on, .reflib-pm-sug li:hover { background: #2f6fec; color: #fff; }
+
 .reflib-fc-nm input, .reflib-fc-bar select { width: 110px; background: var(--input-background-fill, transparent); color: inherit; border: 1px solid var(--border-color-primary, #d1d5db); border-radius: 6px; padding: 3px 6px; }
 .reflib-fc-bar select { width: auto; }
 .reflib-fc-ask { display: flex; gap: 16px; align-items: center; padding: 12px; border-radius: 12px; background: var(--background-fill-secondary, #f3f4f6); }

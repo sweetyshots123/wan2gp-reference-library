@@ -340,7 +340,7 @@
         if (!d.id) return;
         const req = { action: "apply", collection_id: String(d.id), target: "generate:image_refs" };
         if (d.mode === "replace" || d.mode === "append") req.mode = d.mode;
-        sendBridge(req).catch(err => toast(t("apply_failed", { e: (err && err.message) || err }), "error"));
+        sendBridge(req).catch(err => bridgeFailToast("apply_failed", err));
     });
 
     let vreloadTimer = null;
@@ -546,7 +546,7 @@
                 label: data.offer_label || "Save",
                 onClick: () => sendBridge({ action: data.offer_kind === "image" ? "image_offer_accept" : "video_offer_accept",
                                             token: data.offer_token, target: `${tab}:video_guide` })
-                    .catch(err => toast(t("vadd_failed", { e: (err && err.message) || err }), "error")),
+                    .catch(err => bridgeFailToast("vadd_failed", err)),
             });
         }
         toast(text, kind, buttons, data.sticky_ms);
@@ -559,7 +559,7 @@
             return Promise.resolve({ ok: false, error: "control_hidden" });
         }
         return sendBridge(Object.assign({ action: "video_load", target: `${tab}:video_guide` }, req))
-            .catch(err => toast(t("vapply_failed", { e: (err && err.message) || err }), "error"));
+            .catch(err => bridgeFailToast("vapply_failed", err));
     }
     window.addEventListener("reflib:video-apply", (e) => {
         const d = (e && e.detail) || {};
@@ -572,12 +572,17 @@
         const req = { action: "video_add", path: String(d.path), source: String(d.source || "manual"), target: "generate:video_guide" };
         if (d.name) req.name = String(d.name);
         if (d.meta && typeof d.meta === "object") req.meta = d.meta;
-        sendBridge(req).catch(err => toast(t("vadd_failed", { e: (err && err.message) || err }), "error"));
+        sendBridge(req).catch(err => bridgeFailToast("vadd_failed", err));
     });
 
     const pending = new Map();
     function bridgeButton(target) {
         return document.getElementById("reflib_bridge_" + String(target || "").replace(":", "_"));
+    }
+    function bridgeFailToast(key, err) {
+        // 1.12.10: sendBridge already showed the one-time standalone notice — do not re-toast apply/vadd/vapply
+        if (err && err.message === "wan_bridge_unavailable") return;
+        toast(t(key, { e: (err && err.message) || err }), "error");
     }
     function sendBridge(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang() }, req || {});

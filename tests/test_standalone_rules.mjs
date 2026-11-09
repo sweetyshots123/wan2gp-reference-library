@@ -38,6 +38,12 @@ assert.equal(top[1], "/reflib/media-library/", "Open Media Library top link → 
 const js = fs.readFileSync(path.join(root, "reference_library.js"), "utf8");
 assert.match(js, /ReflibStandalone|showWanBridgeActions/);
 assert.match(js, /takeBridgeNotice|bridgeMissingMessage/);
+// 1.12.10 BUG-3b: apply/vadd/vapply catches must not re-toast wan_bridge_unavailable
+assert.match(js, /bridgeFailToast/);
+assert.match(js, /wan_bridge_unavailable/);
+const catches = [...js.matchAll(/bridgeFailToast\("[^"]+",\s*err\)/g)];
+assert.ok(catches.length >= 3, "expected bridgeFailToast on apply/vadd/vapply paths, got " + catches.length);
+
 assert.ok(js.includes("showWanBridgeActions") && js.includes("torefs"), "torefs gated by standalone rules");
 
 console.log("test_standalone_rules: ok");

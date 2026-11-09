@@ -6,6 +6,13 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.10 — Soft-assign safety, ML autocomplete parity, standalone toast once
+
+- All-obsolete assign: no person create, no prune (`face_all_obsolete` only).
+- Media Library name fields: `ReflibPersonMatch.attach` (shared with Galería keyboard/fold).
+- Standalone: `bridgeFailToast` ignores `wan_bridge_unavailable` after the one-time notice.
+- Atomic JSON via unique `.tmp`; Faces service singleton under `_F_LOCK`.
+
 ## 1.12.9 — Faces naming + viewer priority over thumb backlog
 
 - **Soft assign:** `Faces.assign_faces` partitions alive vs obsolete face ids; assigns alive, prunes missing from clusters, toast `face_assigned_skip` / error `face_all_obsolete`. Same path for Galería and Media Library.

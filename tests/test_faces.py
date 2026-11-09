@@ -1,4 +1,5 @@
 """Unit tests for reflib_core/faces.py with synthetic embeddings (no models, no library)."""
+import json as json_mod
 import os, sys, tempfile, threading
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -402,16 +403,22 @@ def test_assign_skips_obsolete_faces():
     assert r["skipped"] == 1
     assert stale in r["skipped_ids"]
     assert stale not in (f.clusters().get("clusters") or {})
-    # all-obsolete → clear error
-    f2, _, _ = mk(data)
+    # all-obsolete → clear error, no person created, clusters untouched (1.12.10 BUG-A)
+    f2, _, d2 = mk(data)
     f2.run()
     cid2 = list(f2.clusters()["clusters"])[0]
+    before_cl = json_mod.dumps(f2.clusters(), sort_keys=True)
+    before_persons = dict(f2.db["persons"])
     f2.clusters()["clusters"][cid2]["faces"] = [stale]
     try:
-        f2.assign_faces(name="X", clusters=[cid2])
+        f2.assign_faces(name="X_all_obsolete", clusters=[cid2])
         assert False
     except ActionError as e:
         assert e.key == "face_all_obsolete"
+    assert "X_all_obsolete" not in {p["name"] for p in f2.db["persons"].values()}
+    assert f2.db["persons"] == before_persons
+    # in-memory cluster still holds the stale id we planted (no prune on all-obsolete)
+    assert stale in f2.clusters()["clusters"][cid2]["faces"]
 
 
 def test_match_persons_fold_prefix_substring():
@@ -429,3 +436,41 @@ def test_match_persons_fold_prefix_substring():
     assert [x["name"] for x in f.match_persons("josé", 5)] == ["María José"]
     # fold-equal resolve via find
     assert f.find_person("maria jose") == f.find_person("María José")
+
+
+def test_assign_all_obsolete_no_person_no_prune():
+    """1.12.10 BUG-A: all-obsolete assign must not create a person or prune/save."""
+    data, _ = synth(people=1, per=4)
+    f, _, d = mk(data)
+    f.run()
+    cid = list(f.clusters()["clusters"])[0]
+    stale = "deadhash:0@arcface"
+    f.clusters()["clusters"][cid]["faces"] = [stale]
+    n_before = len(f.db["persons"])
+    cl_path = os.path.join(d, "faces", "clusters-arcface.json")
+    # snapshot disk after run()
+    disk_before = open(cl_path, encoding="utf-8").read() if os.path.isfile(cl_path) else None
+    try:
+        f.assign_faces(name="Ghost", clusters=[cid])
+        assert False, "expected face_all_obsolete"
+    except ActionError as e:
+        assert e.key == "face_all_obsolete"
+    assert len(f.db["persons"]) == n_before
+    assert not any(p["name"] == "Ghost" for p in f.db["persons"].values())
+    assert stale in f.clusters()["clusters"][cid]["faces"]
+    if disk_before is not None:
+        assert open(cl_path, encoding="utf-8").read() == disk_before
+
+
+def test_atomic_json_unique_tmp(tmp_path=None):
+    """1.12.10: _atomic_json uses a unique temp name (not path+'.tmp' fixed)."""
+    import inspect
+    src = inspect.getsource(F._atomic_json)
+    assert "mkstemp" in src
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "persons.json")
+    F._atomic_json(path, {"version": 1, "persons": {}})
+    assert os.path.isfile(path)
+    assert not os.path.isfile(path + ".tmp")  # fixed name must not linger
+    F._atomic_json(path, {"version": 1, "persons": {"p": {"name": "A"}}}, bak=True)
+    assert os.path.isfile(path + ".bak")

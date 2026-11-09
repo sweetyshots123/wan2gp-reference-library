@@ -5,7 +5,7 @@ clusters-<model>.json (rebuildable cache). Face data never leaves the machine. B
 reflib_faces.js, Galería Personas page) only call the face_* / person_* actions registered at the bottom.
 """
 from __future__ import annotations
-import json, os, re, shutil, threading, time, unicodedata, uuid
+import json, os, re, shutil, tempfile, threading, time, unicodedata, uuid
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -39,14 +39,23 @@ def _fold(s: str) -> str:
 
 
 def _atomic_json(path: str, obj, bak: bool = False):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    """Write JSON via a unique temp file in the same directory, then os.replace (avoids fixed .tmp collisions)."""
+    d = os.path.dirname(path) or "."
+    os.makedirs(d, exist_ok=True)
     if bak and os.path.isfile(path):
         shutil.copy2(path, path + ".bak")
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh, ensure_ascii=False)
-        fh.flush(); os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh, ensure_ascii=False)
+            fh.flush(); os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def face_quality(det, px, q, s: Dict[str, Any]) -> Dict[str, Any]:
@@ -746,24 +755,27 @@ class Faces:
 
     def assign_faces(self, pid=None, name=None, clusters=(), faces=()) -> Dict[str, Any]:
         """Name / assign a whole group. Obsolete faces (left the index after recompute) are skipped,
-        pruned from clusters, and reported — never abort the whole group (1.12.9)."""
+        pruned from clusters, and reported — never abort the whole group (1.12.9).
+        1.12.10: if every id is obsolete, raise face_all_obsolete without creating a person or mutating state."""
         with self.lock:
             m = self.src.model
-            if not pid:
-                pid = self.new_person(name)
-            p = self._person(pid)
             cl = self.clusters(m)["clusters"]
             raw = []
             for cid in clusters or []:
                 if cid not in cl:
                     raise ActionError("cluster_not_found", cluster=cid)
                 raw += cl[cid]["faces"]
+            # expand before creating a person (accept mode does not need pid)
             raw = list(raw) + self.expand_video_faces(faces or [], m, pid, "accept")
             fs, miss = self._partition(raw, m)
+            if not fs:
+                # Do not create a person, do not prune — leave memory/disk untouched
+                raise ActionError("face_all_obsolete", n=len(miss))
+            if not pid:
+                pid = self.new_person(name)
+            p = self._person(pid)
             if miss:
                 self._prune_missing(miss, m)
-            if not fs:
-                raise ActionError("face_all_obsolete", n=len(miss))
             asg = self.assign(m)
             prev = {f: asg.get(f) for f in fs}
             for f in fs:
@@ -1115,24 +1127,30 @@ class _ImagelibTagger:
             pass
 
 
+_F = None
+_F_LOCK = threading.Lock()
+
 def service() -> Faces:
     global _F
-    if _F is None:
-        from . import similarity
-        svc = similarity.service()
-        def save(upd):   # merge face_* keys into similarity/settings.json without restarting the sim worker
-            with svc.lock:
-                try:
-                    with open(svc.settings_path, encoding="utf-8-sig") as fh:
-                        cur = json.load(fh)
-                except Exception:
-                    cur = {}
-                cur.update(upd)
-                _atomic_json(svc.settings_path, cur)
-            return cur
-        _F = Faces(os.path.dirname(svc.dir), FaceSource(svc.index, svc), settings=svc.settings, save_settings=save,
-                   tagger=_ImagelibTagger())
-    return _F
+    if _F is not None:
+        return _F
+    with _F_LOCK:
+        if _F is None:
+            from . import similarity
+            svc = similarity.service()
+            def save(upd):   # merge face_* keys into similarity/settings.json without restarting the sim worker
+                with svc.lock:
+                    try:
+                        with open(svc.settings_path, encoding="utf-8-sig") as fh:
+                            cur = json.load(fh)
+                    except Exception:
+                        cur = {}
+                    cur.update(upd)
+                    _atomic_json(svc.settings_path, cur)
+                return cur
+            _F = Faces(os.path.dirname(svc.dir), FaceSource(svc.index, svc), settings=svc.settings, save_settings=save,
+                       tagger=_ImagelibTagger())
+        return _F
 
 
 def _svc() -> Faces:

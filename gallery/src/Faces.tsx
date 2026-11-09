@@ -128,10 +128,11 @@ function NameBox({ names, placeholder, onName }: { names: string[]; placeholder:
         onFocus={() => setOpen(true)}
         onBlur={() => { window.setTimeout(() => setOpen(false), 120); if (v.trim() && names.some((n) => fold(n) === fold(v))) commit(v); }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && hits.length) { e.preventDefault(); setHi((h) => (h + 1) % hits.length); setOpen(true); }
-          else if (e.key === "ArrowUp" && hits.length) { e.preventDefault(); setHi((h) => (h - 1 + hits.length) % hits.length); setOpen(true); }
-          else if ((e.key === "Enter" || e.key === "Tab") && v.trim()) { e.preventDefault(); commit(open && hits[hi] ? hits[hi] : v); }
-          else if (e.key === "Escape") { setOpen(false); }
+          const step = PM && PM.keyStep ? PM.keyStep(e.key, { hits, hi, open, v }) : null;
+          if (!step) return;
+          e.preventDefault();
+          setHi(step.hi); setOpen(step.open);
+          if (step.commit) commit(step.commit);
         }} />
       {open && v.trim() && hits.length > 0 && (
         <ul className="namebox-sug" role="listbox">
