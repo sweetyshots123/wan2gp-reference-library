@@ -905,10 +905,22 @@
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
     // unqueued channel, so it never waits behind WanGP's generation queue.
-    const FAST_ACTIONS = new Set(["forget_status", "col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
+    const FAST_ACTIONS = new Set(["forget_status", "col_peek", "mask_list", "mask_info", "form_busy", "media_url", "media_dur", "playback_get", "playback_settings", "thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "sim_status", "sim_info"]);
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
+        const useFetch = !!window.__REFLIB_STANDALONE__ || !document.getElementById("reflib_ilib_btn");
+        if (useFetch) {
+            const body = Object.assign({ tz: -new Date().getTimezoneOffset() }, req);
+            return fetch("/reflib/api", {
+                method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                body: JSON.stringify(body),
+            }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+              .then(data => {
+                  if (data && data.v && data.v !== VERSION) staleTab(data.v);
+                  return data;
+              });
+        }
         const fast = !req.slow && FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
         const ch = fast ? "fast" : "main";
         const run = () => new Promise((resolve, reject) => {
@@ -1097,6 +1109,11 @@
         root.querySelector(".reflib-ib-title").textContent = it("browse");
         const gal = root.querySelector(".reflib-ib-galeria");
         if (gal) { gal.textContent = "↗ " + it("open_galeria"); gal.title = it("open_galeria_tip"); }
+        const rcfg = root.querySelector(".reflib-ib-resume-cfg");
+        if (rcfg) {
+          const es = String(lang() || "").toLowerCase().startsWith("es");
+          rcfg.title = es ? "Umbral de reanudación (minutos)" : "Resume threshold (minutes)";
+        }
         root.querySelector(".reflib-ib-x").title = it("close");
         const search = root.querySelector(".reflib-ib-q");
         search.placeholder = it("search_ph");
@@ -2266,7 +2283,7 @@
         bg.className = "reflib-ib-bg";
         bg.innerHTML = `<div class="reflib-ib-modal" role="dialog" aria-modal="true">
             <div class="reflib-ib-head"><span class="reflib-ib-ico">${GRID_SVG}</span><h3 class="reflib-ib-title"></h3>
-              <a class="reflib-ib-btn reflib-ib-galeria" href="/reflib/gallery/" target="_blank" rel="noopener"></a>
+              <a class="reflib-ib-btn reflib-ib-galeria" href="/reflib/gallery/" target="_blank" rel="noopener"></a><button type="button" class="reflib-ib-btn reflib-ib-resume-cfg" data-act="resumecfg" title="resume">⏱</button>
               <input type="search" class="reflib-ib-q" spellcheck="false">
               <button type="button" class="reflib-ib-btn reflib-ib-import"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-addfolder"></button>
@@ -2658,6 +2675,7 @@
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
         // 1.6.0: videos and audio play in the viewer (audio over its waveform)
         const stage = box.querySelector(".reflib-ib-lbstage");
+        stage.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); } catch (e) {} });
         stage.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} m.remove(); });
         const mk = it2.kind || "image";
         box.dataset.kind = mk;
@@ -2673,7 +2691,9 @@
                 m._reflibWantUntil = Infinity;
                 m.addEventListener("play", () => { m._reflibWantUntil = Infinity; });
                 m.addEventListener("pause", () => { m._reflibWantUntil = performance.now() + 2000; });
-                stage.appendChild(m); m.play().catch(() => {});
+                stage.appendChild(m);
+                if (mk === "video") wireResume(m, it2.hash, box);
+                else m.play().catch(() => {});
             });
         }
         showPreview(it2.hash, idx);
@@ -2693,7 +2713,11 @@
         if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
     }
     function closeLightbox(silent) {
-        if (ilib.lightbox) { ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} }); ilib.lightbox.remove(); ilib.lightbox = null; }
+        if (ilib.lightbox) {
+            ilib.lightbox.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); m.pause(); } catch (e) {} });
+            ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} });
+            ilib.lightbox.remove(); ilib.lightbox = null;
+        }
     }
 
     // ---- 1.7.1 "Borrar de la librería" for entries the library doesn't own: files in watched folders, disk-linked
@@ -3205,6 +3229,7 @@
         if (ogClick(act, el, e)) return;   // 1.10.0
         if (act === "aplay") { e.stopPropagation(); toggleAudio(el.dataset.hash); return; }
         if (act === "topick") { pickLoad([...ilib.sel][0]); return; }   // 1.6.8
+        if (act === "resumecfg") { openResumeSettings(); return; }
         if (act === "pkcancel") { if (ilib.pick && ilib.pick.mode === "assign") mkAssignEnd(); else closeBrowser(); return; }
         if (act === "tovctl") { sendMediaTo("video_guide"); return; }
         if (act === "toaudio") { sendMediaTo(el.dataset.to); return; }
@@ -5118,6 +5143,88 @@
     function colPeekReset() { colPeek.cache.clear(); }
 
 
+    // ---- 1.12.7: resume playback (shared ReflibPlayback + playback_* actions)
+    let _resumeMinS = (window.ReflibPlayback && window.ReflibPlayback.DEFAULT_MIN_S) || 300;
+    let _resumeMinLoaded = false;
+    function ensureResumeMin() {
+        if (_resumeMinLoaded) return Promise.resolve(_resumeMinS);
+        return sendIlib({ action: "playback_settings" }).then(r => {
+            if (r && r.ok && r.min_s != null) _resumeMinS = Number(r.min_s);
+            _resumeMinLoaded = true;
+            return _resumeMinS;
+        }).catch(() => _resumeMinS);
+    }
+    function saveResume(m) {
+        if (!m || m.tagName !== "VIDEO") return;
+        const h = m.dataset.resumeHash; if (!h) return;
+        const t = m.currentTime, dur = m.duration;
+        if (!isFinite(t) || !isFinite(dur)) return;
+        const P = window.ReflibPlayback;
+        const thr = _resumeMinS;
+        if (P && !P.shouldTrack(dur, t, thr)) {
+            sendIlib({ action: "playback_set", hash: h, clear: 1 }).catch(() => {});
+            return;
+        }
+        sendIlib({ action: "playback_set", hash: h, t, duration: dur }).catch(() => {});
+    }
+    function wireResume(m, hash, box) {
+        m.dataset.resumeHash = hash || "";
+        const P = window.ReflibPlayback; if (!P) { m.play().catch(() => {}); return; }
+        const offer = document.createElement("div");
+        offer.className = "reflib-ib-resume"; offer.hidden = true;
+        box.querySelector(".reflib-ib-lbstage").appendChild(offer);
+        const showOffer = (t) => {
+            const L = P.offerLabels(t, lang());
+            offer.innerHTML = `<button type="button" class="reflib-ib-resume-go" data-r="go">${esc(L.continue)}</button>` +
+                `<button type="button" class="reflib-ib-resume-restart" data-r="rst">${esc(L.restart)}</button>`;
+            offer.hidden = false;
+            offer.onclick = (e) => {
+                const b = e.target.closest("[data-r]"); if (!b) return;
+                offer.hidden = true;
+                if (b.dataset.r === "rst") {
+                    try { m.currentTime = 0; } catch (err) {}
+                    sendIlib({ action: "playback_set", hash, clear: 1 }).catch(() => {});
+                } else {
+                    try { m.currentTime = t; } catch (err) {}
+                }
+                m.play().catch(() => {});
+            };
+        };
+        ensureResumeMin().then(() => sendIlib({ action: "playback_get", hash })).then(r => {
+            if (!r || !r.ok || !r.pos || ilib.lightbox !== box) { m.play().catch(() => {}); return; }
+            if (r.min_s != null) _resumeMinS = Number(r.min_s);
+            const t = Number(r.pos.t), dur = Number(r.pos.dur || m.duration || 0);
+            if (!P.shouldTrack(dur || m.duration, t, _resumeMinS)) { m.play().catch(() => {}); return; }
+            const apply = () => {
+                const D = isFinite(m.duration) && m.duration > 0 ? m.duration : dur;
+                if (!P.shouldTrack(D, t, _resumeMinS)) { m.play().catch(() => {}); return; }
+                showOffer(t);
+                // wait for user choice; do not autoplay past the offer
+                try { m.pause(); } catch (e) {}
+            };
+            if (isFinite(m.duration) && m.duration > 0) apply();
+            else m.addEventListener("loadedmetadata", apply, { once: true });
+        }).catch(() => { m.play().catch(() => {}); });
+        const flush = () => saveResume(m);
+        window.addEventListener("pagehide", flush);
+        m.addEventListener("remove", () => window.removeEventListener("pagehide", flush), { once: true });
+    }
+    function openResumeSettings() {
+        const es = String(lang() || "").toLowerCase().startsWith("es");
+        ensureResumeMin().then(cur => {
+            const curM = Math.round((cur / 60) * 100) / 100;
+            const raw = window.prompt(es
+                ? "Reanudar vídeos de más de (minutos). Por defecto 5:"
+                : "Resume videos longer than (minutes). Default 5:", String(curM));
+            if (raw == null) return;
+            const n = Number(String(raw).replace(",", "."));
+            if (!isFinite(n) || n < 0) return;
+            sendIlib({ action: "playback_settings", min_m: n }).then(r => {
+                if (r && r.ok) { _resumeMinS = Number(r.min_s); _resumeMinLoaded = true; toast(es ? "Umbral de reanudación guardado" : "Resume threshold saved", "ok"); }
+            }).catch(() => {});
+        });
+    }
+
     // ---- 1.12.6: after Vidosser saves a frame into the library, stay on the open video (shared ReflibFrameCapture)
     (function frameCaptureStay() {
         const FC = window.ReflibFrameCapture;
@@ -5182,14 +5289,44 @@
         const es = String(lang() || "").toLowerCase().startsWith("es");
         a.textContent = (es ? "Abrir Media Library" : "Open Media Library") + " ↗";
         a.title = es
-            ? "Abre la Media Library (Galería) en una pestaña nueva del navegador — mismos datos, mismas acciones."
-            : "Opens the Media Library (Galería) in a new browser tab — same data, same actions.";
-        a.href = "/reflib/gallery/";
+            ? "Abre solo la Media Library en una pestaña nueva (no Galería, no WanGP completo)."
+            : "Opens the Media Library alone in a new browser tab (not Galería, not full WanGP).";
+        a.href = "/reflib/media-library/";
         a.target = "_blank";
         a.rel = "noopener";
     }
     setInterval(syncOpenMlLink, 1200);
     document.addEventListener("DOMContentLoaded", syncOpenMlLink);
+
+
+    // 1.12.7: standalone Media Library page (/reflib/media-library/)
+    if (window.__REFLIB_STANDALONE__) {
+        document.documentElement.classList.add("reflib-standalone");
+        const bootStand = () => {
+            openBrowser({});
+            setFull(true);
+            // Hide / soften WanGP-only chrome once
+            const tip = document.createElement("div");
+            tip.className = "reflib-standalone-tip";
+            const es = String(lang() || "").toLowerCase().startsWith("es");
+            tip.textContent = es
+                ? "Media Library independiente. Acciones que requieren WanGP (vídeo de control, historial de generaciones…) no están disponibles aquí."
+                : "Standalone Media Library. Actions that need WanGP (control video, generation history…) are not available here.";
+            document.body.appendChild(tip);
+            setTimeout(() => tip.remove(), 8000);
+            // Close button leaves the page
+            const origClose = closeBrowser;
+            // keep closeBrowser for lightbox etc.; × on shell navigates away only when standalone
+            const x = () => { try { saveResume(ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia")); } catch (e) {} location.href = "/reflib/gallery/"; };
+            // re-bind after modal built
+            setTimeout(() => {
+                const btn = ilib.root && ilib.root.querySelector(".reflib-ib-x");
+                if (btn) { btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); x(); }; }
+            }, 0);
+        };
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootStand);
+        else setTimeout(bootStand, 0);
+    }
 
     window.referenceLibrary = {
         colPeekReset,
@@ -5205,7 +5342,7 @@
             return r;
         }, ilibFiltered: loadedItems, navState: () => ({ i: nav.i, n: nav.s.length, labels: nav.s.map(navLabel) }), navGo: (i) => navGo(i),
         ilibQuery: () => ({ total: ilib.q.total, loaded: loadedItems().length, cards: ilib.cards ? ilib.cards.size : 0, selAll: !!ilib.sel.all }),
-        applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab,
+        applySettings, handleToast, sendBridge, bridgeResponse, openTab, toast, lang, t, localizeTab, openResumeSettings,
         openNameRow, closeNameRow, toggleNameRow, afterSave, applyTooltips,
         loadVideoRequest, reloadVideos, controlVisible, syncVideoBars, reloadLists, renameResponse, mountPencils, nameFromLabel,
         promptsRefreshed, refreshPrompts,

@@ -54,6 +54,7 @@ from .reflib_core.autotag import AutoTagService
 from .reflib_core import taxonomy as _taxonomy
 from .reflib_core import actions_all as _actions_all  # noqa: F401  (registers every shared action)
 from .reflib_core import actions as _actions
+from .reflib_core import playback as _playback
 
 
 def _wgp_busy() -> bool:
@@ -83,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.6"
+PLUGIN_VERSION = "1.12.7"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -325,7 +326,10 @@ TEXT = {
         "browser_sort": "Default sort order in the media browser",
         "browser_sort_info": "How the explorer orders what it shows (any folder, collection, filter or search). The sort menu in its header changes it for the current session.",
         "open_ml": "Open Media Library",
-        "open_ml_tip": "Opens the Media Library (Galería) in a new browser tab — same data, same actions.",
+        "open_ml_tip": "Opens the Media Library alone in a new browser tab (not Galería, not full WanGP).",
+        "resume_min_m": "Resume videos longer than (minutes)",
+        "resume_min_m_info": "Offer «Continue from mm:ss» only when the video is longer than this. Default 5. Stored in playback.json (settings.json untouched on install).",
+        "sec_playback": "### Playback resume",
         "open_galeria": "Open in Galería",
         "open_galeria_tip": "Open this library in Galería (new tab).",
         "bs_date_desc": "Date modified: newest first", "bs_date_asc": "Date modified: oldest first",
@@ -600,7 +604,10 @@ TEXT = {
         "browser_sort": "Orden por defecto en el explorador de medios",
         "browser_sort_info": "Cómo ordena el explorador lo que muestra (cualquier carpeta, colección, filtro o búsqueda). El menú de orden de su cabecera lo cambia solo para la sesión actual.",
         "open_ml": "Abrir Media Library",
-        "open_ml_tip": "Abre la Media Library (Galería) en una pestaña nueva del navegador — mismos datos, mismas acciones.",
+        "open_ml_tip": "Abre solo la Media Library en una pestaña nueva (no Galería, no WanGP completo).",
+        "resume_min_m": "Reanudar vídeos de más de (minutos)",
+        "resume_min_m_info": "Ofrece «Seguir desde mm:ss» solo si el vídeo dura más que esto. Por defecto 5. Se guarda en playback.json (settings.json no se toca al instalar).",
+        "sec_playback": "### Reanudación de reproducción",
         "open_galeria": "Abrir en Galería",
         "open_galeria_tip": "Abrir esta librería en la Galería (pestaña nueva).",
         "bs_date_desc": "Fecha de modificación: más recientes primero", "bs_date_asc": "Fecha de modificación: más antiguos primero",
@@ -891,8 +898,8 @@ def build_js(settings=None):
     settings = settings or load_settings()
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
-    try:   # 1.9.6 / 1.12.6: selection + frame-capture stay rules shared with the Galería
-        for _shared in ("selection_rules.js", "frame_capture_rules.js"):
+    try:   # 1.9.6 / 1.12.6 / 1.12.7: selection + frame-capture stay + playback resume rules shared with the Galería
+        for _shared in ("selection_rules.js", "frame_capture_rules.js", "playback_rules.js"):
             with open(os.path.join(_PLUGIN_DIR, _shared), "r", encoding="utf-8") as reader:
                 script = reader.read() + "\n" + script
     except OSError:
@@ -2489,7 +2496,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         "sec_messages", "toasts", "toast_s", "sec_prompts", "on_apply_prompts", "save", "sec_manager",
         "mgr_dd", "mgr_refresh", "mgr_name", "mgr_new", "mgr_rename", "mgr_dup", "mgr_delete", "mgr_apply",
         "mgr_prompts_title", "mgr_prompts_save", "mgr_gallery", "mgr_gallery_title", "mgr_add", "mgr_remove", "mgr_left", "mgr_right", "mgr_cover", "mgr_export", "mgr_import",
-        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "browser_fullscreen", "browser_sort", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
+        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "resume_min_m", "sec_playback", "browser_fullscreen", "browser_sort", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
         "vmgr_import", "vmgr_left", "vmgr_right", "vmgr_download", "vmgr_export",
     )
 
@@ -2540,6 +2547,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "crop_save_images": {"label": t("crop_save_images"), "info": t("crop_save_images_info"),
                                  "choices": crop_save_images_choices(lang)},
             "index_paused": {"label": t("index_paused"), "info": t("index_paused_info")},
+            "sec_playback": {"value": t("sec_playback")},
+            "resume_min_m": {"label": t("resume_min_m"), "info": t("resume_min_m_info")},
             "browser_fullscreen": {"label": t("browser_fullscreen"), "info": t("browser_fullscreen_info")},
             "browser_sort": {"label": t("browser_sort"), "info": t("browser_sort_info"), "choices": browser_sort_choices(lang)},
             "vsec": {"value": t("vsec")},
@@ -2567,7 +2576,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         gr.HTML(f"<style>{load_css()}</style>", elem_classes=["reflib-hidden"], padding=False)
         ui["open_ml"] = gr.HTML(
             f'<div class="reflib-top-links" id="reflib_open_ml">'
-            f'<a class="reflib-open-ml" href="/reflib/gallery/" target="_blank" rel="noopener" '
+            f'<a class="reflib-open-ml" href="/reflib/media-library/" target="_blank" rel="noopener" '
             f'title="{tr(lang, "open_ml_tip")}">{tr(lang, "open_ml")} ↗</a></div>',
             elem_id="reflib_open_ml_wrap", padding=False)
         ui["intro"] = gr.Markdown(tx["intro"]["value"], elem_id="reflib_intro")
@@ -2594,6 +2603,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 ui["crop_save_images"] = gr.Dropdown(value=current("crop_save_images"), elem_id="reflib_crop_save_images",
                                                      **tx["crop_save_images"])
                 ui["index_paused"] = gr.Checkbox(value=current("index_paused"), elem_id="reflib_index_paused", **tx["index_paused"])
+            with gr.Group():
+                ui["sec_playback"] = gr.Markdown(tx["sec_playback"]["value"])
+                ui["resume_min_m"] = gr.Number(value=lambda: _playback.get_min_s() / 60.0,
+                                               minimum=0, maximum=1440, step=0.5, elem_id="reflib_resume_min_m", **tx["resume_min_m"])
+            with gr.Group():
                 ui["browser_fullscreen"] = gr.Checkbox(value=current("browser_fullscreen"), elem_id="reflib_browser_fullscreen", **tx["browser_fullscreen"])
                 ui["browser_sort"] = gr.Dropdown(value=current("browser_sort"), elem_id="reflib_browser_sort", **tx["browser_sort"])
             with gr.Group():
@@ -2832,9 +2846,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         ui["save"].click(
             fn=self._save_from_ui,
             inputs=[ui["replace_mode"], ui["auto_apply"], ui["show_edit"], ui["toasts"], ui["toast_s"], ui["language"],
-                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"], ui["browser_sort"]],
+                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"], ui["browser_sort"], ui["resume_min_m"]],
             outputs=[status, settings_json] + tab_outputs + bar_outputs + prompt_outputs, show_progress="hidden",
-            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma,bs) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma, bs]",
+            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma,bs,rm) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma, bs, rm]",
         ).then(fn=None, inputs=[settings_json], outputs=None,
                js="(s) => { if (window.referenceLibrary) window.referenceLibrary.applySettings(s, 'saved'); }")
 
@@ -3506,7 +3520,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 gr.update(choices=choices, label=tr(lang, "mgr_prompts"), interactive=promptlink.can_write()))
 
     def _save_from_ui(self, replace_mode, auto_apply, show_edit, toasts, toast_s, language="auto", on_apply_prompts="offer",
-                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True, browser_sort="date_desc"):
+                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True, browser_sort="date_desc", resume_min_m=5):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings["browser_sort"] = _coerce("browser_sort", "date_desc", browser_sort)
         settings.update({
@@ -3534,6 +3548,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         except Exception:
             pass
         imagelib.set_paused(settings["index_paused"])
+        try:   # 1.12.7: resume threshold lives in playback.json (never written at install)
+            if isinstance(resume_min_m, (int, float)):
+                _playback.set_min_s(float(resume_min_m) * 60.0)
+        except Exception as e:
+            print(f"[Reference Library] resume_min_m not saved: {e}")
         lang = resolve_lang(settings["language"], browser_lang)
         try:
             save_settings(settings)
@@ -4056,7 +4075,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
 
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
-                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign",
+                     "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "playback_get", "playback_settings", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign",
                      "forget_plan", "forget_missing_plan", "folder_excluded", "forget_status")
 
     def _autotag(self, action, req, hashes, lang):
@@ -4203,7 +4222,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             req = {}
         if isinstance(req, dict) and req.get("action") == "form_busy":
             return json.dumps({"ok": True, "id": req.get("id"), **self._form_busy(request)})
-        if not isinstance(req, dict) or (req.get("action") not in _actions.FAST and req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek", "forget_status")):
+        if not isinstance(req, dict) or (req.get("action") not in _actions.FAST and req.get("action") not in ("thumbs", "scan_status", "browse", "preview", "open", "query", "range", "sel_info", "pause_index", "at_status", "at_facets", "at_image", "at_suggest", "index_of", "locate", "at_jobfacets", "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_get", "media_url", "media_dur", "playback_get", "playback_settings", "media_src", "resize_status", "resize_cancel", "mask_list", "mask_info", "forget_plan", "forget_missing_plan", "folder_excluded", "col_peek", "forget_status")):
             return json.dumps({"ok": False, "id": (req or {}).get("id") if isinstance(req, dict) else None, "error": "bad request"})
         return self.ilib(raw)
 

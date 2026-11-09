@@ -326,3 +326,9 @@ html{overflow-anchor:none}
 .versions button.link { display: flex; flex-direction: column; }
 .versions .vsub { font-size: 12px; }
 .vbad { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.85); padding: 16px 20px; border-radius: 10px; max-width: 420px; text-align: center; z-index: 5; }
+
+/* 1.12.7 resume offer */
+.vresume { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; z-index: 6; max-width: 92%; }
+.vresume button { border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; background: rgba(20,20,24,.85); color: #f2f2f5; font: 600 13px/1.2 system-ui,sans-serif; }
+.vresume button.primary { outline: 1px solid rgba(120,180,255,.55); }
+.vresume button:hover { filter: brightness(1.1); }

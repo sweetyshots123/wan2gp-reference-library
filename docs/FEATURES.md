@@ -6,6 +6,13 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/gallery/` (new tab). Media Library header → same URL. Galería header → WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.7 — Standalone Media Library & resume playback
+
+- `/reflib/media-library/`: Media Library alone (shared explorer JS; `POST /reflib/api` fallback).
+- Resume long videos (default threshold **5 minutes**, user-configurable): positions in `playback.json`; shared `playback_*` actions + `playback_rules.js` for Media Library, Galería and standalone.
+- Threshold UI in Reference Library settings, Galería and standalone; install never writes `settings.json` for this.
+
+
 ## Tests
 
 ```sh

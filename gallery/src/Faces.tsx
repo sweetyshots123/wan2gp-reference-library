@@ -7,6 +7,7 @@ import "../../selection_rules.js";
 import "../../review_rules.js";
 import { act } from "./actions";
 import { toast, Thumb } from "./ui";
+import { resumeMinS, setResumeMinM } from "./playback";
 
 export interface Face { id: string; hash: string; n: number; model: string; box?: number[] | null; bbox: number[] | null; det?: number | null; w: number; h: number; score?: number; person?: string; cluster?: string; thumb?: string; kind?: string; t?: number | null; best_t?: number | null; segments?: { t0: number; t1: number }[] }
 export interface Person { id: string; name: string; tag: string; count: number; items: number; cover: Face | null; seeded?: boolean }
@@ -260,17 +261,38 @@ function VideoSimSettings() {
     </span>
   );
 }
+
+function ResumeSettings() {
+  // 1.12.7: umbral de reanudación (playback.json; default 5 min; no toca settings.json al instalar)
+  const [m, setM] = useState<number | null>(null);
+  useEffect(() => { resumeMinS().then((s) => setM(Math.round((s / 60) * 100) / 100)); }, []);
+  if (m == null) return null;
+  return (
+    <div className="fset">
+      <h4>Reanudación de vídeos</h4>
+      <label>Reanudar vídeos de más de (minutos)
+        <input type="number" min={0} max={1440} step={0.5} value={m}
+          onChange={(e) => setM(+e.target.value)}
+          onBlur={() => { if (m != null && isFinite(m) && m >= 0) setResumeMinM(m).then((s) => { setM(Math.round((s / 60) * 100) / 100); toast("Umbral de reanudación guardado", "ok"); }); }} />
+      </label>
+      <p className="muted">Por defecto 5. Solo ofrece «Seguir desde mm:ss» en vídeos más largos; no cerca del inicio ni del final. Se guarda en playback.json.</p>
+    </div>
+  );
+}
+
 function FaceSettings() {
   const [s, setS] = useState<any>(null);
   useEffect(() => { call("face_settings").then((r) => r.ok && setS(r.settings)).catch(() => {}); }, []);
-  if (!s) return null;
   const save = (patch: any) => { setS({ ...s, ...patch }); act("face_settings", { settings: patch }, () => {}, { quiet: true }).then((r: any) => r?.settings && setS(r.settings)); };
   return (
     <span className="fset">
+      <ResumeSettings />
+      {s && <>
       <label title="Agrupa automáticamente las caras nuevas al indexar"><input type="checkbox" checked={s.face_auto_cluster !== false} onChange={(e) => save({ face_auto_cluster: e.target.checked })} /> Auto</label>
       <label title="Ignora caras más pequeñas (px)">mín <input type="number" min={0} max={1024} step={8} defaultValue={s.face_min_size ?? 40}
         onBlur={(e) => { const v = Math.max(0, Math.min(1024, parseInt(e.target.value) || 0)); if (v !== s.face_min_size) save({ face_min_size: v }); }} /> px</label>
       <VideoSimSettings />
+      </>}
     </span>
   );
 }

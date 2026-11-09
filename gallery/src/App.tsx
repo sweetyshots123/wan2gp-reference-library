@@ -20,6 +20,7 @@ import { setRemover } from "./optimistic";
 import Grid, { Section } from "./Grid";
 import Omni, { Chip, chipsFilter } from "./Omni";
 import { Thumb, Toasts, fmtDur, toast } from "./ui";
+import { resumeMinS, setResumeMinM } from "./playback";
 
 // ---------------- rutas (hash): fáciles de ampliar añadiendo un caso en parseRoute + una vista
 type Route =
@@ -334,8 +335,18 @@ export default function App() {
         </nav>
         <Omni meta={meta} chips={chips} setChips={(c) => { setChips(c); goSearch(); }} text={text} setText={setText} onSearch={goSearch}
           onOpenItem={(it, list) => setSolo({ list, i: Math.max(0, list.findIndex((x) => x.hash === it.hash)) })} />
+        <button title="Umbral de reanudación de vídeos (minutos)" onClick={async () => {
+          const cur = Math.round(((await resumeMinS()) / 60) * 100) / 100;
+          const raw = window.prompt("Reanudar vídeos de más de (minutos). Por defecto 5:", String(cur));
+          if (raw == null) return;
+          const n = Number(String(raw).replace(",", "."));
+          if (!isFinite(n) || n < 0) return;
+          await setResumeMinM(n);
+          toast("Umbral de reanudación guardado", "ok");
+        }}>⏱</button>
         <button onClick={() => fileIn.current?.click()} title="O arrastra archivos a la ventana">⤒ Subir</button>
         <input ref={fileIn} type="file" multiple hidden accept="image/*,video/*,audio/*" onChange={(e) => { doUpload([...(e.target.files || [])]); e.target.value = ""; }} />
+        <a className="ml" href="/reflib/media-library/" title="Abrir Media Library sola (sin Galería ni WanGP)">Media Library ↗</a>
         <a className="ml" href="/" title="Abrir Reference Library en WanGP">Reference Library ↗</a>
       </header>
 

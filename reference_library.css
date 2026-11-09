@@ -979,3 +979,29 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-head .reflib-ib-galeria {
   margin-left: 4px; white-space: nowrap;
 }
+
+/* 1.12.7 resume offer + standalone Media Library */
+.reflib-ib-resume {
+  position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%);
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  z-index: 5; max-width: 92%;
+}
+.reflib-ib-resume[hidden] { display: none !important; }
+.reflib-ib-resume button {
+  border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  background: rgba(20,20,24,.82); color: #f2f2f5; font: 600 13px/1.2 system-ui,sans-serif;
+  backdrop-filter: blur(6px); box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.reflib-ib-resume button:hover { filter: brightness(1.1); }
+.reflib-ib-resume-go { outline: 1px solid rgba(120,180,255,.55); }
+.reflib-ib-resume-cfg { opacity: .85; }
+html.reflib-standalone, html.reflib-standalone body { height: 100%; margin: 0; background: #0e0e12; }
+html.reflib-standalone .reflib-ib-bg { position: fixed; inset: 0; display: block; opacity: 1; pointer-events: auto; background: #0e0e12; }
+html.reflib-standalone .reflib-ib-bg.open { display: block; }
+html.reflib-standalone .reflib-ib-modal { width: 100%; height: 100%; max-width: none; border-radius: 0; }
+html.reflib-standalone .reflib-standalone-tip {
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 100000;
+  background: rgba(20,20,28,.92); color: #e8e8ef; padding: 8px 14px; border-radius: 10px;
+  font: 13px/1.35 system-ui,sans-serif; max-width: min(640px, 92vw); text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,.4);
+}

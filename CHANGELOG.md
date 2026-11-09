@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.7
+
+- **Standalone Media Library** at `/reflib/media-library/`: same explorer as WanGP's Media Library, opened alone in a new tab (not Galería, not full WanGP). Top **Open Media Library** button points here. Uses `fetch /reflib/api` when the Gradio bridge is absent; WanGP-only actions show a one-time notice.
+- **Resume playback** (Media Library, Galería, standalone): leaving a video saves position by hash in `playback.json`; reopening offers discreet **Continue from mm:ss** / **Start from the beginning**. Skips the first ~5 s and last ~5 s / 95%. Clips use their own relative time. Shared `reflib_core/playback.py` + `playback_rules.js`.
+- **Configurable threshold** (default 5 minutes): setting in Reference Library accordion, Galería (⏱ header + Personas settings), and standalone (⏱). Stored in `playback.json` — installing the plugin does **not** write or touch `settings.json`.
+
 ## 1.12.6
 
 - **Frame capture stays on the video** (Galería + Media Library): capturing a frame with Vidosser (D / middle click) no longer jumps the viewer to the new photo when the catalog refreshes (`date_desc`). Shared contract in `reflib_core/framecap.py` + `frame_capture_rules.js` (`ReflibFrameCapture`); both UIs listen for `vidosser:frame-saved`, soft-refresh the grid, re-anchor by hash, and resume playback when it was playing.

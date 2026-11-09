@@ -83,6 +83,47 @@ def mount(app, dependencies=None) -> None:
             return Response("not found", status_code=404)
         return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
 
+
+    @r.get("/reflib/media-library")
+    async def media_library_root():
+        return RedirectResponse("/reflib/media-library/")
+
+    @r.get("/reflib/media-library/")
+    async def media_library_page():
+        """1.12.7: standalone Media Library (same explorer JS, fetch bridge, no WanGP chrome)."""
+        if _plugin is None:
+            return Response("Reference Library no está cargado", status_code=503)
+        # Prefer helpers already exported on the plugin module (set via set_plugin)
+        mod = type(_plugin)
+        # _plugin is an instance; helpers live on the package module
+        import sys
+        pkg = sys.modules.get(type(_plugin).__module__)
+        build_js = getattr(pkg, "build_js", None)
+        load_css = getattr(pkg, "load_css", None)
+        PLUGIN_VERSION = getattr(pkg, "PLUGIN_VERSION", "")
+        resolve_lang = getattr(pkg, "resolve_lang", lambda *a, **k: "en")
+        load_settings = getattr(pkg, "load_settings", lambda: {})
+        if not build_js or not load_css:
+            return Response("build_js unavailable", status_code=500)
+        lang = resolve_lang(load_settings().get("language") or "auto")
+        title = "Media Library"
+        css = load_css()
+        js = build_js()
+        html = f"""<!doctype html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{title} · Reference Library {PLUGIN_VERSION}</title>
+<style>{css}</style>
+</head>
+<body>
+<script>window.__REFLIB_STANDALONE__=true;window.__REFLIB_VERSION__={PLUGIN_VERSION!r};</script>
+<script>{js}</script>
+</body>
+</html>"""
+        return Response(html, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
     @r.get("/reflib/gallery")
     async def gallery_root():
         return RedirectResponse("/reflib/gallery/")
@@ -124,7 +165,7 @@ def install() -> None:
             deps = None
         try:
             mount(app, deps)
-            print("[Reference Library] Galería: /reflib/gallery/")
+            print("[Reference Library] Galería: /reflib/gallery/ · Media Library: /reflib/media-library/")
         except Exception as e:
             print(f"[Reference Library] Galería no disponible: {e}")
         return app

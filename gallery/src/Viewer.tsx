@@ -7,6 +7,7 @@ import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
 import { Thumb, toast, fmtDur } from "./ui";
 import { FrameCap, wasWantPlay } from "./frameCapture";
+import { Playback, getPos, savePos, clearPos, resumeMinS } from "./playback";
 
 interface Props {
   items: Item[]; index: number; meta: Meta; total: number;
@@ -26,6 +27,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const [panel, setPanel] = useState(() => localStorage.getItem("gal.panel") === "1");
   const [ve, setVe] = useState<VEdit | null>(null);
   const [vbad, setVbad] = useState(false);   // 1.12.2: el navegador no puede reproducir este vídeo (p. ej. mp4v)
+  const [resumeOffer, setResumeOffer] = useState<number | null>(null);   // 1.12.7
   const [settled, setSettled] = useState<string | null>(null);
   const panelIt = useRef<Item | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
@@ -132,6 +134,35 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     if (v.error) setVbad(true);
     return () => { v.removeEventListener("error", bad); v.removeEventListener("loadedmetadata", meta); };
   });
+
+  // pause when resumeOffer appears (async after autoplay may have started)
+  useEffect(() => {
+    if (resumeOffer == null) return;
+    const v = media.current as HTMLVideoElement | null;
+    if (v && v.tagName === "VIDEO") { try { v.pause(); } catch {} }
+  }, [resumeOffer]);
+  // 1.12.7: resume offer for long videos (shared playback rules)
+  useEffect(() => {
+    setResumeOffer(null);
+    if (!it?.hash || (it.kind || "image") !== "video") return;
+    let gone = false;
+    (async () => {
+      const thr = await resumeMinS();
+      const pos = await getPos(it.hash);
+      if (gone || !pos || !Playback) return;
+      const t = Number(pos.t), dur = Number(pos.dur || 0);
+      if (!Playback.shouldTrack(dur, t, thr)) return;
+      setResumeOffer(t);
+    })();
+    const flush = () => {
+      const v = media.current as HTMLVideoElement | null;
+      if (!v || v.tagName !== "VIDEO") return;
+      const t = v.currentTime, dur = v.duration;
+      if (isFinite(t) && isFinite(dur)) savePos(it.hash, t, dur);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => { gone = true; flush(); window.removeEventListener("pagehide", flush); };
+  }, [it?.hash]);
   // 1.12.6: remember play-intent across Vidosser's pause-for-capture; on frame-saved stay & resume
   useEffect(() => {
     const v = media.current as HTMLVideoElement | null;
@@ -344,7 +375,13 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           )}
           {src && (kind === "video" || kind === "mask") && (
             <div className="vidhost" key={src} ref={(el) => { tgt.current = el; }} style={{ transform: xf(z) }}>
-              <video ref={media} src={src} controls autoPlay loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; setDraft((d) => d && [...d] as Rect); }} />
+              <video ref={media} src={src} controls autoPlay={resumeOffer == null} loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
+              {resumeOffer != null && Playback && (
+                <div className="vresume" onPointerDown={(e) => e.stopPropagation()}>
+                  <button className="primary" onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = resumeOffer; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, "es").continue}</button>
+                  <button onClick={() => { clearPos(it.hash); const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = 0; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, "es").restart}</button>
+                </div>
+              )}
             </div>
           )}
           {src && vbad && (kind === "video" || kind === "mask") && (
