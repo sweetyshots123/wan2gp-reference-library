@@ -84,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.10"
+PLUGIN_VERSION = "1.12.11"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -899,7 +899,7 @@ def build_js(settings=None):
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
     try:   # 1.9.6 / 1.12.6 / 1.12.7: selection + frame-capture stay + playback resume rules shared with the Galería
-        for _shared in ("selection_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js"):
+        for _shared in ("selection_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js", "fullscreen_rules.js"):
             with open(os.path.join(_PLUGIN_DIR, _shared), "r", encoding="utf-8") as reader:
                 script = reader.read() + "\n" + script
     except OSError:

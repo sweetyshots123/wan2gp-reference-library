@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.11
+
+- **Fullscreen stays on across videos** (Galería viewer + Media Library lightbox, also standalone `/reflib/media-library/`): moving to the next/previous item (←/→, ‹ › buttons) no longer drops fullscreen. Cause: fullscreen belonged to the `<video>` element, which was unmounted/replaced on navigation (Galería `key={src}` + unmount while loading; Media Library removes the old `<video>`). Now fullscreen lives on a stable container (Galería `.stage`, Media Library lightbox); a native video-button fullscreen is moved there. Shared rule `fullscreen_rules.js` (`ReflibFullscreen`). New ⛶ button in both viewers. Esc while fullscreen only exits fullscreen; resume offer and frame-capture stay keep working inside fullscreen.
+
 ## 1.12.10
 
 - **BUG-A:** `assign_faces` with only obsolete face ids raises `face_all_obsolete` without creating a person or pruning (no orphan person / inconsistent singleton). Mixed alive+obsolete still assigns + prunes + saves.

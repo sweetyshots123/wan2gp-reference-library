@@ -698,7 +698,7 @@
             s_used: "Last used first", nav_back: "Back (Alt+←)", nav_fwd: "Forward (Alt+→)", nav_list: "Navigation history", nav_empty: "No history yet", nav_all: "All", nav_folder: "Folder: {n}", nav_col: "Collection: {n}", nav_cols: "{n} collections", nav_nocol: "No collection", nav_q: "Search: “{q}”", nav_tags: "+{n} filters", n_date_desc: "Date ↓", n_date_asc: "Date ↑", n_name_asc: "Name A–Z", n_name_desc: "Name Z–A", n_used: "Last used",
             sort_lbl: "Sort", sort_tip: "Sort what the explorer shows (this session; the default is in the plugin settings)", s_date_desc: "Newest first", s_date_asc: "Oldest first", s_name_asc: "Name A–Z", s_name_desc: "Name Z–A", s_sim: "Most similar first", n_sim: "Similarity ↓",
             v_details: "Details", v_details_tip: "Show or hide the details panel on the right (selected image)", v_pick: "Select an image to see its details.",
-            ctx_details: "Show details", crop: "Crop", crop_tip: "Crop with Cropper; the result is saved to the library", crop_na: "Needs Cropper with file cropping (window.cropper.cropFile, file API 1). Update Cropper to enable it.", crop_audio: "Audio can't be cropped", crop_saved_img: "Crop saved to \u201c{c}\u201d", crop_saved_vid: "Crop saved to the Video Library", crop_fail: "Crop failed: {e}", crop_busy: "A crop is already open", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)",
+            ctx_details: "Show details", crop: "Crop", crop_tip: "Crop with Cropper; the result is saved to the library", crop_na: "Needs Cropper with file cropping (window.cropper.cropFile, file API 1). Update Cropper to enable it.", crop_audio: "Audio can't be cropped", crop_saved_img: "Crop saved to \u201c{c}\u201d", crop_saved_vid: "Crop saved to the Video Library", crop_fail: "Crop failed: {e}", crop_busy: "A crop is already open", lb_fit: "Fit", lb_fit_tip: "Zoom to fit (0)", lb_1to1: "1:1", lb_1to1_tip: "Actual size, 1:1 (1)", lb_fs: "Fullscreen (stays on when moving to the next/previous video)",
             lb_prev: "Previous (←)", lb_next: "Next (→)",
             chips_clear: "Clear all", chip_rm: "Remove this filter", chip_or: "or", chip_and: "and", chip_not: "not",
             chip_mode: "Click to switch between include and exclude", chip_find: "Show in the tree", chip_search: "Search: {q}",
@@ -798,7 +798,7 @@
             s_used: "Último uso primero", nav_back: "Atrás (Alt+←)", nav_fwd: "Adelante (Alt+→)", nav_list: "Historial de navegación", nav_empty: "Aún no hay historial", nav_all: "Todo", nav_folder: "Carpeta: {n}", nav_col: "Colección: {n}", nav_cols: "{n} colecciones", nav_nocol: "Sin colección", nav_q: "Búsqueda: «{q}»", nav_tags: "+{n} filtros", n_date_desc: "Fecha ↓", n_date_asc: "Fecha ↑", n_name_asc: "Nombre A–Z", n_name_desc: "Nombre Z–A", n_used: "Último uso",
             sort_lbl: "Orden", sort_tip: "Ordena lo que muestra el explorador (esta sesión; el orden por defecto está en los ajustes del plugin)", s_date_desc: "Más recientes primero", s_date_asc: "Más antiguos primero", s_name_asc: "Nombre A–Z", s_name_desc: "Nombre Z–A", s_sim: "Más parecidas primero", n_sim: "Similitud ↓",
             v_details: "Detalles", v_details_tip: "Muestra u oculta el panel de detalles de la derecha (imagen seleccionada)", v_pick: "Selecciona una imagen para ver sus detalles.",
-            ctx_details: "Ver detalles", crop: "Recortar", crop_tip: "Recortar con Cropper; el resultado se guarda en la librería", crop_na: "Necesita Cropper con recorte de archivos (window.cropper.cropFile, API de archivos 1). Actualiza Cropper para activarlo.", crop_audio: "Los audios no se pueden recortar", crop_saved_img: "Recorte guardado en «{c}»", crop_saved_vid: "Recorte guardado en la Librería de vídeos", crop_fail: "No se pudo recortar: {e}", crop_busy: "Ya hay un recorte abierto", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)",
+            ctx_details: "Ver detalles", crop: "Recortar", crop_tip: "Recortar con Cropper; el resultado se guarda en la librería", crop_na: "Necesita Cropper con recorte de archivos (window.cropper.cropFile, API de archivos 1). Actualiza Cropper para activarlo.", crop_audio: "Los audios no se pueden recortar", crop_saved_img: "Recorte guardado en «{c}»", crop_saved_vid: "Recorte guardado en la Librería de vídeos", crop_fail: "No se pudo recortar: {e}", crop_busy: "Ya hay un recorte abierto", lb_fit: "Ajustar", lb_fit_tip: "Ajustar a la pantalla (0)", lb_1to1: "1:1", lb_1to1_tip: "Tamaño real, 1:1 (1)", lb_fs: "Pantalla completa (se mantiene al pasar al vídeo siguiente/anterior)",
             lb_prev: "Anterior (←)", lb_next: "Siguiente (→)",
             chips_clear: "Quitar todos", chip_rm: "Quitar este filtro", chip_or: "o", chip_and: "y", chip_not: "no",
             chip_mode: "Clic para alternar entre incluir y excluir", chip_find: "Mostrar en el árbol", chip_search: "Búsqueda: {q}",
@@ -2695,11 +2695,11 @@
             box.className = "reflib-ib-lightbox fit"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
             box.innerHTML = `<div class="reflib-ib-lbstage"><img alt=""></div>
                 <div class="reflib-ib-lbbar"><button type="button" data-lb="prev">‹</button><span class="reflib-ib-lbpos"></span><button type="button" data-lb="next">›</button>
-                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button><button type="button" data-lb="resize" class="reflib-rs-btn"></button><button type="button" data-lb="vnew" class="reflib-vc-lbbtn"></button><button type="button" data-lb="vedit" class="reflib-vc-lbbtn"></button></div>
+                  <span class="reflib-ib-lbsep"></span><button type="button" data-lb="fit"></button><button type="button" data-lb="one"></button><button type="button" data-lb="fs" class="reflib-ib-fsbtn">⛶</button><span class="reflib-ib-lbsep"></span><button type="button" data-lb="crop" class="reflib-ib-cropbtn"></button><button type="button" data-lb="resize" class="reflib-rs-btn"></button><button type="button" data-lb="vnew" class="reflib-vc-lbbtn"></button><button type="button" data-lb="vedit" class="reflib-vc-lbbtn"></button></div>
                 <div class="reflib-ib-lbname"></div><button type="button" class="reflib-ib-lbclose">×</button>`;
             box.addEventListener("click", (e) => {
                 const b = e.target.closest("[data-lb]");
-                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; }
+                if (b) { e.stopPropagation(); const k = b.dataset.lb; if (k === "fs") { if (window.ReflibFullscreen) ReflibFullscreen.toggle(box); return; } if (k === "crop") { if (!b.disabled) doCrop((ilib.q.items[+box.dataset.idx] || {}).hash); return; }
                 if (k === "vnew" || k === "vedit") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; if (!b.disabled) { closeLightbox(); vOpen(hh, k === "vedit" ? "edit" : "new"); } return; }
                 if (k === "resize") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; const r0 = b.getBoundingClientRect(); closeLightbox(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: hh }); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
                 if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
@@ -2708,6 +2708,9 @@
             box.addEventListener("dblclick", (e) => e.stopPropagation());
             document.body.appendChild(box);
             ilib.lightbox = box;
+            // 1.12.11: fullscreen lives on the stable lightbox box (shared fullscreen_rules.js); a native <video>
+            // fullscreen is moved here so stepping to another video does not drop it
+            if (window.ReflibFullscreen) box._fsOff = ReflibFullscreen.keep(box);
         }
         box.dataset.idx = idx;
         const img = box.querySelector("img");
@@ -2722,7 +2725,7 @@
         const vn = box.querySelector('[data-lb="vnew"]'), ve = box.querySelector('[data-lb="vedit"]'), vbr = !!(it2.virtual && it2.virtual.broken);   // 1.6.6
         vn.innerHTML = VICO + esc(vct("new")); vn.title = vct("new_tip"); vn.disabled = vbr;
         ve.textContent = "✎ " + vct("edit"); ve.title = vct("edit_tip"); ve.hidden = !it2.virtual; ve.disabled = vbr;
-        fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
+        box.querySelector('[data-lb="fs"]').title = it("lb_fs"); fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
         if (!ilib._lbGate) { thumbGate.enterViewer(); ilib._lbGate = true; }   // 1.12.9: pause thumbs while lightbox open
         const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
@@ -2777,13 +2780,16 @@
         if (i < 0 || i >= ilib.q.total) return;
         ensurePages(i, i);
         const go = () => { const it2 = ilib.q.items[i]; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
-        if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
+        const step = () => { if (ilib.lightbox !== box) return; if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); } };
+        // 1.12.11: inside the key/click gesture, move a native <video> fullscreen to the stable box first, then step
+        if (window.ReflibFullscreen) ReflibFullscreen.navigate(box, step); else step();
     }
     function closeLightbox(silent) {
         if (ilib.lightbox) {
             if (ilib._lbGate) { thumbGate.leaveViewer(); ilib._lbGate = false; queueThumbs(); }
             ilib.lightbox.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); m.pause(); } catch (e) {} });
             ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} });
+            if (ilib.lightbox._fsOff) { try { ilib.lightbox._fsOff(); } catch (e) {} }
             ilib.lightbox.remove(); ilib.lightbox = null;
         }
     }
@@ -3410,6 +3416,7 @@
         }
         if (ilib.lightbox && (e.key === "1" || e.key === "0")) { e.preventDefault(); e.stopPropagation(); lightboxZoom(e.key === "1"); return; }
         if (e.key !== "Escape") return;
+        if (ilib.lightbox && window.ReflibFullscreen && ReflibFullscreen.escAction() !== "close") return;   // 1.12.11: Esc exits fullscreen only
         e.preventDefault(); e.stopPropagation();
         if (ilib.root.querySelector(".reflib-ib-ctx")) { closeCtx(); return; }
         if (ilib.lightbox) { closeLightbox(); return; }

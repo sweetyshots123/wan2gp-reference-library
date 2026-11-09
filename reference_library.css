@@ -1005,3 +1005,8 @@ html.reflib-standalone .reflib-standalone-tip {
   font: 13px/1.35 system-ui,sans-serif; max-width: min(640px, 92vw); text-align: center;
   box-shadow: 0 6px 24px rgba(0,0,0,.4);
 }
+
+/* 1.12.11: fullscreen on the stable lightbox box (survives next/prev video) */
+.reflib-ib-lightbox:fullscreen { background: #000; }
+.reflib-ib-lightbox:-webkit-full-screen { background: #000; }
+.reflib-ib-lightbox:fullscreen .reflib-ib-lbstage video.reflib-ib-lbmedia { max-height: calc(100vh - 64px); }

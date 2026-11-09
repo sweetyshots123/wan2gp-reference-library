@@ -336,3 +336,9 @@ html{overflow-anchor:none}
 .vresume button { border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; background: rgba(20,20,24,.85); color: #f2f2f5; font: 600 13px/1.2 system-ui,sans-serif; }
 .vresume button.primary { outline: 1px solid rgba(120,180,255,.55); }
 .vresume button:hover { filter: brightness(1.1); }
+
+/* 1.12.11: pantalla completa del visor en el contenedor estable (sobrevive a anterior/siguiente) */
+.stage:fullscreen { background:#000; width:100vw; height:100vh; }
+.stage:-webkit-full-screen { background:#000; width:100vw; height:100vh; }
+.stage:fullscreen .nav { opacity:.55; } .stage:fullscreen .nav:hover { opacity:1; }
+.stage .vloading { position:absolute; inset:0; justify-content:center; pointer-events:none; }

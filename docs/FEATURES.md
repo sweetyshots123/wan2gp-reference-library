@@ -6,6 +6,13 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.11 — Fullscreen kept across next/prev
+
+- Shared `fullscreen_rules.js`: fullscreen on a stable container (Galería `.stage`, ML `.reflib-ib-lightbox`); `navigate(container, step)` inside the key/click gesture first moves a native `<video>` fullscreen to the container and only then steps (removing the fullscreen `<video>` before the move completes drops it — checked in headless Chrome); `keep()` tries the move on `fullscreenchange`; `escAction` leaves Esc to the browser while fullscreen.
+- Galería: same `<video>` element reused (no `key={src}`, stays mounted while the next URL loads); ⛶ button.
+- Media Library / standalone: ⛶ button in the lightbox bar; arrows/buttons step inside fullscreen.
+- Tests: `node tests/test_fullscreen_rules.mjs` (synthetic DOM stubs).
+
 ## 1.12.10 — Soft-assign safety, ML autocomplete parity, standalone toast once
 
 - All-obsolete assign: no person create, no prune (`face_all_obsolete` only).

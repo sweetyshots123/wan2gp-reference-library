@@ -4,6 +4,9 @@ import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from 
 import { WheelStepper, normDelta, medium, loadFull } from "./viewerNav";
 import { viewerNet } from "./api";
 import "../../progressive_media.js";
+import "../../fullscreen_rules.js";
+// 1.12.11: pantalla completa en un contenedor estable (.stage) que sobrevive a anterior/siguiente
+const FS: any = (globalThis as any).ReflibFullscreen;
 import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
@@ -87,7 +90,10 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     return () => { on = false; window.clearTimeout(settle); full?.abort(); };
   }, [it?.hash]);
 
-  const go = useCallback((d: number) => { dirRef.current = d > 0 ? 1 : -1; const j = index + d; if (j >= 0 && j < total) setIndex(j); }, [index, total]);
+  const go = useCallback((d: number) => { dirRef.current = d > 0 ? 1 : -1; const j = index + d; if (j >= 0 && j < total) { if (FS) FS.navigate(stage.current, () => setIndex(j)); else setIndex(j); } }, [index, total]);
+  // 1.12.11: si el botón nativo del <video> lo pone en pantalla completa, se pasa al contenedor estable
+  const [fsOn, setFsOn] = useState(false);
+  useEffect(() => { if (!FS) return; const off1 = FS.keep(stage.current); const off2 = FS.onChange(document, () => setFsOn(FS.owns(stage.current))); return () => { off1(); off2(); }; }, []);
   const isFav = favOpt && favOpt.h === it?.hash ? favOpt.v : !!it?.tags.some((t) => t.toLowerCase() === FAV);
   const toggleFav = () => {
     if (!it) return;
@@ -201,7 +207,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       if (e.defaultPrevented) return;
       // con Vidosser en un vídeo, sus teclas mandan (l = bucle, e = vídeo anterior…): aquí solo flechas, F, Esc, h
       if (vid && media.current?.tagName === "VIDEO" && k.length === 1 && vidKeys().has(k.toLowerCase()) && k.toLowerCase() !== "f") return;
-      if (k === "Escape") { ve ? setVe(null) : close(); }
+      if (k === "Escape") { if (FS && FS.escAction() !== "close") return; ve ? setVe(null) : close(); }   // 1.12.11: Esc en pantalla completa = solo salir de ella
       else if (k === "ArrowRight" || k === "l") go(1);
       else if (k === "ArrowLeft" || k === "h") go(-1);
       else if (k === "f" || k === "F") toggleFav();
@@ -339,6 +345,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       <div className="vbody"><div className="stage"><div className="loading">Cargando…</div></div></div></div>);
   const src = ve ? ve.url : url;
   const kind = ve ? ve.kind : it.kind || "image";
+  const isVid = kind === "video" || kind === "mask";
   const rectStyle = (() => {
     const s = draft && natSize(); if (!s || !draft || !stage.current) return null;
     const st = stage.current.getBoundingClientRect();
@@ -365,21 +372,25 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           <button onClick={() => { animate(); setLive({ s: 1, x: 0, y: 0 }, "now"); }} title="Ajustar (0)">⤢</button>
           {(it.kind || "image") === "image" && <SimilarButtons hash={it.hash} name={it.name} />}
           <button onClick={() => setPanel(!panel)} className={panel ? "on" : ""} title="Editar (E)">✎ Editar</button>
+          <button className={fsOn ? "on" : ""} onClick={() => FS?.toggle(stage.current)} title="Pantalla completa (se mantiene al pasar de vídeo)">⛶</button>
           <button onClick={close} title="Cerrar (Esc)">✕</button>
         </span>
       </div>
       <div className="vbody">
         <div className={`stage ${z.s > 1 ? "zoomed" : ""} ${ve ? "cropping" : ""}`} ref={stage}
           onPointerDown={ve ? cropDown : onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          {!src && (ph && !rendering ? <img className="phimg" ref={(el) => { tgt.current = el; }} src={ph} alt="" draggable={false} style={{ transform: xf(z) }} />
+          {!src && !isVid && (ph && !rendering ? <img className="phimg" ref={(el) => { tgt.current = el; }} src={ph} alt="" draggable={false} style={{ transform: xf(z) }} />
             : <div className="loading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}<Thumb hash={it.hash} className="blur" /></div>)}
           {src && kind === "image" && (
             <img ref={(el) => { (media as any).current = el; tgt.current = el; }} src={src} alt={it.name} draggable={false} onLoad={() => setDraft((d) => d && [...d] as Rect)}
               style={{ transform: xf(z) }} />
           )}
-          {src && (kind === "video" || kind === "mask") && (
-            <div className="vidhost" key={src} ref={(el) => { tgt.current = el; }} style={{ transform: xf(z) }}>
-              <video ref={media} src={src} controls autoPlay={resumeOffer == null} loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
+          {!src && isVid && <div className="loading vloading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}</div>}
+          {isVid && (
+            // 1.12.11: sin key={src} y montado también mientras carga: el mismo <video> cambia de src al pasar de
+            // vídeo (antes se desmontaba y el navegador salía de la pantalla completa)
+            <div className="vidhost" ref={(el) => { tgt.current = el; }} style={{ transform: xf(z), visibility: src ? undefined : "hidden" }}>
+              <video ref={media} src={src || undefined} controls autoPlay={resumeOffer == null} loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
               {resumeOffer != null && Playback && (
                 <div className="vresume" onPointerDown={(e) => e.stopPropagation()}>
                   <button className="primary" onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = resumeOffer; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, uiLang()).continue}</button>
