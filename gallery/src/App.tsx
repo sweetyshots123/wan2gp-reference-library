@@ -11,6 +11,7 @@ import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
 import { FrameCap, type Pin } from "./frameCapture";
+import { STALE_KEY, staleShow, staleText } from "./stale";
 import EditPanel from "./EditPanel";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
@@ -147,7 +148,7 @@ export default function App() {
     try {
       const r = await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz });
       if (g !== gen.current) return;
-      if (r.v && typeof __REFLIB_BUILD__ === "string" && r.v !== __REFLIB_BUILD__) setStale(String(r.v));   // 1.12.13: old tab / old build
+      if (r.v && typeof __REFLIB_BUILD__ === "string" && staleShow(r.v, __REFLIB_BUILD__, localStorage.getItem(STALE_KEY))) setStale(String(r.v));   // 1.12.13: old tab / old build
       if (withSections) { applyMeta(r); setSections(r.page.sections || null); if (r.page.kinds) setKc(r.page.kinds); }
       setTotal(r.page.total);
       r.page.items.forEach((it: Item, j: number) => store.current.set(p * PAGE + j, it));
@@ -169,7 +170,14 @@ export default function App() {
     fetchPage(0, g, true);
   }, [fkey]);
 
-  const closeViewer = useCallback(() => setViewer(null), []);   // 1.9.7: props estables -> el visor (memo) no se re-renderiza por el resto de la app
+  const closeViewer = useCallback(() => setViewer(null), []);
+  // 1.12.14: App-driven viewer moves (delete, item gone) keep fullscreen like the Viewer's own navTo (shared rule)
+  const viewerGo = useCallback((j: number | null) => {
+    const FS: any = (globalThis as any).ReflibFullscreen;
+    const st = document.querySelector(".viewer .stage");
+    if (j != null && FS && st) FS.navigate(st, () => { setViewer(j); setVer((v) => v + 1); });
+    else { setViewer(j); setVer((v) => v + 1); }
+  }, []);   // 1.9.7: props estables -> el visor (memo) no se re-renderiza por el resto de la app
   const ensure = useCallback((from: number, to: number) => {
     for (let p = Math.floor(Math.max(0, from) / PAGE); p <= Math.floor(Math.max(0, to - 1) / PAGE); p++)
       if (pages.current.get(p) !== gen.current) fetchPage(p, gen.current);
@@ -213,6 +221,12 @@ export default function App() {
       if (r && r.ok && typeof r.index === "number" && r.index >= 0) {
         ensure(r.index, r.index + 1);
         if (pin.current && pin.current.hash === hash && viewerNow.current === viewer) move(r.index);
+      } else if (r && r.ok && pin.current && pin.current.hash === hash && viewerNow.current === viewer) {
+        // 1.12.14: the open item left the list (deleted elsewhere, filtered out): release the pin and show what is
+        // at that position now (same as deleting it here); close if the list is empty
+        pin.current = null; pinItem.current = null;
+        const n = totalNow.current;
+        viewerGo(n ? Math.min(viewer, n - 1) : null);
       }
     } catch {}
   }, [viewer, filter, ensure]);
@@ -248,7 +262,7 @@ export default function App() {
       const nt = Math.max(0, snap.total - gone.length);
       store.current = next; setTotal(nt); setVer((v) => v + 1);
       setSel((s) => { if (![...hs].some((h) => s.has(h))) return s; const n = new Set(s); hs.forEach((h) => n.delete(h)); return n; });
-      if (snap.viewer != null) { pin.current = null; pinItem.current = null; const before = gone.filter((i) => i < snap.viewer!).length; setViewer(nt ? Math.min(snap.viewer - before, nt - 1) : null); }   // 1.12.13: deleting moves on, unpin
+      if (snap.viewer != null) { pin.current = null; pinItem.current = null; const before = gone.filter((i) => i < snap.viewer!).length; viewerGo(nt ? Math.min(snap.viewer - before, nt - 1) : null); }   // 1.12.13: deleting moves on, unpin
       return () => { store.current = snap.store; setTotal(snap.total); setVer((v) => v + 1); if (snap.viewer != null) setViewer(snap.viewer); };
     });
     return () => setRemover(null);
@@ -465,7 +479,7 @@ export default function App() {
       {solo && meta && (
         <Viewer items={solo.list} index={solo.i} total={solo.list.length} meta={meta} setIndex={(i) => setSolo({ ...solo, i })} close={() => setSolo(null)} onChanged={refresh} ensure={() => {}} />
       )}
-      {stale && <div className="stalebar" role="status">La Galería abierta es la {__REFLIB_BUILD__} y el servidor ya usa la {stale}. <button onClick={() => location.reload()}>Recargar</button></div>}
+      {stale && <StaleBar build={__REFLIB_BUILD__} server={stale} close={() => { try { localStorage.setItem(STALE_KEY, stale); } catch {} setStale(null); }} />}
       {drag && <div className="dropzone">Suelta para importar a la Media Library</div>}
       <AutoTagBar onDone={refresh} />
       <SimBar />
@@ -588,4 +602,10 @@ function crumbsOf(meta: any, r: any) {
   const f = meta?.folders.find((x: any) => x.id === r.fid);
   const parts = r.rel ? r.rel.split("/") : [];
   return <>{[<a key="" href={nodeHref({ fid: r.fid, rel: "" })}>{f?.path || folderLabel(f)}</a>, ...parts.map((p: string, i: number) => <span key={i}> / <a href={nodeHref({ fid: r.fid, rel: parts.slice(0, i + 1).join("/") })}>{p}</a></span>)]}</>;
+}
+
+// 1.12.14: open tab older than the server (shown once per server version; EN/ES) — texts/rule in stale.ts
+function StaleBar({ build, server, close }: { build: string; server: string; close: () => void }) {
+  const t = staleText(navigator.language || document.documentElement.lang, build, server);
+  return <div className="stalebar" role="status">{t.msg} <button onClick={() => location.reload()}>{t.reload}</button><button className="x" aria-label={t.close} title={t.close} onClick={close}>×</button></div>;
 }

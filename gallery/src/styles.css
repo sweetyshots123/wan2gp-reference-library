@@ -346,3 +346,4 @@ html{overflow-anchor:none}
 /* 1.12.13: open tab running an older build than the server */
 .stalebar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:#7a4b00;color:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 4px 16px #0006;font-size:14px}
 .stalebar button{margin-left:10px}
+.stalebar button.x{margin-left:6px;background:transparent;border:0;color:#fff;font-size:16px;cursor:pointer}

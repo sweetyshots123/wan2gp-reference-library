@@ -28,5 +28,7 @@ assert.match(rp, /const keepVid = /);
 assert.match(rp, /if \(n !== oldImg\) n\.remove\(\)/, "old <video> container never detached");
 assert.match(rp, /class="reflib-ib-pvmedia" data-hash=/);
 // play intent for the preview video
-assert.match(js, /contains\("reflib-ib-pvmedia"\)\) m\._reflibWantUntil = Infinity/);
+assert.match(js, /contains\("reflib-ib-pvmedia"\) && window\.ReflibFrameCapture\) ReflibFrameCapture\.notePlay\(m\)/);
+// 1.12.14: body rebuild keeps the details host in place (behaviour covered for real in test_browser_capture.mjs)
+assert.match(js, /replaceKeeping\(body, /);
 console.log("test_capture_stay_ml: ok");

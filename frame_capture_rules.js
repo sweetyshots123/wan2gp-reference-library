@@ -41,5 +41,26 @@
     }
     /** 1.12.13: the viewer already shows the item to stay on → re-index only, never re-open (re-opening = new <video>). */
     function sameOpen(shownHash, keepHash) { return !!shownHash && !!keepHash && String(shownHash) === String(keepHash); }
-    root.ReflibFrameCapture = { version: 2, EVENT, shouldNavigate, stayHash, toastText, resumePlayback, keepOpen, pinFollow, pinLocate, sameOpen };
+    // 1.12.14: play intent, ONE implementation for both UIs. Vidosser pauses the video for the exact frame just
+    // before saving, so a pause in the last WANT_MS still counts as "was playing"; an older pause (the user's) does not.
+    const WANT_MS = 2000;
+    const clock = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+    function notePlay(el) { if (el) { el._reflibWantUntil = Infinity; el._reflibWantPlay = true; } }
+    function notePause(el, now) { if (el) { el._reflibWantUntil = (now == null ? clock() : now) + WANT_MS; el._reflibWantPlay = false; } }
+    function wantPlay(el, now) {
+        if (!el) return false;
+        const t = now == null ? clock() : now, u = el._reflibWantUntil;
+        if (u === Infinity) return true;
+        if (typeof u === "number" && t < u) return true;
+        return !el.paused && !el.ended;
+    }
+    function trackIntent(el) {
+        if (!el || !el.addEventListener) return () => {};
+        if (!el.paused && !el.ended) notePlay(el);
+        const onPlay = () => notePlay(el), onPause = () => notePause(el);
+        el.addEventListener("play", onPlay); el.addEventListener("pause", onPause);
+        return () => { el.removeEventListener("play", onPlay); el.removeEventListener("pause", onPause); };
+    }
+    root.ReflibFrameCapture = { version: 3, EVENT, shouldNavigate, stayHash, toastText, resumePlayback, keepOpen, pinFollow, pinLocate, sameOpen,
+        WANT_MS, notePlay, notePause, wantPlay, trackIntent };
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -11,28 +11,18 @@ type FC = {
   keepOpen: (cur: string | null | undefined, d: any) => { navigate: boolean; hash: string | null; toast: boolean };
   pinFollow: (pin: Pin | null, viewer: number | null, hashAtViewer: string | null | undefined) => Pin | null;
   pinLocate: (pin: Pin | null, viewer: number | null, entries: Iterable<[number, string]>) => { index: number | null; override: boolean; lookup: boolean };
+  trackIntent: (el: any) => () => void;
+  wantPlay: (el: any, now?: number) => boolean;
 };
 export type Pin = { hash: string; idx: number };
 export const FrameCap: FC = (globalThis as any).ReflibFrameCapture;
 
-/** Remember whether a <video> was playing; survives Vidosser's brief pause before save. */
+/** 1.12.14: play intent = shared ReflibFrameCapture.trackIntent / wantPlay (same code as the Media Library). */
 export function trackWantPlay(el: HTMLVideoElement | null | undefined): () => void {
-  if (!el) return () => {};
-  let until = 0;
-  const onPlay = () => { until = Number.POSITIVE_INFINITY; (el as any)._reflibWantPlay = true; };
-  const onPause = () => { until = performance.now() + 2000; (el as any)._reflibWantPlay = true; };
-  el.addEventListener("play", onPlay);
-  el.addEventListener("pause", onPause);
-  return () => {
-    el.removeEventListener("play", onPlay);
-    el.removeEventListener("pause", onPause);
-    const want = until === Number.POSITIVE_INFINITY || performance.now() < until;
-    (el as any)._reflibWantPlay = want;
-  };
+  return FrameCap ? FrameCap.trackIntent(el) : () => {};
 }
 
 export function wasWantPlay(el: HTMLVideoElement | null | undefined): boolean {
   if (!el) return false;
-  if ((el as any)._reflibWantPlay) return true;
-  return !el.paused && !el.ended;
+  return FrameCap ? FrameCap.wantPlay(el) : !el.paused && !el.ended;
 }

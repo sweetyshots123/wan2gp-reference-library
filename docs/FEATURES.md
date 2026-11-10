@@ -6,6 +6,19 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.14 — Capture keeps play state; ML details video kept; tests on real code
+
+- Shared play intent `ReflibFrameCapture.trackIntent / wantPlay` (frame_capture_rules.js v3) in Galería and Media Library.
+- ML: body rebuilt around the details host (`replaceKeeping`); lightbox steps only on fresh rows.
+- Galería: pin released when the open item leaves the list; App-driven moves keep fullscreen; stale bar EN/ES, closable, once per version.
+
+### How to run the tests
+
+- All node tests: `node --test tests/*.mjs` (the glob is needed: Node's default pattern does not match `test_*.mjs`). Each file also runs alone with `node tests/<file>.mjs`.
+- Python: `pytest -q tests/` (in an env with the plugin deps; `test_videofaces` needs `cv2`).
+- Galería build: `cd gallery && npm run build`.
+- Node test files (19): `bench_viewer_priority.mjs`, `test_browser_capture.mjs` (headless Chrome + `tests/browser/` synthetic mock; skips without google-chrome/ffmpeg/dist), `test_capture_stay_gallery.mjs`, `test_capture_stay_ml.mjs`, `test_faces_overlay.mjs`, `test_frame_capture_rules.mjs`, `test_fullscreen_rules.mjs`, `test_nav_paths.mjs`, `test_person_match.mjs`, `test_play_intent.mjs`, `test_playback_rules.mjs`, `test_progressive_media.mjs`, `test_request_priority.mjs`, `test_review_rules.mjs`, `test_selection_rules.mjs`, `test_stale_bar.mjs`, `test_standalone_rules.mjs`, `test_start_picker.mjs`, `test_wheel_rules.mjs`.
+
 ## 1.12.13 — Frame capture stays on the video (Galería fix, ML parity)
 
 - Shared `ReflibFrameCapture.pinFollow / pinLocate / sameOpen` (frame_capture_rules.js v2).

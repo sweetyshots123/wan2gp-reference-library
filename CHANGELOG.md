@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.12.14
+
+- **Galería: a paused video no longer starts playing when you capture a frame.** The play intent flag was set on play and never cleared, so every capture resumed playback. Play intent is now ONE shared implementation (`ReflibFrameCapture.trackIntent / notePlay / notePause / wantPlay`) used by the Galería viewer and both Media Library players: a pause within 2 s (Vidosser's pause for the exact frame) still resumes, an older pause by the user is respected.
+- **Media Library details panel keeps its `<video>`:** `render()` rebuilt the whole body (including the details host) before `renderPreview()` could keep the video, so the preview reloaded and native fullscreen was lost. The body is now rebuilt around the details host (`replaceKeeping`), which is never detached.
+- **Media Library lightbox outside the loaded grid pages:** after a capture, › / ‹ read stale rows of pages not re-fetched yet (› skipped one, ‹ re-opened the same item). Steps now only use rows of pages loaded in the current query generation (waiting for the page otherwise), and re-indexing fetches the rows around the open item.
+- **Galería: open item removed elsewhere** (deleted in another UI/tab, or filtered out): when `index_of` answers -1 the pin is released and the viewer shows what is at that position now (closes if the list is empty) instead of a ghost.
+- Galería: deleting / item-gone moves go through the shared fullscreen navigate (same as ‹ ›). Stale-tab bar is EN/ES, can be closed, and is shown once per server version (`gallery/src/stale.ts`).
+- Tests: real-code browser test `tests/test_browser_capture.mjs` (headless Chrome + synthetic mock backend in `tests/browser/`; reproduces all four bugs on 1.12.13), `test_play_intent.mjs`, `test_stale_bar.mjs`.
+
 ## 1.12.13
 
 - **Galería: capturing a frame no longer leaves the video.** Root cause: after the capture the grid refresh puts the new photo first (date_desc), so the viewer's index pointed at another item (the captured photo when the video was the newest, otherwise its neighbour), and the 1.12.6 pin effect re-pinned to *that* item on every refresh, so relocation never happened (the 60 ms relocate also ran before the refresh answered). Now the pin (`ReflibFrameCapture.pinFollow/pinLocate`, shared) only follows user navigation; the refresh relocates the viewer in the same React batch as the store write, and while an `index_of` lookup is pending the viewer keeps showing the pinned item. Also covers the 5 s rev poll and changes from another tab.

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 await import(path.join(root, "frame_capture_rules.js"));
 const FC = globalThis.ReflibFrameCapture;
-assert.equal(FC.version, 2);   // 1.12.13: + pinFollow / pinLocate / sameOpen
+assert.equal(FC.version, 3);   // 1.12.13: + pinFollow / pinLocate / sameOpen; 1.12.14: + play intent
 assert.equal(FC.EVENT, "vidosser:frame-saved");
 assert.equal(FC.shouldNavigate({ hash: "abc", name: "x.png" }), false);
 assert.equal(FC.stayHash("videoHash", { hash: "frameHash" }), "videoHash");

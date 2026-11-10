@@ -1205,8 +1205,12 @@
         const keepTag = root.querySelector(".reflib-ib-tagin");
         const tagVal = keepTag ? keepTag.value : "";
         const tagFocused = keepTag && document.activeElement === keepTag;
-        body.innerHTML = `<div class="reflib-ib-filters">${filters}</div>
-            <div class="reflib-ib-split">${renderTree(d)}<div class="reflib-ib-main">${renderFilterChips(d)}${renderCrumbs(d)}<div class="reflib-ib-vgrid"></div><div class="reflib-ib-gridend"></div></div><div class="reflib-ib-pvhost"></div></div><div class="reflib-ib-foothost"></div>`;
+        // 1.12.14: the details-panel host is kept in place while the rest of the body is rebuilt, so a playing
+        // preview <video> is never detached (detaching = reload + native fullscreen lost); renderPreview() then
+        // keeps the same <video> when the item is the same.
+        const keepPv = body.querySelector(".reflib-ib-pvhost video.reflib-ib-pvmedia") ? body.querySelector(".reflib-ib-pvhost") : null;
+        replaceKeeping(body, `<div class="reflib-ib-filters">${filters}</div>
+            <div class="reflib-ib-split">${renderTree(d)}<div class="reflib-ib-main">${renderFilterChips(d)}${renderCrumbs(d)}<div class="reflib-ib-vgrid"></div><div class="reflib-ib-gridend"></div></div><div class="reflib-ib-pvhost"></div></div><div class="reflib-ib-foothost"></div>`, keepPv);
         const treeEl = body.querySelector(".reflib-ib-tree");
         if (treeEl) treeEl.scrollTop = ilib.treeScroll || 0;
         const main = body.querySelector(".reflib-ib-main");
@@ -2118,6 +2122,28 @@
         }
         return false;
     }
+    // 1.12.14: like el.innerHTML = html, but `keep` (a descendant of el) and its ancestors up to el stay the same
+    // nodes: siblings are replaced around them, the matching new node (same tag + first class) is dropped.
+    function replaceKeeping(el, html, keep) {
+        if (!keep || !el.contains(keep) || keep === el) { el.innerHTML = html; return; }
+        const tmp = document.createElement(el.tagName); tmp.innerHTML = html;
+        const sig = (n) => n && n.nodeType === 1 ? n.tagName + "." + (n.classList[0] || "") : null;
+        const chain = []; for (let n = keep; n && n !== el; n = n.parentNode) chain.unshift(n);
+        const plan = []; let np = tmp;
+        for (const old of chain) {
+            const match = [...np.children].find(c => sig(c) === sig(old));
+            if (!match) { el.innerHTML = html; return; }   // structure changed: plain rewrite
+            plan.push([old, match]); np = match;
+        }
+        let op = el; np = tmp;
+        for (const [old, match] of plan) {
+            [...op.childNodes].forEach(n => { if (n !== old) n.remove(); });
+            let before = true;
+            [...np.childNodes].forEach(n => { if (n === match) { before = false; return; } if (before) op.insertBefore(n, old); else op.appendChild(n); });
+            if (old !== keep) { for (const a of [...match.attributes]) old.setAttribute(a.name, a.value); }
+            op = old; np = match;
+        }
+    }
     function renderPreview() {
         const host = ilib.root && ilib.root.querySelector(".reflib-ib-pvhost");
         if (!host) return;
@@ -2769,9 +2795,7 @@
                 m.className = "reflib-ib-lbmedia"; m.controls = true; m.autoplay = true; m.preload = "auto"; m.src = u;
                 if (mk === "video") { m.playsInline = true; if (th) m.poster = th; }
                 // 1.12.6: remember play-intent across Vidosser's pause-for-capture
-                m._reflibWantUntil = Infinity;
-                m.addEventListener("play", () => { m._reflibWantUntil = Infinity; });
-                m.addEventListener("pause", () => { m._reflibWantUntil = performance.now() + 2000; });
+                if (window.ReflibFrameCapture) ReflibFrameCapture.trackIntent(m);   // 1.12.14: shared play intent
                 stage.appendChild(m);
                 if (mk === "video") wireResume(m, it2.hash, box);
                 else m.play().catch(() => {});
@@ -2804,7 +2828,9 @@
         const i = +box.dataset.idx + d;
         if (i < 0 || i >= ilib.q.total) return;
         ensurePages(i, i);
-        const go = () => { const it2 = ilib.q.items[i]; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
+        // 1.12.14: only a row of a page loaded in THIS query generation (after a refresh, e.g. a frame capture, rows of
+        // pages not re-fetched yet are stale and point at the neighbour)
+        const go = () => { const it2 = ilib.q.pages.has(Math.floor(i / PAGE)) ? ilib.q.items[i] : null; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
         // 1.12.12: fullscreen is kept by openLightbox() (single choke point, ReflibFullscreen.navigate inside it)
         if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
     }
@@ -5330,8 +5356,8 @@
     }
 
     // 1.12.13: play intent of the preview-pane <video> (same as the lightbox's), survives Vidosser's pause-for-capture
-    document.addEventListener("play", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia")) m._reflibWantUntil = Infinity; }, true);
-    document.addEventListener("pause", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia")) m._reflibWantUntil = performance.now() + 2000; }, true);
+    document.addEventListener("play", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia") && window.ReflibFrameCapture) ReflibFrameCapture.notePlay(m); }, true);
+    document.addEventListener("pause", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia") && window.ReflibFrameCapture) ReflibFrameCapture.notePause(m); }, true);
     // ---- 1.12.6: after Vidosser saves a frame into the library, stay on the open video (shared ReflibFrameCapture)
     (function frameCaptureStay() {
         const FC = window.ReflibFrameCapture;
@@ -5352,7 +5378,7 @@
                 hash: openH,
                 lb: !!ilib.lightbox,
                 t: mediaEl && isFinite(mediaEl.currentTime) ? mediaEl.currentTime : null,
-                playing: !!(mediaEl && (mediaEl._reflibWantUntil === Infinity || performance.now() < (mediaEl._reflibWantUntil || 0) || (!mediaEl.paused && !mediaEl.ended))),
+                playing: FC.wantPlay(mediaEl),   // 1.12.14: shared rule
             };
             // Soft refresh of the grid only; re-anchor preview / lightbox to the same item (never to d.hash)
             const keep = FC.stayHash(pin.hash, d);
@@ -5381,6 +5407,7 @@
         });
         function reindexLightbox(box, idx) {
             box.dataset.idx = idx;
+            ensurePages(Math.max(0, idx - 1), idx + 1);   // 1.12.14: fresh rows around the open item for ‹ ›
             const pos = box.querySelector(".reflib-ib-lbpos"); if (pos) pos.textContent = `${idx + 1} / ${ilib.q.total}`;
             const pb = box.querySelector('[data-lb="prev"]'), nb = box.querySelector('[data-lb="next"]');
             if (pb) pb.disabled = idx <= 0; if (nb) nb.disabled = idx >= ilib.q.total - 1;

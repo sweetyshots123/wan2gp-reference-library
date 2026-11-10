@@ -11,7 +11,7 @@ import { act } from "./actions";
 import EditPanel from "./EditPanel";
 import { SimilarButtons } from "./Similar";
 import { Thumb, toast, fmtDur } from "./ui";
-import { FrameCap, wasWantPlay } from "./frameCapture";
+import { FrameCap, trackWantPlay, wasWantPlay } from "./frameCapture";
 import { Playback, getPos, savePos, clearPos, resumeMinS, uiLang } from "./playback";
 
 interface Props {
@@ -186,14 +186,11 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     return () => { gone = true; flush(); window.removeEventListener("pagehide", flush); };
   }, [it?.hash]);
   // 1.12.6: remember play-intent across Vidosser's pause-for-capture; on frame-saved stay & resume
+  // 1.12.14: shared play intent (a user pause older than 2 s is respected: capturing does NOT start playback)
   useEffect(() => {
     const v = media.current as HTMLVideoElement | null;
     if (!v || v.tagName !== "VIDEO") return;
-    const markPlay = () => { (v as any)._reflibWantPlay = true; (v as any)._reflibWantUntil = Infinity; };
-    const markPause = () => { (v as any)._reflibWantUntil = performance.now() + 2000; };
-    v.addEventListener("play", markPlay);
-    v.addEventListener("pause", markPause);
-    return () => { v.removeEventListener("play", markPlay); v.removeEventListener("pause", markPause); };
+    return trackWantPlay(v);
   });
   useEffect(() => {
     if (!FrameCap) return;
@@ -201,7 +198,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       const v = media.current as HTMLVideoElement | null;
       if (!v || v.tagName !== "VIDEO") return;
       const t0 = v.currentTime;
-      const want = wasWantPlay(v) || ((v as any)._reflibWantUntil === Infinity) || (performance.now() < ((v as any)._reflibWantUntil || 0));
+      const want = wasWantPlay(v);
       // keep exact frame time; resume if it was playing (Vidosser pauses for the exact frame)
       const restore = () => {
         try { if (isFinite(t0)) v.currentTime = t0; } catch {}
