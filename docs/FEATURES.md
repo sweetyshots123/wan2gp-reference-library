@@ -6,6 +6,12 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.13 — Frame capture stays on the video (Galería fix, ML parity)
+
+- Shared `ReflibFrameCapture.pinFollow / pinLocate / sameOpen` (frame_capture_rules.js v2).
+- Galería: viewer pinned by hash across refreshes; stale-build reload bar. ML: lightbox re-indexed (not re-opened), preview `<video>` kept.
+- Tests: `tests/test_capture_stay_gallery.mjs`, `tests/test_capture_stay_ml.mjs` (both fail on 1.12.12).
+
 ## 1.12.12 — All navigation paths keep fullscreen; resume offer per item
 
 - Galería: single `navTo(j)` (keys, ‹ ›, wheel, strip) → `ReflibFullscreen.navigate`. Media Library: single `openLightbox()` wrapper → `openLightboxNow()`.

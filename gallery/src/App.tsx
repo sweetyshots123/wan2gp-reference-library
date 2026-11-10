@@ -10,7 +10,7 @@ import { DupesPage } from "./Dupes";
 import { VideoManager } from "./Videos";
 import { AF0, AFilt, FacetPanel, afActive, afToFilter } from "./Facets";
 import { act } from "./actions";
-import { FrameCap } from "./frameCapture";
+import { FrameCap, type Pin } from "./frameCapture";
 import EditPanel from "./EditPanel";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
 import { SIM_EVENT, SimBar, SimHeader, SimRef, startSimIndex } from "./Similar";
@@ -89,6 +89,10 @@ export default function App() {
   const [size, setSize] = useState(() => +(localStorage.getItem("gal.size") || 220));
   const [drag, setDrag] = useState(false);
   const rev = useRef(0);
+  const [stale, setStale] = useState<string | null>(null);
+  const pin = useRef<Pin | null>(null);          // 1.12.13: open viewer pinned by hash
+  const pinItem = useRef<Item | null>(null);
+  const viewerNow = useRef<number | null>(null);
   const fileIn = useRef<HTMLInputElement>(null);
   // elementos dispersos: índice -> Item, por páginas (solo se pide lo que se ve)
   const store = useRef(new Map<number, Item>());
@@ -143,9 +147,17 @@ export default function App() {
     try {
       const r = await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz });
       if (g !== gen.current) return;
+      if (r.v && typeof __REFLIB_BUILD__ === "string" && r.v !== __REFLIB_BUILD__) setStale(String(r.v));   // 1.12.13: old tab / old build
       if (withSections) { applyMeta(r); setSections(r.page.sections || null); if (r.page.kinds) setKc(r.page.kinds); }
       setTotal(r.page.total);
       r.page.items.forEach((it: Item, j: number) => store.current.set(p * PAGE + j, it));
+      // 1.12.13: same batch as the store write -> the viewer never renders the item that slid into its index
+      // (frame capture / rev poll insert the new photo first in date_desc)
+      if (FrameCap && pin.current && viewerNow.current != null) {
+        const entries: [number, string][] = []; store.current.forEach((x, i) => entries.push([i, x.hash]));
+        const loc = FrameCap.pinLocate(pin.current, viewerNow.current, entries);
+        if (loc.index != null && loc.index !== viewerNow.current) { pin.current = { ...pin.current, idx: loc.index }; viewerNow.current = loc.index; setViewer(loc.index); }
+      }
       setVer((v) => v + 1);
     } catch { if (g === gen.current) pages.current.delete(p); }
   }, [fkey]);
@@ -180,51 +192,53 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [refresh]);
 
-  // 1.12.6: pin the open viewer by hash so a refresh (frame capture → date_desc) does not jump to the new photo
-  const viewerHash = useRef<string | null>(null);
+  // 1.12.6 / 1.12.13: the open viewer is pinned by hash (shared ReflibFrameCapture.pinFollow/pinLocate).
+  // The pin only follows the USER's navigation (viewer index changed); a refresh (frame capture, rev poll) never
+  // re-pins, it relocates: in fetchPage (same batch) or, if the item left the loaded pages, via index_of while the
+  // Viewer keeps showing the pinned item (viewerItems).
   useEffect(() => {
-    if (viewer == null) { viewerHash.current = null; return; }
-    const it = store.current.get(viewer);
-    if (it) viewerHash.current = it.hash;
+    const it = viewer == null ? undefined : store.current.get(viewer);
+    const n = FrameCap ? FrameCap.pinFollow(pin.current, viewer, it?.hash) : (viewer == null ? null : it ? { hash: it.hash, idx: viewer } : pin.current);
+    if (n !== pin.current) { pin.current = n; pinItem.current = n && it && it.hash === n.hash ? it : null; }
+    else if (n && it && it.hash === n.hash) pinItem.current = it;
   }, [viewer, ver]);
   const relocateViewer = useCallback(async (hash: string | null) => {
     if (!hash || viewer == null || !filter) return;
     let found: number | null = null;
     store.current.forEach((it, i) => { if (it.hash === hash) found = i; });
-    if (found != null) { if (found !== viewer) setViewer(found); return; }
+    const move = (i: number) => { if (pin.current && pin.current.hash === hash) pin.current = { ...pin.current, idx: i }; setViewer(i); };
+    if (found != null) { if (found !== viewer) move(found); return; }
     try {
       const r = await call("index_of", { f: filter, hash });
       if (r && r.ok && typeof r.index === "number" && r.index >= 0) {
         ensure(r.index, r.index + 1);
-        setViewer(r.index);
+        if (pin.current && pin.current.hash === hash && viewerNow.current === viewer) move(r.index);
       }
     } catch {}
   }, [viewer, filter, ensure]);
   useEffect(() => {
-    if (viewer == null || !viewerHash.current) return;
-    const h = viewerHash.current;
+    const pn = pin.current;
+    if (viewer == null || !pn || pn.idx !== viewer) return;
     const cur = store.current.get(viewer);
-    if (cur && cur.hash === h) return;
-    void relocateViewer(h);
+    if (cur && cur.hash === pn.hash) return;
+    if (!cur && !store.current.size) return;
+    void relocateViewer(pn.hash);
   }, [ver, relocateViewer, viewer]);
-  // Vidosser frame-saved: stay on the video (shared ReflibFrameCapture); soft refresh only
+  // Vidosser frame-saved: stay on the video (shared ReflibFrameCapture); soft refresh only — the pin keeps the viewer
   useEffect(() => {
     if (!FrameCap) return;
     const onSaved = (ev: Event) => {
       const d = (ev as CustomEvent).detail || {};
       if (FrameCap.shouldNavigate(d)) return;
-      const keep = FrameCap.stayHash(viewerHash.current, d);
-      if (keep) viewerHash.current = keep;
       refresh();
-      if (keep) window.setTimeout(() => { void relocateViewer(keep); }, 60);
     };
     window.addEventListener(FrameCap.EVENT, onSaved);
     return () => window.removeEventListener(FrameCap.EVENT, onSaved);
-  }, [refresh, relocateViewer]);
+  }, [refresh]);
 
   // 1.9.7: borrado optimista (optimistic.ts): se quitan de la lista cargada al instante y el visor pasa a la siguiente
   const totalNow = useRef(0); totalNow.current = total;
-  const viewerNow = useRef<number | null>(null); viewerNow.current = viewer;
+  viewerNow.current = viewer;
   useEffect(() => {
     setRemover((hs) => {
       const snap = { store: store.current, total: totalNow.current, viewer: viewerNow.current };
@@ -234,13 +248,19 @@ export default function App() {
       const nt = Math.max(0, snap.total - gone.length);
       store.current = next; setTotal(nt); setVer((v) => v + 1);
       setSel((s) => { if (![...hs].some((h) => s.has(h))) return s; const n = new Set(s); hs.forEach((h) => n.delete(h)); return n; });
-      if (snap.viewer != null) { const before = gone.filter((i) => i < snap.viewer!).length; setViewer(nt ? Math.min(snap.viewer - before, nt - 1) : null); }
+      if (snap.viewer != null) { pin.current = null; pinItem.current = null; const before = gone.filter((i) => i < snap.viewer!).length; setViewer(nt ? Math.min(snap.viewer - before, nt - 1) : null); }   // 1.12.13: deleting moves on, unpin
       return () => { store.current = snap.store; setTotal(snap.total); setVer((v) => v + 1); if (snap.viewer != null) setViewer(snap.viewer); };
     });
     return () => setRemover(null);
   }, []);
 
   const items = useMemo(() => { const a: Item[] = new Array(total); store.current.forEach((it, i) => { if (i < total) a[i] = it; }); return a; }, [ver, total]);
+  // 1.12.13: while the pinned item is being relocated (index_of), the viewer keeps showing it instead of the neighbour
+  const pv = pin.current, pvi = pinItem.current;
+  const viewerItems = useMemo(() => {
+    if (viewer == null || !pv || pv.idx !== viewer || !pvi || pvi.hash !== pv.hash || (items[viewer] && items[viewer].hash === pv.hash)) return items;
+    const a = items.slice(); a[viewer] = pvi; return a;
+  }, [items, viewer, pv, pvi]);
   const loaded = useMemo(() => [...store.current.values()], [ver]);
 
   const doUpload = async (files: File[]) => {
@@ -440,11 +460,12 @@ export default function App() {
       {delPlan && <DeleteDialog plan={delPlan} hashes={[...sel]} close={() => setDelPlan(null)} after={() => { setSel(new Set()); refresh(); }} />}
 
       {viewer !== null && meta && !solo && (
-        <Viewer items={items} index={viewer} total={total} meta={meta} setIndex={setViewer} close={closeViewer} onChanged={refresh} ensure={ensure} />
+        <Viewer items={viewerItems} index={viewer} total={total} meta={meta} setIndex={setViewer} close={closeViewer} onChanged={refresh} ensure={ensure} />
       )}
       {solo && meta && (
         <Viewer items={solo.list} index={solo.i} total={solo.list.length} meta={meta} setIndex={(i) => setSolo({ ...solo, i })} close={() => setSolo(null)} onChanged={refresh} ensure={() => {}} />
       )}
+      {stale && <div className="stalebar" role="status">La Galería abierta es la {__REFLIB_BUILD__} y el servidor ya usa la {stale}. <button onClick={() => location.reload()}>Recargar</button></div>}
       {drag && <div className="dropzone">Suelta para importar a la Media Library</div>}
       <AutoTagBar onDone={refresh} />
       <SimBar />

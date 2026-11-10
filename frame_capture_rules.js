@@ -21,5 +21,25 @@
     function keepOpen(currentHash, detail) {
         return { navigate: false, hash: stayHash(currentHash, detail), toast: true };
     }
-    root.ReflibFrameCapture = { version: 1, EVENT, shouldNavigate, stayHash, toastText, resumePlayback, keepOpen };
+    // 1.12.13: viewer pin. A refresh (frame capture, rev poll, another tab) may insert items before the open one,
+    // so the same index now holds another item. The pin {hash, idx} only follows USER navigation (viewer index
+    // changed); a refresh never re-pins. pinLocate() moves the viewer to the pinned hash in the same update as the
+    // store write; if the pinned item is not in the loaded rows it keeps showing it (override) until index_of answers.
+    function pinFollow(pin, viewer, hashAtViewer) {
+        if (viewer == null) return null;
+        if (pin && pin.idx === viewer) return pin;            // same index: a refresh, never re-pin
+        if (hashAtViewer) return { hash: String(hashAtViewer), idx: viewer };
+        return pin || null;                                   // target row not loaded yet (pin.idx !== viewer: no override)
+    }
+    function pinLocate(pin, viewer, entries) {
+        if (!pin || viewer == null || pin.idx !== viewer) return { index: viewer, override: false, lookup: false };
+        let at = null, found = null;
+        for (const [i, h] of entries || []) { if (h === pin.hash) { if (i === viewer) at = i; else if (found == null) found = i; } }
+        if (at != null) return { index: viewer, override: false, lookup: false };
+        if (found != null) return { index: found, override: false, lookup: false };
+        return { index: viewer, override: true, lookup: true };
+    }
+    /** 1.12.13: the viewer already shows the item to stay on → re-index only, never re-open (re-opening = new <video>). */
+    function sameOpen(shownHash, keepHash) { return !!shownHash && !!keepHash && String(shownHash) === String(keepHash); }
+    root.ReflibFrameCapture = { version: 2, EVENT, shouldNavigate, stayHash, toastText, resumePlayback, keepOpen, pinFollow, pinLocate, sameOpen };
 })(typeof globalThis !== "undefined" ? globalThis : window);

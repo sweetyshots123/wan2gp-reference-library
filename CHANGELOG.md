@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.13
+
+- **Galería: capturing a frame no longer leaves the video.** Root cause: after the capture the grid refresh puts the new photo first (date_desc), so the viewer's index pointed at another item (the captured photo when the video was the newest, otherwise its neighbour), and the 1.12.6 pin effect re-pinned to *that* item on every refresh, so relocation never happened (the 60 ms relocate also ran before the refresh answered). Now the pin (`ReflibFrameCapture.pinFollow/pinLocate`, shared) only follows user navigation; the refresh relocates the viewer in the same React batch as the store write, and while an `index_of` lookup is pending the viewer keeps showing the pinned item. Also covers the 5 s rev poll and changes from another tab.
+- **Galería: stale tab notice.** The build carries its version; if the server answers with another one, a bar offers to reload (an open tab keeps running the old JS even after WanGP restarts).
+- **Media Library parity:** the frame-capture re-anchor no longer re-opens the lightbox on the same item (that created a new `<video>`: reload, resume offer, native fullscreen lost) — it only re-indexes it, using the server `index_of` after the insert. The details-panel preview keeps its `<video>` node across re-renders of the same item, and its play intent is tracked so playback resumes after Vidosser's pause.
+
 ## 1.12.12
 
 - **Fullscreen on every navigation path:** Galería wheel and thumbnail strip now go through the same `navTo()` → `ReflibFullscreen.navigate` as ←/→ and ‹ › (before, they called `setIndex` directly and could drop a native `<video>` fullscreen). Media Library: `openLightbox()` is the single choke point (arrows, ‹ ›, double-click, context menu, frame-capture re-anchor) and moves fullscreen to the lightbox before replacing the `<video>`.

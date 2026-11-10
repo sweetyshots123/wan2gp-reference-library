@@ -9,7 +9,10 @@ type FC = {
   toastText: (d: any, lang?: string) => string;
   resumePlayback: (was: boolean) => boolean;
   keepOpen: (cur: string | null | undefined, d: any) => { navigate: boolean; hash: string | null; toast: boolean };
+  pinFollow: (pin: Pin | null, viewer: number | null, hashAtViewer: string | null | undefined) => Pin | null;
+  pinLocate: (pin: Pin | null, viewer: number | null, entries: Iterable<[number, string]>) => { index: number | null; override: boolean; lookup: boolean };
 };
+export type Pin = { hash: string; idx: number };
 export const FrameCap: FC = (globalThis as any).ReflibFrameCapture;
 
 /** Remember whether a <video> was playing; survives Vidosser's brief pause before save. */

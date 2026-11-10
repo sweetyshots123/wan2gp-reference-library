@@ -2144,8 +2144,13 @@
                 <div class="reflib-ib-pvbtns">${vBtn("vorig", (fv.orig && fv.orig.hash) || "", "reflib-ib-btn reflib-vc-showorig", vct("show_orig"), vct("show_orig"), fv.broken || !fv.orig_in_library, true)}</div>` : ""}</div>`
             : (full && full.copies && full.copies.length ? `<h4>${esc(vct("copies", { n: full.copies.length }))}</h4><div class="reflib-vc-list">${full.copies.map(c => `<button type="button" class="reflib-ib-chip" data-act="vshow" data-hash="${esc(c.hash)}" title="${esc(vParams(c.params, c.kind))}">${VICO}${esc(c.name)}</button>`).join("")}</div>` : "");
         if (rendering) vPollRender(h);
-        host.innerHTML = `<aside class="reflib-ib-preview k-${pmk}"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
-              <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
+        // 1.12.13: a re-render of the SAME item (grid refresh after a frame capture, rev change…) keeps the playing
+        // <video> node (never detached: position, play state and fullscreen survive); only the rest is rebuilt
+        const oldAside = host.querySelector("aside.reflib-ib-preview");
+        const oldVid = oldAside && oldAside.querySelector("video.reflib-ib-pvmedia");
+        const keepVid = !!(oldVid && oldVid.dataset.hash === h && pmk === "video" && full && full.url && oldVid.getAttribute("src") === full.url);
+        const html = `<aside class="reflib-ib-preview k-${pmk}"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
+              <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" data-hash="${esc(h)}" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
               <div class="reflib-ib-pv-name">${esc(name)}</div>
               <div class="reflib-ib-pvbtns">${revealBtn(h, "reflib-ib-btn reflib-ib-pvreveal")}${locateBtn(h, "reflib-ib-btn reflib-ib-pvlocate")}${lv ? vBtn("vedit", h, "reflib-ib-btn reflib-vc-pvedit", "✎ " + vct("edit"), vct("edit_tip"), lv.broken) : cropBtn(h, "reflib-ib-btn reflib-ib-pvcrop", pmk)}${pmk === "video" && !(lv && lv.broken) ? resizeBtn(h, "reflib-ib-btn reflib-ib-pvresize") : ""}${lv && lv.broken ? "" : vBtn("vnew", h, "reflib-ib-btn reflib-vc-pvnew", vct("new"), vct("new_tip"), false, true)}${extHtml("details", h)}</div>
@@ -2160,6 +2165,17 @@
               ${files.length ? `<h4>${esc(it("preview_folders"))}</h4><div class="reflib-ib-pv-files">${files.map(p => `<div title="${esc(p)}">${esc(p)}</div>`).join("")}</div>` : ""}
               <h4>${esc(it("preview_tags"))}</h4><div class="reflib-ib-pv-list">${tags.length ? tags.map(x => `<span class="reflib-ib-chip static">${esc(x)}</span>`).join("") : esc(it("preview_none"))}</div>
               ${pmk === "image" ? `<div class="reflib-ib-autohost">${renderAutoPanel(h)}</div>` : ""}</aside>`;
+        if (keepVid) {
+            const tmp = document.createElement("div"); tmp.innerHTML = html;
+            const na = tmp.firstElementChild, oldImg = oldVid.closest(".reflib-ib-pv-img");
+            oldAside.className = na.className;
+            [...oldAside.childNodes].forEach(n => { if (n !== oldImg) n.remove(); });
+            let before = true;
+            [...na.childNodes].forEach(n => {
+                if (n.nodeType === 1 && n.classList.contains("reflib-ib-pv-img")) { before = false; return; }
+                if (before) oldAside.insertBefore(n, oldImg); else oldAside.appendChild(n);
+            });
+        } else host.innerHTML = html;
         if (pmk === "image" && (!ilib.at.img || ilib.at.img.hash !== h)) loadAutoImage(h);
     }
     // ---- selection footer: the server summarises the selection (it can be "all 11 207 matching") ----
@@ -5313,6 +5329,9 @@
         });
     }
 
+    // 1.12.13: play intent of the preview-pane <video> (same as the lightbox's), survives Vidosser's pause-for-capture
+    document.addEventListener("play", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia")) m._reflibWantUntil = Infinity; }, true);
+    document.addEventListener("pause", (e) => { const m = e.target; if (m && m.classList && m.classList.contains("reflib-ib-pvmedia")) m._reflibWantUntil = performance.now() + 2000; }, true);
     // ---- 1.12.6: after Vidosser saves a frame into the library, stay on the open video (shared ReflibFrameCapture)
     (function frameCaptureStay() {
         const FC = window.ReflibFrameCapture;
@@ -5328,7 +5347,7 @@
                 mediaEl = ilib.lightbox.querySelector("video.reflib-ib-lbmedia, audio.reflib-ib-lbmedia");
                 const img = ilib.lightbox.querySelector("img[data-hash]");
                 if (img && img.dataset.hash) openH = img.dataset.hash;
-            }
+            } else if (ilib.root) mediaEl = ilib.root.querySelector(".reflib-ib-pvmedia");   // 1.12.13: preview-pane video too
             const pin = {
                 hash: openH,
                 lb: !!ilib.lightbox,
@@ -5342,22 +5361,36 @@
             const reanchor = () => {
                 const i = ilib.q.items.findIndex(x => x && x.hash === keep);
                 const go = (idx) => {
+                    // 1.12.13: the open item is the same one: only its index moved (the new frame was inserted before it).
+                    // Re-opening would destroy the <video> (reload, resume offer, native fullscreen lost) — just re-index.
+                    const box = ilib.lightbox;
+                    const lbSame = pin.lb && box && FC.sameOpen(box.querySelector("img[data-hash]") && box.querySelector("img[data-hash]").dataset.hash, keep);
+                    if (lbSame) { reindexLightbox(box, idx); restoreMedia(pin); return; }
+                    if (!pin.lb && FC.sameOpen(ilib.preview, keep)) { ilib.anchorIdx = idx; ilib.pvItem = ilib.q.items[idx] || ilib.pvItem; for (const c of ilib.cards.values()) c.classList.toggle("cur", c.dataset.hash === keep); restoreMedia(pin); return; }
                     const p = pin.lb ? openLightbox(idx) : showPreview(keep, idx);
                     if (pin.lb && p && typeof p.then === "function") p.then(() => restoreMedia(pin));   // 1.12.12: waited for fullscreen move
                     else restoreMedia(pin);
                 };
-                if (i >= 0) { go(i); return; }
+                // 1.12.13: the server index is the one AFTER the frame was inserted (local rows may still be the old page)
                 sendIlib({ action: "index_of", f: filterSnap(), hash: keep }).then(r => {
-                    if (!r || !r.ok || r.index < 0) return;
+                    if (!r || !r.ok || r.index < 0) { if (i >= 0) go(i); return; }
                     go(r.index);
-                }).catch(() => {});
+                }).catch(() => { if (i >= 0) go(i); });
             };
             setTimeout(reanchor, 80);
         });
+        function reindexLightbox(box, idx) {
+            box.dataset.idx = idx;
+            const pos = box.querySelector(".reflib-ib-lbpos"); if (pos) pos.textContent = `${idx + 1} / ${ilib.q.total}`;
+            const pb = box.querySelector('[data-lb="prev"]'), nb = box.querySelector('[data-lb="next"]');
+            if (pb) pb.disabled = idx <= 0; if (nb) nb.disabled = idx >= ilib.q.total - 1;
+            ilib.anchorIdx = idx;
+        }
         function restoreMedia(p) {
-            if (!p || !p.lb) return;
+            if (!p) return;
             const tryOnce = () => {
-                const m = ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia, audio.reflib-ib-lbmedia");
+                const m = p.lb ? (ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia, audio.reflib-ib-lbmedia"))
+                               : (ilib.root && ilib.root.querySelector(".reflib-ib-pvmedia"));
                 if (!m) return false;
                 if (p.t != null && isFinite(p.t)) try { m.currentTime = p.t; } catch (e) {}
                 if (FC.resumePlayback(p.playing)) try { m.play().catch(() => {}); } catch (e) {}
