@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.15
+
+- **Galería: the "Este navegador no puede reproducir este vídeo (códec no compatible…)" notice no longer stays over a video that plays.** It was a sticky flag, only reset when the item changed, while a listener re-ran on every render and set it again from `video.error`. Since 1.12.11 the same `<video>` is reused from item to item (to keep fullscreen), and `video.error` keeps the previous item's MediaError until the next source starts loading. So after an undecodable video (e.g. mp4v) the next, playable one still got the notice. The notice now reflects what the `<video>` has loaded *now* (shared `ReflibPlayback.unplayable`, playback_rules.js): only decode / unsupported-source errors (MediaError 3 / 4) or metadata without a picture count; network/aborted loads don't. It is re-evaluated on error, emptied, loadstart, loadedmetadata, loadeddata, canplay and playing.
+- The Media Library has no such notice, so it was not affected (it uses the same playback_rules.js).
+- Tests: `tests/test_browser_vbad.mjs` (real built Galería in headless Chrome, synthetic VP8 webm + mp4v files; fails on 1.12.14), `unplayable()` cases in `test_playback_rules.mjs`; mock server `BAD_HASHES` and `kinds` filter.
+
 ## 1.12.14
 
 - **Galería: a paused video no longer starts playing when you capture a frame.** The play intent flag was set on play and never cleared, so every capture resumed playback. Play intent is now ONE shared implementation (`ReflibFrameCapture.trackIntent / notePlay / notePause / wantPlay`) used by the Galería viewer and both Media Library players: a pause within 2 s (Vidosser's pause for the exact frame) still resumes, an older pause by the user is respected.

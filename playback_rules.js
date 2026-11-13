@@ -39,8 +39,21 @@
         const t = Number(offer.t);
         return isFinite(t) ? t : null;
     }
+    // 1.12.15: "this browser can't play this video" is a property of what the <video> has loaded NOW, never a
+    // sticky flag: the same element is reused across items (1.12.11, fullscreen), so a previous item's MediaError
+    // must not leak onto a video that plays. Only decode / unsupported-source errors (MEDIA_ERR_DECODE = 3,
+    // MEDIA_ERR_SRC_NOT_SUPPORTED = 4) or loaded metadata without a picture (videoWidth 0) count; network (2) and
+    // aborted (1) loads are not a codec problem. Re-evaluate on UNPLAYABLE_EVENTS.
+    const UNPLAYABLE_EVENTS = ["error", "emptied", "loadstart", "loadedmetadata", "loadeddata", "canplay", "playing"];
+    function unplayable(v) {
+        if (!v) return false;
+        const e = v.error;
+        if (e) return e.code === 3 || e.code === 4;
+        if (!v.currentSrc && !v.getAttribute?.("src")) return false;
+        return (v.readyState || 0) >= 1 && !v.videoWidth;
+    }
     root.ReflibPlayback = {
         version: 1, DEFAULT_MIN_S, HEAD_S, TAIL_S, TAIL_FRAC,
-        minS, shouldTrack, fmt, offerLabels, offerFor,
+        minS, shouldTrack, fmt, offerLabels, offerFor, unplayable, UNPLAYABLE_EVENTS,
     };
 })(typeof globalThis !== "undefined" ? globalThis : window);

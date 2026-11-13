@@ -6,6 +6,10 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.15 — Unsupported-codec notice matches the loaded video
+
+- Galería viewer: notice + «Abrir en reproductor externo» / «Mostrar en carpeta» only while the current `<video>` really can't decode its source (`ReflibPlayback.unplayable`, playback_rules.js, shared with the Media Library); recomputed on `ReflibPlayback.UNPLAYABLE_EVENTS`, never sticky across items. Test: `node tests/test_browser_vbad.mjs`.
+
 ## 1.12.14 — Capture keeps play state; ML details video kept; tests on real code
 
 - Shared play intent `ReflibFrameCapture.trackIntent / wantPlay` (frame_capture_rules.js v3) in Galería and Media Library.

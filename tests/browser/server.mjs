@@ -16,7 +16,9 @@ function reset(n = 300) {
   }
 }
 reset();
+const BAD = new Set((process.env.BAD_HASHES || "").split(",").filter(Boolean));   // served as an mp4v (MPEG-4 Part 2) file the browser can't decode
 const sorted = (f) => { let a = items.slice(); if (f && f.kind === "video") a = a.filter((x) => x.kind === "video");
+  if (f && Array.isArray(f.kinds) && f.kinds.length) a = a.filter((x) => f.kinds.includes(x.kind));
   const s = (f && f.sort) || "date_desc"; a.sort((x, y) => s === "date_asc" ? x.added - y.added : y.added - x.added); return a; };
 const meta = () => ({ rev, total: items.length, collections: [], tags: [], folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -29,7 +31,7 @@ async function api(b) {
       const out = { ok: true, v: VERSION, page: { items: L.slice(o, o + l), offset: o, total: L.length, sections: null, kinds: meta().kinds } };
       if (b.meta) Object.assign(out, meta()); return out; }
     case "index_of": { await sleep(QDELAY); return { ok: true, index: sorted(b.f).findIndex((x) => x.hash === b.hash) }; }
-    case "media_url": { const it = items.find((x) => x.hash === b.hash); return { ok: true, url: it && it.kind === "video" ? "/media/clip.webm?h=" + b.hash : "/media/img.png?h=" + b.hash }; }
+    case "media_url": { const it = items.find((x) => x.hash === b.hash); return { ok: true, url: it && it.kind === "video" ? (BAD.has(b.hash) ? "/media/bad.mp4?h=" : "/media/clip.webm?h=") + b.hash : "/media/img.png?h=" + b.hash }; }
     case "thumbs": return { ok: true, thumbs: Object.fromEntries((b.hashes || []).map((h) => [h, "/media/img.png?t=" + h])), pending: [] };
     case "preview": { const it = items.find((x) => x.hash === b.hash) || {}; return { ok: true, image: { src: "/media/img.png?pv=" + b.hash, hash: b.hash, name: it.name, kind: it.kind, tags: [], collections: [], folders: [], files: [], added: it.added, in_pool: true, url: it.kind === "video" ? "/media/clip.webm?h=" + b.hash : undefined } }; }
     case "open": { const L = sorted(b.f); return { ok: true, meta: meta(), scan: { running: false }, default_collection: "", paused: false, v: VERSION, page: { items: L.slice(0, b.limit || 120), offset: 0, total: L.length, sections: null, kinds: meta().kinds } }; }
@@ -45,7 +47,7 @@ function serveFile(req, res, p, type) {
     fs.createReadStream(p, { start: s, end: e }).pipe(res); return; }
   res.writeHead(200, { "Content-Type": type, "Content-Length": st.size, "Accept-Ranges": "bytes" }); fs.createReadStream(p).pipe(res);
 }
-const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".webm": "video/webm", ".png": "image/png" };
+const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".webm": "video/webm", ".png": "image/png", ".mp4": "video/mp4" };
 http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
   if (req.method === "POST") {

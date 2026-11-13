@@ -18,4 +18,18 @@ assert.match(es.continue, /Seguir desde 1:30/);
 assert.match(es.restart, /principio/);
 const en = P.offerLabels(90, "en");
 assert.match(en.continue, /Continue from 1:30/);
+// 1.12.15 unplayable(): live state of the loaded <video>, never sticky (fake elements, no media)
+{
+  const P = globalThis.ReflibPlayback, V = (o) => ({ error: null, readyState: 0, videoWidth: 0, currentSrc: "", getAttribute: () => o.src ?? null, ...o });
+  assert.equal(P.unplayable(null), false);
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", error: { code: 4 } })), true, "unsupported source");
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", error: { code: 3 } })), true, "decode error");
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", error: { code: 2 } })), false, "network error is not a codec problem");
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", error: { code: 1 } })), false, "aborted load");
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", readyState: 1, videoWidth: 0 })), true, "metadata without a picture");
+  assert.equal(P.unplayable(V({ src: "/m/a.mp4", currentSrc: "/m/a.mp4", readyState: 4, videoWidth: 320 })), false, "plays");
+  assert.equal(P.unplayable(V({ src: "/m/b.webm", readyState: 0 })), false, "new load in progress (error reset by the browser)");
+  assert.equal(P.unplayable(V({})), false, "no source");
+  for (const e of ["error", "loadstart", "emptied", "loadedmetadata", "playing"]) assert.ok(P.UNPLAYABLE_EVENTS.includes(e), e);
+}
 console.log("test_playback_rules: ok");

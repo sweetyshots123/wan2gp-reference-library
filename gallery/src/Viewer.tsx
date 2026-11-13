@@ -142,15 +142,17 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   })(live.current), commit);
   const zoomCenter = (f: number) => { const r = stage.current!.getBoundingClientRect(); animate(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
 
-  useEffect(() => setVbad(false), [it?.hash]);
-  useEffect(() => {   // también con el reproductor de Vidosser (su <video> no lleva nuestros onError)
+  // 1.12.15: el aviso refleja lo que el <video> tiene cargado AHORA (ReflibPlayback.unplayable, compartido); antes era
+  // un flag pegajoso: el mismo <video> se reutiliza entre elementos (1.12.11) y el v.error del vídeo anterior (p. ej.
+  // mp4v) lo volvía a poner al pasar a uno que sí se reproduce. También con el reproductor de Vidosser.
+  useEffect(() => {
     const v = media.current as HTMLVideoElement | null;
-    if (!v || v.tagName !== "VIDEO") return;
-    const bad = () => setVbad(true);
-    const meta = () => { if (!v.videoWidth) setVbad(true); };
-    v.addEventListener("error", bad); v.addEventListener("loadedmetadata", meta);
-    if (v.error) setVbad(true);
-    return () => { v.removeEventListener("error", bad); v.removeEventListener("loadedmetadata", meta); };
+    if (!v || v.tagName !== "VIDEO") { setVbad(false); return; }
+    const upd = () => setVbad(Playback ? Playback.unplayable(v) : !!v.error && (v.error.code === 3 || v.error.code === 4));
+    const evs = Playback?.UNPLAYABLE_EVENTS || ["error", "emptied", "loadstart", "loadedmetadata", "loadeddata", "canplay", "playing"];
+    for (const e of evs) v.addEventListener(e, upd);
+    upd();
+    return () => { for (const e of evs) v.removeEventListener(e, upd); };
   });
 
   // 1.12.12: la oferta solo vale para el elemento que la pidió (al cambiar de vídeo no se pinta la del anterior)
@@ -399,7 +401,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
             // 1.12.11: sin key={src} y montado también mientras carga: el mismo <video> cambia de src al pasar de
             // vídeo (antes se desmontaba y el navegador salía de la pantalla completa)
             <div className="vidhost" ref={(el) => { tgt.current = el; }} style={{ transform: xf(z), visibility: src ? undefined : "hidden" }}>
-              <video ref={media} src={src || undefined} controls autoPlay={resumeOffer == null} loop playsInline onError={() => setVbad(true)} onLoadedMetadata={(e) => { if (!e.currentTarget.videoWidth) setVbad(true); if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
+              <video ref={media} src={src || undefined} controls autoPlay={resumeOffer == null} loop playsInline onLoadedMetadata={(e) => { if (resumeOffer != null) { try { e.currentTarget.pause(); } catch {} } else { const t = takeSeek(it.hash) ?? it.best_t; if (t != null) e.currentTarget.currentTime = t; } setDraft((d) => d && [...d] as Rect); }} />
               {resumeOffer != null && Playback && (
                 <div className="vresume" onPointerDown={(e) => e.stopPropagation()}>
                   <button className="primary" onClick={() => { const v = media.current as HTMLVideoElement | null; if (v) { try { v.currentTime = resumeOffer; } catch {} v.play()?.catch(() => {}); } setResumeOffer(null); }}>{Playback.offerLabels(resumeOffer, uiLang()).continue}</button>
