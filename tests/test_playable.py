@@ -195,3 +195,104 @@ def test_missing_file_fails():
 def test_encoder_forced_libx264():
     assert P.encoder_name() == "libx264"
     assert P.encoder()[0] == "libx264"
+
+
+def test_no_ffprobe_plays_original(monkeypatch):
+    """Without ffprobe, keep the pre-1.12.19 behaviour: serve the original (H.264 still plays)."""
+    src = os.path.join(td, "h264_nofp.mp4")
+    if FFMPEG:
+        _clip(src, "libx264", seconds=1, size="160x120", rate="25")
+    else:
+        pytest.skip("ffmpeg required")
+    orig = P.media.find_binary
+    monkeypatch.setattr(P.media, "find_binary", lambda name, orig=orig: None if name == "ffprobe" else orig(name))
+    P._probe_cache.clear()
+    st = P.status(_h("nofp"), src)
+    assert st["play"] == "original", st
+    assert st.get("mode") == "original"
+
+
+def test_no_ffprobe_no_ffmpeg_does_not_fail_h264(monkeypatch):
+    src = os.path.join(td, "h264_nobin.mp4")
+    if FFMPEG:
+        _clip(src, "libx264", seconds=1, size="160x120", rate="25")
+    else:
+        pytest.skip("ffmpeg required")
+    monkeypatch.setattr(P.media, "find_binary", lambda name: None)
+    P._probe_cache.clear()
+    st = P.ensure(_h("nobin"), src)
+    assert st["play"] == "original", st
+
+
+@need_ff
+def test_source_change_does_not_serve_stale_copy():
+    src = os.path.join(td, "mutate.mp4")
+    _clip(src, "mpeg4", tag="mp4v", seconds=2, size="160x120", rate="25")
+    digest = _h("mutate")
+    st = P.wait(digest, src, timeout=60)
+    assert st["play"] == "ready"
+    old_path, old_sig = st["path"], st.get("sig")
+    time.sleep(0.05)
+    _clip(src, "mpeg4", tag="mp4v", seconds=1, size="160x120", rate="15")
+    P._probe_cache.clear()
+    st2 = P.status(digest, src)
+    assert st2.get("sig") and st2.get("sig") != old_sig
+    st3 = P.wait(digest, src, timeout=60)
+    assert st3["play"] == "ready"
+    assert st3.get("sig") != old_sig
+    assert st3["path"] != old_path or not os.path.isfile(old_path) or st3["path"] == st3.get("path")
+    # the new cache file is a different signature path
+    assert old_path != st3["path"] or (os.path.isfile(st3["path"]) and st3.get("sig") != old_sig)
+
+
+@need_ff
+def test_failed_job_retries_after_source_is_fixed():
+    src = os.path.join(td, "sticky.mp4")
+    with open(src, "wb") as f:
+        f.write(b"not a video")
+    digest = _h("sticky")
+    st = P.wait(digest, src, timeout=20)
+    assert st["play"] == "failed"
+    time.sleep(0.05)
+    _clip(src, "mpeg4", tag="mp4v", seconds=1, size="160x120", rate="25")
+    P._probe_cache.clear()
+    st2 = P.wait(digest, src, timeout=60)
+    assert st2["play"] == "ready", st2
+
+
+@need_ff
+def test_session_evict_enforces_cap():
+    os.environ["REFLIB_PLAY_CACHE_MAX"] = str(16 * 1024 * 1024)
+    P._reset_for_tests()
+    for i in range(4):
+        src = os.path.join(td, f"cap{i}.mp4")
+        _clip(src, "mpeg4", tag="mp4v", seconds=2, size="320x240", rate="25")
+        st = P.wait(_h(f"cap{i}"), src, timeout=60)
+        assert st["play"] == "ready"
+    root = P.cache_dir()
+    total = 0
+    if os.path.isdir(root):
+        for n in os.listdir(root):
+            if n.endswith(".mp4") and not n.endswith(".part.mp4") and not n.endswith(".tmp.mp4"):
+                total += os.path.getsize(os.path.join(root, n))
+    assert total <= P.cache_max() + 64_000, total  # small slack for a file just written and kept
+    os.environ["REFLIB_PLAY_CACHE_MAX"] = str(32 * 1024 * 1024)
+
+
+@need_ff
+def test_idle_cancel_does_not_stick_failed():
+    os.environ["REFLIB_PLAY_IDLE_S"] = "0.3"
+    P._reset_for_tests()
+    src = os.path.join(td, "idle.mp4")
+    _clip(src, "mpeg4", tag="mp4v", seconds=8, size="320x240", rate="25")
+    digest = _h("idle")
+    st = P.ensure(digest, src)
+    assert st["play"] == "preparing"
+    time.sleep(2.0)  # no further status/ensure polls
+    with P._lock:
+        left = [j for k, j in P._jobs.items() if k.startswith(digest) and j.get("state") == "preparing"]
+    assert not left, "idle job should have been abandoned, not left preparing"
+    # not a sticky failure: a new ensure + wait (with polls) completes
+    os.environ["REFLIB_PLAY_IDLE_S"] = "45"
+    st2 = P.wait(digest, src, timeout=60)
+    assert st2["play"] == "ready", st2

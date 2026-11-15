@@ -985,7 +985,9 @@ def _preview(img: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
 #                                    pool/<sha256>.<ext>
 #                                    pool/.trash/<sha256>.<ext> + <sha256>.json   (deleted, restorable 5 min, purged at 15)
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff")
-VIDEO_EXTS = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")            # 1.6.0 media browser
+# 1.12.21: same set as media.VIDEO_EXTS so .mpg/.mpeg/.wmv/.ts/.mts/.m2ts/.flv/.3gp are indexed and can play via the transcode path.
+# Additive: existing catalog entries and tags are not rewritten; only new scans pick up files that were previously ignored.
+VIDEO_EXTS = (".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mpg", ".mpeg", ".wmv", ".ts", ".mts", ".m2ts", ".flv", ".3gp")
 AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
 MEDIA_EXTS = IMAGE_EXTS + VIDEO_EXTS + AUDIO_EXTS
 KINDS = ("image", "video", "audio")

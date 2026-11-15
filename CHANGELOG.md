@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.12.21
+
+Fixes for the 1.12.19 playable path (peer retest), and index more video containers so they can play through the same transcode.
+
+- **Transcode reliability:** drain ffmpeg stderr in a side thread (a full pipe could deadlock the job forever). Write remuxes to `.tmp.mp4` and `os.replace` so a half-written file is never reported ready. Cache ffprobe by (path, size, mtime). `GET /reflib/play/{hash}` runs catalog/ffprobe work in a thread pool; image and audio hashes return 404; the growing part is opened before the streaming response is returned.
+- **Timeline:** `-bf 0` and `-avoid_negative_ts make_non_negative` so the playable copy matches the original frame at `currentTime` (the previous fMP4 was 2–3 frames late, with ~80 ms A/V offset). Cache version bumped to 2 so older copies are not reused.
+- **Fallback:** if ffprobe is missing, the file is served as "original" (H.264 still plays, as before 1.12.19; mp4v then shows the browser's unsupported notice).
+- **Cache:** job keys include the source signature (a replaced file or a previously failed one is rebuilt). Eviction skips only running jobs, runs after each write, ignores `.tmp.mp4`, and touches mtime on a ready serve (real LRU). At most `REFLIB_PLAY_MAX_JOBS` (default 2) ffmpeg processes at once. A job with no status/ensure poll for `REFLIB_PLAY_IDLE_S` (default 45 s) is abandoned without a sticky failure.
+- **Galería:** the unsupported notice is shown when conversion fails even if there is no `<video>` yet. Polling for a long transcode no longer stops at 36 s (400 ms, then every 2 s); the poll timer is cleared when leaving the item.
+- **Indexing:** `.mpg`, `.mpeg`, `.wmv`, `.ts`, `.mts`, `.m2ts`, `.flv` and `.3gp` are now in `imagelib.VIDEO_EXTS` (same list as `media.VIDEO_EXTS`), so they appear in the library and play via the transcode. Existing tags and catalog entries are not rewritten.
+
+
 ## 1.12.20
 
 Compact Colecciones / Etiquetas chip rows in both the Media Library and the Galería, so a large tag or collection list no longer fills the screen above the grid.

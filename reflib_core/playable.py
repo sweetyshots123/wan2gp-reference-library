@@ -36,7 +36,7 @@ PLAYABLE_AUDIO_MP4 = frozenset({"aac", "mp3", "alac"})
 MP4_EXTS = frozenset({".mp4", ".m4v", ".mov"})
 WEB_EXTS = frozenset({".webm", ".ogv", ".ogg"})
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2  # 1.12.21: -bf 0 + avoid_negative_ts make_non_negative (old copies had a 2–3 frame lag)
 DEFAULT_CACHE_MAX = 4 * 1024 * 1024 * 1024  # 4 GiB
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -45,6 +45,8 @@ _jobs: Dict[str, Dict[str, Any]] = {}          # key -> job
 _flight: Dict[str, threading.Event] = {}       # key -> event set when the job finishes
 _encoder: Optional[list] = None                # ["h264_nvenc", ...] or ["libx264", ...]
 _encoder_name: Optional[str] = None
+_probe_cache: Dict[tuple, Dict[str, Any]] = {}  # (abspath, size, mtime_ns) -> probe(); status() runs on every poll
+_slots = None  # BoundedSemaphore, built lazily so tests can change REFLIB_PLAY_MAX_JOBS
 
 
 def cache_dir() -> str:
@@ -60,8 +62,56 @@ def cache_max() -> int:
         return DEFAULT_CACHE_MAX
 
 
+def _max_jobs() -> int:
+    try:
+        return max(1, int(os.environ.get("REFLIB_PLAY_MAX_JOBS") or 2))
+    except ValueError:
+        return 2
+
+
+def idle_s() -> float:
+    """Seconds without a status/ensure poll before a running transcode is abandoned. 0 disables. Default 45."""
+    try:
+        return max(0.0, float(os.environ.get("REFLIB_PLAY_IDLE_S") or 45))
+    except ValueError:
+        return 45.0
+
+
+def _get_slots():
+    global _slots
+    with _lock:
+        if _slots is None:
+            _slots = threading.BoundedSemaphore(_max_jobs())
+        return _slots
+
+
+def _touch(job: Optional[Dict[str, Any]]) -> None:
+    if job is not None:
+        job["touch"] = time.time()
+
+
+def _idle_expired(job: Dict[str, Any]) -> bool:
+    limit = idle_s()
+    if limit <= 0:
+        return False
+    return (time.time() - float(job.get("touch") or job.get("started") or 0)) > limit
+
+
+def _drop(job: Dict[str, Any]) -> None:
+    """Abandon a job without a sticky 'failed' state, so the next ensure() starts cleanly."""
+    key = job.get("key")
+    job["state"] = "idle"
+    job["abandoned"] = True
+    with _lock:
+        if key and _jobs.get(key) is job:
+            _jobs.pop(key, None)
+        ev = _flight.pop(key, None) if key else None
+    if ev is not None:
+        ev.set()
+
+
 def _reset_for_tests() -> None:
-    global _encoder, _encoder_name
+    global _encoder, _encoder_name, _slots
     with _lock:
         for j in list(_jobs.values()):
             proc = j.get("proc")
@@ -72,8 +122,10 @@ def _reset_for_tests() -> None:
                     pass
         _jobs.clear()
         _flight.clear()
+        _probe_cache.clear()
         _encoder = None
         _encoder_name = None
+        _slots = None
     d = cache_dir()
     if os.path.isdir(d):
         shutil.rmtree(d, ignore_errors=True)
@@ -85,16 +137,32 @@ def probe(path: str) -> Dict[str, Any]:
                              "duration": 0.0, "pix_fmt": "", "ext": ""}
     if not isinstance(path, str) or not os.path.isfile(path):
         return empty
+    try:
+        st = os.stat(path)
+        ck = (os.path.abspath(path), int(st.st_size), int(getattr(st, "st_mtime_ns", st.st_mtime)))
+    except OSError:
+        return empty
+    with _lock:
+        hit = _probe_cache.get(ck)
+    if hit is not None:
+        return dict(hit)
+    def _remember(val: Dict[str, Any]) -> Dict[str, Any]:
+        with _lock:
+            if len(_probe_cache) > 4096:
+                _probe_cache.clear()
+            _probe_cache[ck] = val
+        return dict(val)
+
     exe = media.find_binary("ffprobe")
     if not exe:
-        return empty
+        return _remember(empty)
     cmd = [exe, "-v", "error", "-show_streams", "-show_format", "-of", "json", path]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore",
                              timeout=30, creationflags=_NO_WINDOW)
         data = json.loads(res.stdout or "{}")
     except Exception:
-        return empty
+        return _remember(empty)
     streams = data.get("streams") or []
     v = next((s for s in streams if s.get("codec_type") == "video"), {})
     a = next((s for s in streams if s.get("codec_type") == "audio"), {})
@@ -117,7 +185,7 @@ def probe(path: str) -> Dict[str, Any]:
             continue
     if dur <= 0:
         dur = media.scan_duration(path, "v:0")
-    return {
+    out = {
         "vcodec": str(v.get("codec_name") or "").lower(),
         "acodec": str(a.get("codec_name") or "").lower(),
         "vtag": str(v.get("codec_tag_string") or "").lower(),
@@ -129,6 +197,7 @@ def probe(path: str) -> Dict[str, Any]:
         "ext": os.path.splitext(path)[1].lower(),
         "has_audio": bool(a),
     }
+    return _remember(out)
 
 
 def classify(info: Dict[str, Any]) -> str:
@@ -227,8 +296,9 @@ def _paths(digest: str, sig: str) -> Dict[str, str]:
     return {"dir": root, "part": base + ".part.mp4", "final": base + ".mp4", "meta": base + ".json"}
 
 
-def _key(digest: str, path: str) -> str:
-    return f"{digest}:{os.path.abspath(path)}"
+def _key(digest: str, path: str, sig: str = "") -> str:
+    # the source signature is part of the key: an edited / replaced file never reuses the old (ready or failed) job
+    return f"{digest}:{os.path.abspath(path)}:{sig}"
 
 
 def _write_meta(meta_path: str, data: Dict[str, Any]) -> None:
@@ -239,7 +309,7 @@ def _write_meta(meta_path: str, data: Dict[str, Any]) -> None:
     os.replace(tmp, meta_path)
 
 
-def evict(needed: int = 0) -> None:
+def evict(needed: int = 0, keep=()) -> None:
     """Drop the oldest finished cache files until the cap has ``needed`` extra bytes of headroom."""
     root = cache_dir()
     if not os.path.isdir(root):
@@ -247,9 +317,11 @@ def evict(needed: int = 0) -> None:
     entries = []
     total = 0
     for name in os.listdir(root):
-        if not name.endswith(".mp4") or name.endswith(".part.mp4"):
+        if not name.endswith(".mp4") or name.endswith(".part.mp4") or name.endswith(".tmp.mp4"):
             continue
         p = os.path.join(root, name)
+        if p in keep:
+            continue
         try:
             st = os.stat(p)
         except OSError:
@@ -258,7 +330,7 @@ def evict(needed: int = 0) -> None:
         busy = False
         with _lock:
             for j in _jobs.values():
-                if j.get("final") == p or j.get("part") == p:
+                if j.get("state") == "preparing" and (j.get("final") == p or j.get("part") == p):
                     busy = True
                     break
         if busy:
@@ -307,7 +379,12 @@ def status(digest: str, path: str) -> Dict[str, Any]:
     """Current play status for ``path`` (does not start a job)."""
     digest = str(digest or "")
     info = probe(path)
-    mode = classify(info) if info.get("vcodec") else "transcode"
+    if info.get("vcodec"):
+        mode = classify(info)
+    elif path and os.path.isfile(path) and not media.find_binary("ffprobe"):
+        mode = "original"   # no ffprobe: cannot tell the codec, play the file as before 1.12.19
+    else:
+        mode = "transcode"
     if mode == "original":
         return {"ok": True, "play": "original", "url": None, "codec": info.get("vcodec") or "",
                 "progress": 1.0, "mode": mode, "path": os.path.abspath(path) if path and os.path.isfile(path) else None,
@@ -318,18 +395,28 @@ def status(digest: str, path: str) -> Dict[str, Any]:
     sig = _sig(path, info, mode)
     paths = _paths(digest, sig)
     if os.path.isfile(paths["final"]) and os.path.getsize(paths["final"]) > 0:
-        return {"ok": True, "play": "ready", "url": None, "codec": info.get("vcodec") or "",
+        try:   # LRU: a served copy is recent (mtime is what evict() orders by)
+            if time.time() - os.path.getmtime(paths["final"]) > 60:
+                os.utime(paths["final"], None)
+        except OSError:
+            pass
+        return {"ok": True, "play": "ready", "sig": sig, "url": None, "codec": info.get("vcodec") or "",
                 "progress": 1.0, "mode": mode, "path": paths["final"], "rendering": False, "info": info,
                 "encoder": encoder_name()}
     with _lock:
-        j = _jobs.get(_key(digest, path))
+        j = _jobs.get(_key(digest, path, sig))
+        if j and j.get("state") == "ready" and not os.path.isfile(j.get("final") or ""):
+            _jobs.pop(_key(digest, path, sig), None)   # evicted since: build it again on the next ensure()
+            j = None
         if j:
+            _touch(j)
             snap = _job_snapshot(j, info, mode)
             snap["info"] = info
+            snap["sig"] = sig
             return snap
     return {"ok": True, "play": "preparing", "url": None, "codec": info.get("vcodec") or "",
             "progress": 0.0, "mode": mode, "path": None, "part": None, "rendering": True, "info": info,
-            "idle": True}
+            "idle": True, "sig": sig}
 
 
 def ensure(digest: str, path: str, start: bool = True) -> Dict[str, Any]:
@@ -342,12 +429,14 @@ def ensure(digest: str, path: str, start: bool = True) -> Dict[str, Any]:
         return st
     if not start:
         return st
-    key = _key(digest, path)
+    key = _key(digest, path, st.get("sig") or "")
     with _lock:
         j = _jobs.get(key)
         if j and j.get("state") in {"preparing", "ready"}:
+            _touch(j)
             snap = _job_snapshot(j, st.get("info") or {}, st.get("mode") or "")
             snap["info"] = st.get("info")
+            snap["sig"] = st.get("sig")
             return snap
         ev = threading.Event()
         _flight[key] = ev
@@ -355,23 +444,46 @@ def ensure(digest: str, path: str, start: bool = True) -> Dict[str, Any]:
         mode = st.get("mode") or classify(info)
         sig = _sig(path, info, mode)
         paths = _paths(digest, sig)
+        pre = f"{digest}:{os.path.abspath(path)}:"
+        for k, o in [(k, o) for k, o in list(_jobs.items()) if k.startswith(pre) and k != key]:
+            if o.get("state") == "preparing":
+                o["abandoned"] = True
+                proc = o.get("proc")
+                if proc is not None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+            else:
+                _jobs.pop(k, None)
+                _flight.pop(k, None)
         job = {"state": "preparing", "progress": 0.0, "mode": mode, "codec": info.get("vcodec") or "",
                "part": paths["part"], "final": paths["final"], "meta": paths["meta"], "src": os.path.abspath(path),
-               "proc": None, "error": None, "started": time.time()}
+               "proc": None, "error": None, "started": time.time(), "touch": time.time(), "key": key}
         _jobs[key] = job
 
     def run():
         try:
-            _transcode(job, path, info, mode, paths)
+            with _get_slots():
+                if job.get("abandoned") or _idle_expired(job):
+                    _drop(job)
+                    return
+                _transcode(job, path, info, mode, paths)
+                if job.get("abandoned"):
+                    _drop(job)
         except Exception as e:
-            job["state"] = "failed"
-            job["error"] = str(e)[:300]
+            if job.get("abandoned"):
+                _drop(job)
+            else:
+                job["state"] = "failed"
+                job["error"] = str(e)[:300]
         finally:
             ev.set()
 
     threading.Thread(target=run, name=f"reflib-play-{digest[:8]}", daemon=True).start()
     snap = _job_snapshot(job, info, mode)
     snap["info"] = info
+    snap["sig"] = sig
     return snap
 
 
@@ -380,8 +492,7 @@ def wait(digest: str, path: str, timeout: float = 120.0) -> Dict[str, Any]:
     st = ensure(digest, path, start=True)
     if st.get("play") in {"original", "ready", "failed"}:
         return st
-    key = _key(digest, path)
-    ev = _flight.get(key)
+    ev = _flight.get(_key(digest, path, st.get("sig") or ""))
     if ev is not None:
         ev.wait(timeout)
     return status(digest, path)
@@ -431,12 +542,14 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
         cmd += ["-c:v", "copy"]
         if info.get("has_audio"):
             cmd += ["-c:a", "copy"]
-        cmd += ["-movflags", "+faststart", final]
-        target = final
+        cmd += ["-movflags", "+faststart", final + ".tmp.mp4"]   # never expose a half-written final (status() = ready)
+        target = final + ".tmp.mp4"
         growing = False
     else:
         enc = encoder()
-        cmd += ["-c:v", *enc, "-pix_fmt", "yuv420p"]
+        # -bf 0: an empty_moov fMP4 cannot carry the B-frame edit list, so the video track would start 2-3 frames
+        # late (displayed frame / capture / resume vs the original timeline, and A/V offset)
+        cmd += ["-c:v", *enc, "-bf", "0", "-pix_fmt", "yuv420p"]
         if info.get("has_audio"):
             if info.get("acodec") in PLAYABLE_AUDIO_MP4 and mode != "transcode":
                 cmd += ["-c:a", "copy"]
@@ -445,7 +558,8 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
         else:
             cmd += ["-an"]
         # Fragmented MP4 so the browser can start before the whole file is written.
-        cmd += ["-movflags", "+frag_keyframe+empty_moov+default_base_moof", part]
+        # make_non_negative: the default shift for AAC priming moves every video frame after the first by ~23 ms
+        cmd += ["-avoid_negative_ts", "make_non_negative", "-movflags", "+frag_keyframe+empty_moov+default_base_moof", part]
         target = part
         growing = True
     # Progress on stdout (key=value).
@@ -453,10 +567,28 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
     dur = float(info.get("duration") or 0.0)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=_NO_WINDOW)
     job["proc"] = proc
+    err_tail = bytearray()
+
+    def _drain():   # stderr must be read concurrently: a full pipe (~64 KB of decode errors) blocks ffmpeg forever
+        try:
+            for chunk in iter(lambda: proc.stderr.read(4096), b""):
+                err_tail.extend(chunk)
+                del err_tail[:-8192]
+        except Exception:
+            pass
+    drain = threading.Thread(target=_drain, daemon=True)
+    drain.start()
     out_line = b""
     try:
         assert proc.stdout is not None
         while True:
+            if _idle_expired(job) or job.get("abandoned"):
+                job["abandoned"] = True
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                break
             chunk = proc.stdout.read(256)
             if not chunk:
                 break
@@ -487,16 +619,36 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
             proc.kill()
         except Exception:
             pass
-        job["state"] = "failed"
-        job["error"] = str(e)[:300]
-        return
+        if job.get("abandoned"):
+            rc = -1
+        else:
+            job["state"] = "failed"
+            job["error"] = str(e)[:300]
+            return
     finally:
         job["proc"] = None
+        drain.join(5)
+    if job.get("abandoned"):
+        for leftover in (target, paths.get("part"), final + ".tmp.mp4"):
+            if leftover:
+                try:
+                    os.remove(leftover)
+                except OSError:
+                    pass
+        _drop(job)
+        return
     if rc != 0 or not os.path.isfile(target) or os.path.getsize(target) == 0:
-        err = (proc.stderr.read() if proc.stderr else b"").decode("utf-8", "replace").strip().splitlines()
+        err = bytes(err_tail).decode("utf-8", "replace").strip().splitlines()
         job["state"] = "failed"
         job["error"] = (err[-1] if err else "ffmpeg failed")[:300]
         return
+    if not growing:
+        try:
+            os.replace(target, final)
+        except OSError:
+            job["state"] = "failed"
+            job["error"] = "could not finalise cache"
+            return
     if growing:
         # Remux the fragmented copy to a seekable, faststart MP4.
         tmp_final = final + ".tmp.mp4"
@@ -526,6 +678,7 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
         "codec": info.get("vcodec") or "", "encoder": encoder_name(), "at": time.time(),
         "duration": info.get("duration") or 0,
     })
+    evict(0, keep=(final,))   # enforce the cap with the real size of what was just written (never the copy being played)
 
 
 def serve_name(digest: str, path: str) -> str:

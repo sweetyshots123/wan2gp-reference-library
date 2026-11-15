@@ -90,10 +90,11 @@ def mount(app, dependencies=None) -> None:
         import asyncio, mimetypes
         from .reflib_core import imagelib, playable as _play
         digest = str(digest or "")
-        src = imagelib.media_path(digest)
-        if not src or not os.path.isfile(src):
+        # sync work (catalog, ffprobe, file checks) off the event loop: this route is polled while a copy is built
+        src = await run_in_threadpool(imagelib.media_path, digest)
+        if not src or not os.path.isfile(src) or imagelib.kind_of(src) in ("image", "audio"):
             return Response("not found", status_code=404)
-        st = _play.ensure(digest, src, start=True)
+        st = await run_in_threadpool(_play.ensure, digest, src, True)
         if st.get("play") == "failed":
             return JSONResponse({"ok": False, "error": st.get("error") or "transcode failed"}, status_code=415)
         if st.get("play") == "original":
@@ -102,31 +103,34 @@ def mount(app, dependencies=None) -> None:
         # Wait until the cache has the first box (or is ready), so the <video> can start.
         deadline = asyncio.get_event_loop().time() + 45
         while asyncio.get_event_loop().time() < deadline:
-            cur = _play.status(digest, src)
+            cur = await run_in_threadpool(_play.status, digest, src)
             if cur.get("play") == "failed":
                 return JSONResponse({"ok": False, "error": cur.get("error") or "transcode failed"}, status_code=415)
             if cur.get("play") == "ready" and cur.get("path") and os.path.isfile(cur["path"]):
                 return FileResponse(cur["path"], media_type="video/mp4",
                                     filename=_play.serve_name(digest, src),
                                     headers={"Cache-Control": "private, max-age=3600"})
-            if _play.part_ready(digest, src, 256):
-                part = _play.play_file(digest, src)
-                if part:
-                    return StreamingResponse(_grow_play(part, digest, src, _play), media_type="video/mp4",
+            part = cur.get("part")
+            if part and cur.get("play") == "preparing":
+                try:   # open now: the part is removed once the remux to the final file is done
+                    fh = open(part, "rb") if os.path.getsize(part) >= 256 else None
+                except OSError:
+                    fh = None
+                if fh is not None:
+                    return StreamingResponse(_grow_play(fh, digest, src, _play), media_type="video/mp4",
                                              headers={"Cache-Control": "no-store"})
             await asyncio.sleep(0.12)
         return Response("preparing", status_code=425)
 
-    async def _grow_play(path, digest, src, _play):
+    async def _grow_play(fh, digest, src, _play):
         import asyncio
-        fh = open(path, "rb")
         try:
             while True:
                 chunk = fh.read(64 * 1024)
                 if chunk:
                     yield chunk
                     continue
-                cur = _play.status(digest, src)
+                cur = await run_in_threadpool(_play.status, digest, src)
                 if cur.get("play") == "ready":
                     rest = fh.read()
                     if rest:

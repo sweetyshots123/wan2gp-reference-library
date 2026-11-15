@@ -6,6 +6,13 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.21 — Playable-path fixes; more video containers indexed
+
+- `reflib_core/playable.py`: stderr drain thread; remux via `.tmp.mp4` + `os.replace`; probe cache `(abspath, size, mtime_ns)` (empty results cached too); `CACHE_VERSION = 2` (`-bf 0`, `-avoid_negative_ts make_non_negative`); job key includes the source sig (stale / sticky-failed jobs pruned); `evict(needed, keep=)` skips only `preparing` jobs, ignores `.tmp.mp4`, LRU mtime touch, runs after each write; `REFLIB_PLAY_MAX_JOBS` (default 2, lazy semaphore) and `REFLIB_PLAY_IDLE_S` (default 45, abandon without a sticky failure). No ffprobe → mode `original`.
+- `gallery_routes.py`: `run_in_threadpool` for `media_path` / `ensure` / `status`; 404 for image/audio; open the growing part before `StreamingResponse`.
+- Galería `Viewer.tsx`: notice when `playSt.failed` even with no `src`; unbounded prepare poll (400 ms then 2 s) cancelled on leave.
+- `imagelib.VIDEO_EXTS` matches `media.VIDEO_EXTS` (adds `.mpg`, `.mpeg`, `.wmv`, `.ts`, `.mts`, `.m2ts`, `.flv`, `.3gp`). Tests: `tests/test_playable.py` extras, `tests/test_video_exts.py`.
+
 ## 1.12.20 — Compact Colecciones / Etiquetas chip rows in both UIs
 
 - **Why:** with 60+ tags/collections the ML filter rows wrapped into a tall block above the grid (synthetic 80 tags + 24 collections: 286 px at 1280 px wide, 198 px at 1920).

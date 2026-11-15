@@ -74,11 +74,11 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   // medio a resolución completa (imagen original, vídeo o copia virtual renderizada)
   useEffect(() => {
     if (!it) return;
-    let on = true, tries = 0, full: { p: Promise<boolean>; abort: () => void } | null = null, unhold: (() => void) | null = null;
+    let on = true, tries = 0, poll = 0, full: { p: Promise<boolean>; abort: () => void } | null = null, unhold: (() => void) | null = null;
     setUrl(null); setZ(VR.navZoom()); setVe(null); setDraft(null); setPlaySt(null);   // 1.12.17: shared rule (ML too): every item opens in Fit
     // 1.12.18: the open item's original first: neighbour preloads wait until it has loaded (or failed / holdMs)
     // 1.12.19: videos that need a transcode (mp4v, …) arrive as play=preparing with a /reflib/play URL; keep polling and swap to the finished file
-    const load = () => { const p = mediaUrl(it.hash).then((r) => {
+    const load = () => { if (!on) return; const p = mediaUrl(it.hash).then((r) => {
       if (!on) return;
       setPlaySt(r);
       setRendering(!!r.rendering || r.play === "preparing");
@@ -99,13 +99,14 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           v.addEventListener("loadedmetadata", onMeta);
         }
       }
-      if ((r.rendering || r.play === "preparing") && tries++ < 90) window.setTimeout(load, 400);
+      // keep polling until the copy is ready (long transcodes): 400 ms for ~36 s, then every 2 s
+      if (r.rendering || r.play === "preparing") poll = window.setTimeout(load, tries++ < 90 ? 400 : 2000);
       return full?.p;
     }); if (!unhold && (!it.kind || it.kind === "image")) unhold = medium.hold(p); return p; };
     // 1.9.7: la resolución completa (y el panel de edición) solo cuando el índice se asienta; girando rápido
     // no se encola nada y la carga en curso se cancela
     const settle = window.setTimeout(() => { if (!on) return; setSettled(it.hash); load(); }, 40);
-    return () => { on = false; window.clearTimeout(settle); full?.abort(); unhold?.(); };
+    return () => { on = false; window.clearTimeout(settle); window.clearTimeout(poll); full?.abort(); unhold?.(); };
   }, [it?.hash]);
 
   // 1.12.12: ÚNICO camino para cambiar de elemento (teclas, ‹ ›, rueda, tira de miniaturas): mueve la pantalla
@@ -437,7 +438,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
               )}
             </div>
           )}
-          {src && vbad && (kind === "video" || kind === "mask") && (
+          {((src && vbad) || !!playSt?.failed) && (kind === "video" || kind === "mask") && (
             <div className="vbad" onPointerDown={(e) => e.stopPropagation()}>
               <p>{(Playback && Playback.playLabels(uiLang()).unplayable) || "Este navegador no puede reproducir este vídeo (códec no compatible, p. ej. mp4v / MPEG-4 Part 2)."}</p>
               <div className="row">
