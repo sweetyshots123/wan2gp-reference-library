@@ -4113,7 +4113,8 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     r = None
             except usertax.UserTaxError as e:
                 return {"ok": False, "error": e.msg(lang), "code": e.code}
-            imagelib.invalidate()
+            if action != "at_tax_list":   # read-only: listing the taxonomy must not drop the catalog
+                imagelib.invalidate()
             return {"ok": True, "r": r, "user": usertax.listing(), "tax": _taxonomy.compact()}
         if action == "at_suggest":
             return {"ok": True, "sug": imagelib.suggest(req.get("text", ""), req.get("f"), lang)}

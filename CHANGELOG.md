@@ -16,9 +16,11 @@ Fixes from the peer retest of 1.12.17, including the real cause of the slow Medi
 
 - **The search box no longer drops the whole catalog on every typing pause.**
   - `at_suggest` (search-box autocomplete) and `col_peek` (collection hover) were missing from the read-only action list, so each one invalidated the catalog and the next query paid a full rebuild. The retest measured 4.5–9 s per pause on the PC with 1.12.15.
-  - Both are now read-only, as is `at_tax_list`. The list was audited (`tests/ilib_readonly_check.py` runs the real `plugin.py` handler).
+  - Both are now read-only, as is `at_tax_list`. The list was audited (`tests/ilib_readonly_check.py` runs the real `plugin.py` handler, including a real `at_tax_list` call).
+  - `at_tax_list` no longer invalidates the catalog: it was already on the read-only list, but `_autotag` still called `invalidate()` for every `at_tax_*` action (peer retest of 1.12.18).
   - Simulated ML inside WanGP, typing "esth" with a 5 s rebuild: results 10.2 s → 0.26 s, 20 thumbnails 15.6 s → 0.40 s.
 - **Media Library inside WanGP: read-only actions call `/reflib/api` directly** (the same handler, served in a thread pool) when it answers. Thumbnails get their own lane instead of waiting one at a time behind query, facets and suggestions on the single Gradio fast channel.
+  - Direct replies go through `handleToast`, same as the Gradio channel, so errors, messages and `changed` events are not silent (a failed "Browse…" in the add-folder picker was the retest case).
   - If `/reflib/api` doesn't answer, it falls back to the Gradio channel. `form_busy` always uses Gradio.
   - A single network error, such as a keep-alive connection the server closed just as the request went out, is retried once directly instead of switching to Gradio. After a real fallback it checks `/reflib/api` again 5 s later.
   - Set `localStorage.reflib_direct_api = "0"` to turn it off.
@@ -36,6 +38,7 @@ Fixes from the peer retest of 1.12.17, including the real cause of the slow Medi
   - `tests/ilib_readonly_check.py` (run by `test_ilib_readonly.py`; fails on 1.12.17);
   - `catalog_race_check.py thumbs_budget`;
   - `test_browser_ml_search.mjs` (simulated WanGP bridge: direct API, fallback, cancelled keystrokes; `MEASURE=1 INVAL=1` for the before/after timings);
+  - `test_browser_ml_toast.mjs` (embedded ML: a browse error toasts once on the direct path and on the Gradio fallback);
   - IME, dead-key, Esc and persona cases in `test_browser_tagcomplete.mjs` (both UIs);
   - failure-path and supersede cases in `test_thumb_queue.mjs`;
   - `test_tag_complete.mjs`.

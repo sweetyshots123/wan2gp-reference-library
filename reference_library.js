@@ -968,6 +968,7 @@
                     e => { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { direct: true }); })
               .then(data => {
                   if (data && data.v && data.v !== VERSION) staleTab(data.v);
+                  if (direct) handleToast(data);   // what bridgeResponse did on the Gradio channel: error / message toasts, change events
                   return data;
               });
             if (sched.lanes) return sched.lanes.enqueue(req.action, run, prio, sup);

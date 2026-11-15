@@ -1,5 +1,6 @@
 """1.12.18: read-only library actions must not drop the catalog (retest of 1.12.17: at_suggest / col_peek invalidated
-it, so every search-box pause made the next query rebuild everything). Synthetic temp library only.
+it, so every search-box pause made the next query rebuild everything).
+Also calls at_tax_list: being in ILIB_READONLY is not enough if _autotag still invalidates (1.12.18 retest). Synthetic temp library only.
 Runs the REAL plugin.py `ilib` / `_autotag` methods (extracted with ast: no Gradio / WanGP needed) on the real core.
 python3 tests/ilib_readonly_check.py [path/to/plugin.py]"""
 import ast, hashlib, json, os, sys, tempfile, traceback
@@ -33,6 +34,12 @@ ns = {"json": json, "traceback": traceback, "gr": SimpleNamespace(Request=object
       "LANGS": ("en", "es"), "TEXT": {"en": {}, "es": {}}, "tr": lambda lang, key, **k: key, "PLUGIN_VERSION": "test",
       "_actions": SimpleNamespace(has=lambda a: False), "autotag_service": lambda: SimpleNamespace(),
       "storage_error_text": lambda lang, e: str(e)}
+# relative "from .reflib_core import …" inside the extracted methods needs a package; use the same modules from sys.path
+for n in ast.walk(mod):
+    if isinstance(n, ast.ImportFrom) and n.level == 1 and (n.module or "").startswith("reflib_core"):
+        n.level = 0
+from reflib_core import taxonomy as _tx_
+ns["_taxonomy"] = _tx_
 exec(compile(ast.fix_missing_locations(mod), "plugin_ilib", "exec"), ns)
 H = ns["Harness"]
 H._lang = lambda self, b=None: "es"
@@ -52,8 +59,8 @@ def call(action, **kw):
 
 bad = []
 call("query", f={}, offset=0, limit=50)
-for action, kw in [("at_suggest", {"text": "an", "f": {}}), ("at_suggest", {"text": "est", "f": {}}), ("col_peek", {"label": "nada"}),
-                   ("thumbs", {"hashes": []}), ("query", {"f": {}, "offset": 0, "limit": 50})]:
+for action, kw in [("at_tax_list", {}), ("at_suggest", {"text": "an", "f": {}}), ("at_suggest", {"text": "est", "f": {}}),
+                   ("col_peek", {"label": "nada"}), ("thumbs", {"hashes": []}), ("query", {"f": {}, "offset": 0, "limit": 50})]:
     e0, b0 = L._cat["epoch"], builds[0]
     r = call(action, **kw)
     call("query", f={}, offset=0, limit=50)   # the next query must not rebuild
