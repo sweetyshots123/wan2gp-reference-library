@@ -1367,17 +1367,18 @@
         if (!main) return [];
         const vg = main.querySelector(".reflib-ib-vgrid");
         const top = main.scrollTop - vg.offsetTop, h = main.clientHeight, margin = 200;
-        const now = Date.now(), out = [];
+        const now = Date.now(), ent = [];
         for (const [idx, el] of ilib.cards) {
             const hsh = el.dataset.hash;
             if (!hsh || ilib.thumbs.has(hsh) || (thumbRetry.get(hsh) || 0) > now) continue;
             const y = parseFloat(el.style.top);
-            if (y + ilib.lay.ch < top - margin || y > top + h + margin) continue;
-            const vis = y + ilib.lay.ch >= top && y <= top + h;
-            out.push([hsh, vis ? 0 : 1, y, idx]);
+            ent.push({ hash: hsh, top: y, bottom: y + ilib.lay.ch, order: idx });
         }
-        out.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[3] - b[3]);
-        return out.map(x => x[0]);
+        // 1.12.17: same visible-first ranking as the Galería (shared ReflibNet.rankThumbs)
+        if (Net && Net.rankThumbs) return Net.rankThumbs(ent, { top, bottom: top + h }, margin);
+        return ent.filter(e => e.bottom >= top - margin && e.top <= top + h + margin)
+            .sort((a, b) => ((a.bottom >= top && a.top <= top + h) ? 0 : 1) - ((b.bottom >= top && b.top <= top + h) ? 0 : 1) || a.top - b.top || a.order - b.order)
+            .map(e => e.hash);
     }
     function queueThumbs() { if (!thumbFlush && !thumbBusy) thumbFlush = setTimeout(flushThumbs, 16); }
     function putThumb(h) {
@@ -2305,7 +2306,7 @@
               ${n ? `<button type="button" class="reflib-ib-btn" data-act="selnone">${esc(it("sel_clear"))}</button>` + extHtml("selbar", n) : ""}
               <span class="reflib-ib-spacer"></span>
               ${n ? `<span class="reflib-ib-seltags">${(inf.tags || []).map(tg => `<span class="reflib-ib-chip static">${esc(tg)}<button type="button" data-act="untag" data-tag="${esc(tg)}" title="${esc(it("tag_remove", { tag: tg }))}">×</button></span>`).join("")}</span>
-                <input type="text" class="reflib-ib-tagin" list="reflib-ib-taglist" placeholder="${esc(it("tag_ph"))}">
+                <input type="text" class="reflib-ib-tagin" list="reflib-ib-taglist" autocomplete="off" placeholder="${esc(it("tag_ph"))}">
                 <datalist id="reflib-ib-taglist">${d.tags.map(x => `<option value="${esc(x.tag)}"></option>`).join("")}</datalist>
                 <button type="button" class="reflib-ib-btn" data-act="tag">${esc(it("tag_add"))}</button>
                 <label class="reflib-ib-check" title="${esc(it("close_after"))}"><input type="checkbox" class="reflib-ib-closeafter" ${localStorage.getItem("reflib_ib_close_after") === "1" ? "checked" : ""}> ${esc(it("close_after"))}</label>
@@ -2316,7 +2317,11 @@
                 ${removeBtn}<button type="button" class="reflib-ib-btn reflib-ib-danger ${ilib.delArmed ? "armed" : ""}" data-act="del" ${canDelete ? "" : "disabled"} title="${esc(delTip)}">${esc(delLabel)}</button>` : ""}
             </div>${addPanel}`;
         const tagin = host.querySelector(".reflib-ib-tagin");
-        if (tagin) { tagin.value = tagVal; if (tagFocused) tagin.focus(); }
+        if (tagin) {
+            // 1.12.17: shared inline completion + ranked suggestions (tag_complete.js) instead of the native datalist
+            if (window.ReflibTagComplete) { tagin.removeAttribute("list"); window.ReflibTagComplete.attach(tagin, () => ((ilib.data && ilib.data.tags) || []).map(x => x.tag), { key: "ml-tag" }); }
+            tagin.value = tagVal; if (tagFocused) tagin.focus();
+        }
         const nn = host.querySelector(".reflib-ib-newname");
         if (nn && nameVal) nn.value = nameVal;
     }
@@ -2362,7 +2367,11 @@
                 return;
             }
             pollLastDone = -1;
-            if ((pollWasRunning || (st.seq != null && st.seq !== ilib.scanSeq)) && ilib.open) refreshData();   // also scans too quick to be seen running
+            // also scans too quick to be seen running; 1.12.17: shared ReflibNet.indexRefresh ("full" when indexing ends)
+            const mode = Net && Net.indexRefresh ? Net.indexRefresh({ was: pollWasRunning, running: false, revChanged: st.seq != null && st.seq !== ilib.scanSeq })
+                : ((pollWasRunning || (st.seq != null && st.seq !== ilib.scanSeq)) ? "full" : "none");
+            if (mode !== "none") window.__mlIndexMode = mode;   // tests
+            if (mode === "full" && ilib.open) refreshData();
             ilib.scanSeq = st.seq;
             pollWasRunning = false;
             if (pollAnnounce && r.scan_message) toast(r.scan_message, st.missing && st.missing.length ? "error" : "ok");

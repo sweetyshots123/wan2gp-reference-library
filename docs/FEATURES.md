@@ -6,6 +6,14 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.17 — Indexing races fixed, thumbnails after a long scroll, tag autocomplete
+
+- Server: catalog edit epoch (`_cat["epoch"]` / `data_epoch`), bumped by `invalidate()`, `_patch_remove`, `_patch_tags` and `_patch_cols`. The previous catalog is served while indexing only if `data_epoch == epoch`, and an older in-flight build lands with `key=None`. The forced `_missing_recheck` waits for an in-flight background pass. Sidecar names are compared via `os.path.normcase` (`_candidates`, `origin._dir_names`).
+- Clients: `ReflibNet.indexRefresh({was, running, revChanged})` returns "full", "scan" or "none". Galería poll (`wasScan` ref) → `refresh()` / `refreshScan()`; ML `pollScan` → `refreshData()` when indexing ends. Test hooks: `window.__galIndexMode` and `window.__mlIndexMode`.
+- Thumbnails: `ReflibNet.rankThumbs(entries, view, margin)` and `createThumbQueue({send, batch, inflight, pos, view, margin, blocked})` (pull-based, visible first, unmounted tiles dropped), plus a `th` lane in `createLanes` (2 at a time). Galería `wantThumb(hash, el, cb)` returns `release`, and `Thumb` passes its element; test hook `window.__thumbQ`. ML `wantedThumbs()` uses `rankThumbs`.
+- Tag autocomplete: `tag_complete.js` (`ReflibTagComplete.rank / completion / inline / accept / attach`), loaded in the plugin's shared JS tuple and imported by the Galería. Wired on the Galería EditPanel (`input.tagin`, key "gal-tag") and the ML footer (`.reflib-ib-tagin`, key "ml-tag").
+- Tests: `python3 tests/catalog_race_check.py [case]`, `node tests/test_browser_thumbs.mjs`, `node tests/test_browser_tagcomplete.mjs`, `node tests/test_browser_indexing.mjs`; bench `python3 tests/bench_catalog_scan.py 23000 2300 .` (scan marked running).
+
 ## 1.12.16 — Fast catalog while indexing
 
 - Server: `imagelib.catalog()` single flight (`_cat_build`) + stale-while-indexing (only when the key differs in the folders index / missing re-check and a scan runs); `_catalog_build` parses the folders index once; `forget.is_missing(i, known, gone)` uses the scan + background re-check (`_missing_recheck`, `MISSING_RECHECK_S = 60`, `missing_recheck_now()`); `SCAN_COMMIT_SECONDS = 10`; scan stores `side` (AI sidecar) from its listing, `origin.prime_sidecars`, fallback one listing per directory; `query()` passes the catalog to `_light`.
@@ -27,7 +35,7 @@
 - All node tests: `node --test tests/*.mjs` (the glob is needed: Node's default pattern does not match `test_*.mjs`). Each file also runs alone with `node tests/<file>.mjs`.
 - Python: `pytest -q tests/` (in an env with the plugin deps; `test_videofaces` needs `cv2`).
 - Galería build: `cd gallery && npm run build`.
-- Node test files (19): `bench_viewer_priority.mjs`, `test_browser_capture.mjs` (headless Chrome + `tests/browser/` synthetic mock; skips without google-chrome/ffmpeg/dist), `test_capture_stay_gallery.mjs`, `test_capture_stay_ml.mjs`, `test_faces_overlay.mjs`, `test_frame_capture_rules.mjs`, `test_fullscreen_rules.mjs`, `test_nav_paths.mjs`, `test_person_match.mjs`, `test_play_intent.mjs`, `test_playback_rules.mjs`, `test_progressive_media.mjs`, `test_request_priority.mjs`, `test_review_rules.mjs`, `test_selection_rules.mjs`, `test_stale_bar.mjs`, `test_standalone_rules.mjs`, `test_start_picker.mjs`, `test_wheel_rules.mjs`.
+- Node test files (26; the browser ones use headless Chrome + the synthetic mock in `tests/browser/` and skip without google-chrome / ffmpeg / dist): `bench_viewer_priority.mjs`, `test_browser_capture.mjs`, `test_browser_indexing.mjs`, `test_browser_tagcomplete.mjs`, `test_browser_thumbs.mjs`, `test_browser_vbad.mjs`, `test_capture_stay_gallery.mjs`, `test_capture_stay_ml.mjs`, `test_faces_overlay.mjs`, `test_frame_capture_rules.mjs`, `test_fullscreen_rules.mjs`, `test_nav_paths.mjs`, `test_person_match.mjs`, `test_play_intent.mjs`, `test_playback_rules.mjs`, `test_progressive_media.mjs`, `test_request_priority.mjs`, `test_review_rules.mjs`, `test_scan_refresh_rules.mjs`, `test_selection_rules.mjs`, `test_stale_bar.mjs`, `test_standalone_rules.mjs`, `test_start_picker.mjs`, `test_tag_complete.mjs`, `test_thumb_queue.mjs`, `test_wheel_rules.mjs`.
 
 ## 1.12.13 — Frame capture stays on the video (Galería fix, ML parity)
 

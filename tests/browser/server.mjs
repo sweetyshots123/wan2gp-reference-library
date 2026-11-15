@@ -7,7 +7,7 @@ const QDELAY = +(process.env.QDELAY || 150);
 let items, rev, seq;
 let scanning = false, scanDone = 0;   // 1.12.16: simulated folder indexing (scan_status / open / list report it)
 const scanSt = () => ({ running: scanning, done: scanning ? ++scanDone : 0, total: 1000, path: "/synthetic/photos", folder_id: "", seq: 1, missing: [], queued: 0 });
-function reset(n = 300) {
+function reset(n = +(process.env.N_ITEMS || 300)) {   // 1.12.17: N_ITEMS for the big-scroll thumbnail test
   items = []; rev = 1; seq = 0;
   for (let i = 0; i < n; i++) {
     const video = i % 5 === 0 || i === 10 || i === 119 || i === 125;
@@ -22,11 +22,14 @@ const BAD = new Set((process.env.BAD_HASHES || "").split(",").filter(Boolean)); 
 const sorted = (f) => { let a = items.slice(); if (f && f.kind === "video") a = a.filter((x) => x.kind === "video");
   if (f && Array.isArray(f.kinds) && f.kinds.length) a = a.filter((x) => f.kinds.includes(x.kind));
   const s = (f && f.sort) || "date_desc"; a.sort((x, y) => s === "date_asc" ? x.added - y.added : y.added - x.added); return a; };
-const meta = () => ({ rev, total: items.length, collections: [], tags: [], folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } });
+const MOCK_TAGS = (process.env.MOCK_TAGS || "").split(",").filter(Boolean);   // 1.12.17: synthetic tags for the autocomplete test
+const meta = () => ({ rev, total: items.length, collections: [], tags: MOCK_TAGS.map((tag, i) => ({ tag, n: 100 - i })), folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = [];
+const THUMB_MS = +(process.env.THUMB_MS || 0), THUMB_CONC = +(process.env.THUMB_CONC || 2); let thumbBusy = 0; const thumbLog = []; const tagLog = [];
 async function api(b) {
   const a = b.action; log.push(a + (a === "index_of" ? ":" + b.hash : ""));
+  if (a === "tag") tagLog.push(b.add || []);
   switch (a) {
     case "list": return { ok: true, ...meta(), meta: meta(), scan: scanSt() };
     case "scan_status": return { ok: true, scan: scanSt() };
@@ -35,7 +38,10 @@ async function api(b) {
       if (b.meta) Object.assign(out, meta(), { meta: meta(), scan: { running: scanning, done: scanDone, total: 1000, seq: 1, missing: [] } }); return out; }
     case "index_of": { await sleep(QDELAY); return { ok: true, index: sorted(b.f).findIndex((x) => x.hash === b.hash) }; }
     case "media_url": { const it = items.find((x) => x.hash === b.hash); return { ok: true, url: it && it.kind === "video" ? (BAD.has(b.hash) ? "/media/bad.mp4?h=" : "/media/clip.webm?h=") + b.hash : "/media/img.png?h=" + b.hash }; }
-    case "thumbs": return { ok: true, thumbs: Object.fromEntries((b.hashes || []).map((h) => [h, "/media/img.png?t=" + h])), pending: [] };
+    case "thumbs": {   // 1.12.17: THUMB_MS per hash, THUMB_CONC server workers (simulated slow thumbnail generation)
+      const hs = b.hashes || []; thumbLog.push(...hs);
+      if (THUMB_MS) { while (thumbBusy >= THUMB_CONC) await sleep(5); thumbBusy++; try { await sleep(THUMB_MS * hs.length); } finally { thumbBusy--; } }
+      return { ok: true, thumbs: Object.fromEntries((b.hashes || []).map((h) => [h, "/media/img.png?t=" + h])), pending: [] }; }
     case "preview": { const it = items.find((x) => x.hash === b.hash) || {}; return { ok: true, image: { src: "/media/img.png?pv=" + b.hash, hash: b.hash, name: it.name, kind: it.kind, tags: [], collections: [], folders: [], files: [], added: it.added, in_pool: true, url: it.kind === "video" ? "/media/clip.webm?h=" + b.hash : undefined } }; }
     case "open": { const L = sorted(b.f); return { ok: true, meta: meta(), scan: scanSt(), default_collection: "", paused: false, v: VERSION, page: { items: L.slice(0, b.limit || 120), offset: 0, total: L.length, sections: null, kinds: meta().kinds } }; }
     case "playback_get": return { ok: true, pos: null, min_s: 300 };
@@ -62,6 +68,8 @@ http.createServer(async (req, res) => {
     else if (u.pathname === "/test/scan") { scanning = !!b.running; out = { ok: true }; }
     else if (u.pathname === "/test/add") { seq++; const h = "n" + String(seq).padStart(3, "0"); items.push({ hash: h, name: "new_" + seq + ".png", names: [], cols: [], pool: true, folders: [], tags: [], added: b.old ? 1 + seq : 3e6 + seq, kind: "image" }); rev++; out = { ok: true, hash: h }; }
     else if (u.pathname === "/test/touch") { rev++; out = { ok: true }; }
+    else if (u.pathname === "/test/thumblog") { out = { ok: true, hashes: thumbLog.slice() }; if (b.clear) thumbLog.length = 0; }
+    else if (u.pathname === "/test/tags") { out = { ok: true, adds: tagLog.slice() }; }
     else if (u.pathname === "/test/log") { out = { ok: true, log: log.slice() }; }
     else if (u.pathname === "/test/remove") { items = items.filter((x) => x.hash !== b.hash); rev++; out = { ok: true }; }
     else if (u.pathname === "/test/order") { out = { ok: true, order: sorted(b.f).map((x) => x.hash), log: log.slice() }; }

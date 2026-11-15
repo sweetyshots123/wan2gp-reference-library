@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { thumb } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { thumbNow, wantThumb } from "./api";
 
 export interface Toast { id: number; text: string; kind?: string; action?: { label: string; run: () => void } }
 let push: (t: Omit<Toast, "id">) => void = () => {};
@@ -29,10 +29,17 @@ export function Toasts() {
   );
 }
 
+// 1.12.17: the tile's own element is passed so the queue can rank by on-screen position; unmount releases the request
 export function Thumb({ hash, className, alt }: { hash: string; className?: string; alt?: string }) {
-  const [src, setSrc] = useState<string>("");
-  useEffect(() => { let on = true; setSrc(""); thumb(hash).then((u) => on && setSrc(u)); return () => { on = false; }; }, [hash]);
-  return src ? <img className={className} src={src} alt={alt || ""} draggable={false} /> : <div className={`ph ${className || ""}`} />;
+  const [src, setSrc] = useState<string>(() => thumbNow(hash) || "");
+  const ph = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let on = true; const c = thumbNow(hash); setSrc(c || "");
+    if (c) return;
+    const release = wantThumb(hash, ph.current, (u) => { if (on) setSrc(u); });
+    return () => { on = false; release(); };
+  }, [hash]);
+  return src ? <img className={className} src={src} alt={alt || ""} draggable={false} /> : <div ref={ph} className={`ph ${className || ""}`} />;
 }
 
 export const fmtDur = (s?: number) => {

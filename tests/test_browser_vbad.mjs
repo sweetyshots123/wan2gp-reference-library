@@ -19,7 +19,9 @@ spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=duration=30:si
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=duration=10:size=320x180:rate=25", "-c:v", "mpeg4", "-tag:v", "mp4v", path.join(MEDIA, "bad.mp4")]);
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64", "-frames:v", "1", path.join(MEDIA, "img.png")]);
 const VERSION = JSON.parse(fs.readFileSync(path.join(root, "plugin_info.json"), "utf8")).version;
-const PORT = 18900 + Math.floor(Math.random() * 90), CDP = 9500 + Math.floor(Math.random() * 90), BASE = `http://127.0.0.1:${PORT}`;
+const { freePort } = await import(path.join(root, "tests/browser/ports.mjs"));
+const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) CDP = await freePort();
+const BASE = `http://127.0.0.1:${PORT}`;
 // video-only order (date_desc): v000 v005 c010 v015 v020 v025 …  → v005 and v020 are undecodable
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA, BAD_HASHES: "v005,v020" }, stdio: ["ignore", "pipe", "inherit"] });
 await new Promise((r) => srv.stdout.once("data", r));
@@ -40,9 +42,15 @@ async function open(idx) {
   if (!await waitFor(`document.querySelectorAll('figure.tile').length > 0`)) throw new Error("no tiles");
   await ev(`document.querySelectorAll('figure.tile')[${idx}].click(); true`, true);
   await waitFor(`!!document.querySelector('.viewer .vname')`);
-  await sleep(1500);
+  await waitFor(settled, 10000); await sleep(800);
 }
-const key = async (k, wait = 1800) => { await ev(`document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'${k}', bubbles:true})); true`); await sleep(wait); return st(); };
+// 1.12.17: after a step, wait until the new video has loaded or failed (parallel runs are slow), then let it settle
+const settled = `(() => { const v = ${GV}; return !!v && (v.readyState >= 2 || !!v.error); })()`;
+const key = async (k, wait = 1800) => { const n0 = (await st()).name;
+  await ev(`document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'${k}', bubbles:true})); true`);
+  if (wait < 200) { await sleep(wait); return st(); }
+  await waitFor(`(document.querySelector('.vname')?.textContent || null) !== ${JSON.stringify(n0)}`, 6000);
+  await waitFor(settled, 10000); await sleep(800); return st(); };
 const playsWell = (s) => s.ready >= 2 && s.err == null && s.w > 0;
 const fails = [];
 async function check(name, fn) { try { await fn(); console.log("  ok  " + name); } catch (e) { fails.push(name); console.log("  FAIL " + name + ": " + (e && e.message)); } }
@@ -75,6 +83,6 @@ await check("fast stepping through mp4v (no settle): no notice left on the playa
   await open(0); await key("ArrowRight", 30); const s = await key("ArrowRight", 1800);
   assert.ok(s.name.startsWith("clip_10.webm")); assert.ok(playsWell(s)); assert.equal(s.notice, false, JSON.stringify(s));
 });
-const ex = c.logs.filter((l) => l.startsWith("EXC")); if (ex.length) { console.log(ex.slice(0, 5)); fails.push("exceptions"); }
+const ex = c.logs.filter((l) => l.startsWith("EXC ")); if (ex.length) { console.log(ex.slice(0, 5)); fails.push("exceptions"); }
 console.log(fails.length ? `test_browser_vbad: ${fails.length} FAILED` : "test_browser_vbad: all OK");
 done(fails.length ? 1 : 0);

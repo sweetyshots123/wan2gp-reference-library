@@ -166,7 +166,7 @@ export default function App() {
 
   // filtro nuevo: se vacía y se pide la primera página (con las secciones del índice lateral)
   useEffect(() => {
-    if (!filter) { call("list").then(applyMeta); return; }
+    if (!filter) { call("list").then(applyMeta).catch(() => {}); return; }   // 1.12.17: no unhandled rejection
     const g = ++gen.current; store.current = new Map(); pages.current = new Map(); setTotal(0); setSections(null); setVer((v) => v + 1);
     fetchPage(0, g, true);
   }, [fkey]);
@@ -186,7 +186,7 @@ export default function App() {
 
   // recarga en el sitio (tras editar o si cambió algo en la Media Library): mismas páginas, sin vaciar
   const refresh = useCallback(() => {
-    if (!filter) { call("list").then(applyMeta); return; }
+    if (!filter) { call("list").then(applyMeta).catch(() => {}); return; }   // 1.12.17: no unhandled rejection
     const g = ++gen.current, loaded = [...pages.current.keys()];
     pages.current = new Map();
     fetchPage(0, g, true).then(() => loaded.filter((p) => p > 0).forEach((p) => fetchPage(p, g)));
@@ -195,6 +195,7 @@ export default function App() {
   // 1.12.16: while a folder is being indexed (shared ReflibNet.scanRefresh, same rule as the Media Library): page 0 +
   // counts at background priority; nothing changed on it -> counts only (other loaded pages untouched); otherwise it
   // is applied in place and the other loaded pages are re-fetched in the background, still shown meanwhile.
+  const wasScan = useRef(false);   // 1.12.17: indexing seen by the previous poll
   const refreshScan = useCallback(async () => {
     const NetR: any = (globalThis as any).ReflibNet;
     if (!filter || !NetR?.scanRefresh) { refresh(); return; }
@@ -218,7 +219,13 @@ export default function App() {
       if (document.hidden) return;
       try {
         const r = await call("list", {}, { bg: true }); const m = metaOf(r);
-        if (m && m.rev !== rev.current) { applyMeta(r); if (r.scan?.running) refreshScan(); else refresh(); }   // 1.12.16
+        // 1.12.17: shared ReflibNet.indexRefresh; the end of indexing always re-fetches every loaded page
+        const running = !!r.scan?.running, NetR: any = (globalThis as any).ReflibNet;
+        const mode = NetR?.indexRefresh ? NetR.indexRefresh({ was: wasScan.current, running, revChanged: !!m && m.rev !== rev.current })
+          : (m && m.rev !== rev.current ? (running ? "scan" : "full") : "none");
+        wasScan.current = running;
+        if (mode !== "none") (window as any).__galIndexMode = mode;   // tests
+        if (mode !== "none") { applyMeta(r); if (mode === "scan") refreshScan(); else refresh(); }
       } catch {}
     }, 5000);
     return () => window.clearInterval(t);

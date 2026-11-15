@@ -18,7 +18,9 @@ const MEDIA = path.join(tmp, "media"); fs.mkdirSync(MEDIA);
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=duration=30:size=320x180:rate=25", "-c:v", "libvpx", "-b:v", "300k", path.join(MEDIA, "clip.webm")]);
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64", "-frames:v", "1", path.join(MEDIA, "img.png")]);
 const VERSION = JSON.parse(fs.readFileSync(path.join(root, "plugin_info.json"), "utf8")).version;
-const PORT = 18900 + Math.floor(Math.random() * 90), CDP = 9400 + Math.floor(Math.random() * 90), BASE = `http://127.0.0.1:${PORT}`;
+const { freePort } = await import(path.join(root, "tests/browser/ports.mjs"));
+const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) CDP = await freePort();
+const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA }, stdio: ["ignore", "pipe", "inherit"] });
 await new Promise((r) => srv.stdout.once("data", r));
 process.env.CHROME_PROFILE = path.join(tmp, "chrome");
@@ -59,7 +61,9 @@ async function gOpen(idx, playing, fsOn) {
   if (fsOn) { await ev(`(() => { [...document.querySelectorAll('.vbtns button')].find((x) => x.textContent.includes('⛶')).click(); return true; })()`, true); await waitFor(`!!document.fullscreenElement`, 3000); }
   await sleep(playing ? 400 : 2600);   // user pause older than the 2 s intent window
 }
-const gNext = async () => { await ev(`document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true})); true`); await sleep(900); return gState(); };
+// 1.12.17: wait for the step to happen (count changes) instead of a fixed 900 ms (parallel runs are slower)
+const gNext = async () => { const c0 = (await gState()).count; await ev(`document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true})); true`);
+  await waitFor(`(document.querySelector('.vtop .count')?.textContent || null) !== ${JSON.stringify(c0)}`, 6000); await sleep(400); return gState(); };
 const exitFs = () => ev(`(document.fullscreenElement ? document.exitFullscreen() : Promise.resolve()).then(() => true)`);
 
 console.log("Galería");
@@ -77,14 +81,23 @@ await check("playing newest, burst ×3: stays and keeps playing", async () => {
   assert.equal(s.name, "vid_0.webm"); assert.equal(s.mark, "orig"); assert.equal(s.paused, false);
 });
 await check("open item removed elsewhere: pin released, no ghost, › goes to the right neighbour (BUG-4)", async () => {
-  await gOpen(5, false, false); await post("/test/remove", { hash: "v005" }); await sleep(6800);
-  const o = await order(), s = await gState();
+  await gOpen(5, false, false); await post("/test/remove", { hash: "v005" });
+  const o = await order();
+  // 1.12.17: the Galería notices on its 5 s poll; under parallel load allow up to 15 s (the assertions are unchanged)
+  await waitFor(`document.querySelector('.vname')?.textContent === ${JSON.stringify(nameOf(o[5]))}`, 15000); await sleep(300);
+  const s = await gState();
   assert.notEqual(s.name, "vid_5.webm", "ghost of the removed item");
   assert.equal(s.name, nameOf(o[5]));
   assert.equal((await gNext()).name, nameOf(o[6]));
 });
 
 // ---------------- Media Library (standalone)
+// 1.12.17: a lightbox step waits for the index to change (then settles) instead of a fixed 1.2 s
+async function lbStep(dir) {
+  const i0 = await ev(`document.querySelector('.reflib-ib-lightbox')?.dataset.idx || null`);
+  await ev(`(() => { document.querySelector('.reflib-ib-lightbox [data-lb="${dir}"]').click(); return true; })()`);
+  await waitFor(`(document.querySelector('.reflib-ib-lightbox')?.dataset.idx || null) !== ${JSON.stringify(i0)}`, 6000); await sleep(500);
+}
 const LBV = `document.querySelector('.reflib-ib-lightbox video.reflib-ib-lbmedia')`, PVV = `document.querySelector('.reflib-ib-pvmedia')`;
 const mState = (V) => ev(`(() => { const v = ${V}, box = document.querySelector('.reflib-ib-lightbox');
   return { idx: box ? box.dataset.idx : null, imgHash: box?.querySelector('img[data-hash]')?.dataset.hash || null, mark: v ? (v._mark || null) : null,
@@ -127,11 +140,11 @@ await check("lightbox on an item outside the loaded grid pages (idx 125): › / 
   await capture(LBV); await sleep(2500);
   const o = await order(), s = await mState(LBV), at = o.indexOf("v125");
   assert.equal(s.imgHash, "v125"); assert.equal(s.mark, "orig"); assert.equal(+s.idx, at);
-  await ev(`(() => { document.querySelector('.reflib-ib-lightbox [data-lb="next"]').click(); return true; })()`); await sleep(1200);
+  await lbStep("next");
   assert.equal((await mState(LBV)).imgHash, o[at + 1], "› skipped one");
-  await ev(`(() => { document.querySelector('.reflib-ib-lightbox [data-lb="prev"]').click(); return true; })()`); await sleep(1200);
+  await lbStep("prev");
   assert.equal((await mState(LBV)).imgHash, "v125", "‹ must return to the video");
-  await ev(`(() => { document.querySelector('.reflib-ib-lightbox [data-lb="prev"]').click(); return true; })()`); await sleep(1200);
+  await lbStep("prev");
   assert.equal((await mState(LBV)).imgHash, o[at - 1]);
 });
 await check("lightbox newest, playing, fullscreen: same <video>, ‹› neighbours", async () => {
@@ -143,7 +156,7 @@ await check("lightbox newest, playing, fullscreen: same <video>, ‹› neighbou
   assert.equal(s.imgHash, "v000"); assert.equal(s.mark, "orig"); assert.equal(s.fs, true); assert.equal(s.paused, false); assert.equal(+s.idx, o.indexOf("v000"));
   await exitFs();
 });
-const ex = c.logs.filter((l) => l.startsWith("EXC"));
+const ex = c.logs.filter((l) => l.startsWith("EXC "));
 if (ex.length) { console.log("page exceptions:", ex.slice(0, 5)); fails.push("page exceptions"); }
 console.log(fails.length ? "test_browser_capture: FAIL " + fails.join("; ") : "test_browser_capture: ok");
 done(fails.length ? 1 : 0);

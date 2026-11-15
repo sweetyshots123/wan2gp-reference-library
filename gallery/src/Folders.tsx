@@ -82,7 +82,7 @@ export default function Folders({ meta, node, onChanged }: { meta: Meta; node: N
       {running && (
         <div className="fscan">
           <span>{scan.paused ? "En pausa" : "Indexando"} {scan.path ? scan.path.split(/[\\/]/).pop() : ""} {scan.total ? `${scan.done}/${scan.total}` : ""}{scan.queued ? ` · ${scan.queued} en cola` : ""}</span>
-          <button onClick={async () => { const r: any = await call("pause_index", { paused: !scan.pause_set }); if (r.scan) setScan(r.scan); }}>{scan.pause_set ? "▶ Seguir" : "⏸ Pausa"}</button>
+          <button onClick={async () => { try { const r: any = await call("pause_index", { paused: !scan.pause_set }); if (r.scan) setScan(r.scan); } catch { /* 1.12.17 */ } }}>{scan.pause_set ? "▶ Seguir" : "⏸ Pausa"}</button>
         </div>
       )}
       {adding && <AddFolder onDone={(ok) => { setAdding(false); if (ok) { onChanged(); watchScan(); } }} />}

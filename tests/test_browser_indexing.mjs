@@ -18,7 +18,9 @@ const MEDIA = path.join(tmp, "media"); fs.mkdirSync(MEDIA);
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=160x90:rate=10", "-c:v", "libvpx", "-b:v", "100k", path.join(MEDIA, "clip.webm")]);
 spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64", "-frames:v", "1", path.join(MEDIA, "img.png")]);
 const VERSION = JSON.parse(fs.readFileSync(path.join(root, "plugin_info.json"), "utf8")).version;
-const PORT = 18800 + Math.floor(Math.random() * 90), CDP = 9600 + Math.floor(Math.random() * 90), BASE = `http://127.0.0.1:${PORT}`;
+const { freePort } = await import(path.join(root, "tests/browser/ports.mjs"));
+const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) CDP = await freePort();
+const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA, QDELAY: "60" }, stdio: ["ignore", "pipe", "inherit"] });
 await new Promise((r) => srv.stdout.once("data", r));
 process.env.CHROME_PROFILE = path.join(tmp, "chrome");
@@ -98,6 +100,39 @@ await check("indexing, new file at the top: applied in place, no wipe", async ()
   assert.equal(await ev(`window.__gw`), 0, "no wipe");
   assert.match(await ev(`document.querySelector('figure.tile')?.textContent || document.querySelector('figure.tile img')?.alt || ''`) + "", /new_|/);
 });
-const ex = c.logs.filter((l) => l.startsWith("EXC")); if (ex.length) { console.log(ex.slice(0, 5)); fails.push("exceptions"); }
+// 1.12.17 (retest repro gal_deep_stale): an item replaced deep in the list while indexing (total and page 0 unchanged
+// -> countsOnly), then the scan ends: the indexing->idle transition must re-fetch every loaded page.
+const gNames = async () => { const out = new Set(); for (let y = 0; y <= 30; y++) { const r = await ev(`(() => { window.scrollTo(0, ${y} * document.body.scrollHeight / 30); return [...document.querySelectorAll('figure.tile figcaption span')].map(e => e.textContent); })()`); await sleep(100); (r || []).forEach((n) => out.add(n)); } return out; };
+await check("indexing ends: deep tiles changed during the scan are refreshed (full refresh on indexing -> idle)", async () => {
+  await gBoot(true);
+  for (let k = 0; k < 6; k++) { await ev(`window.scrollTo(0, 999999), true`); await sleep(500); }
+  const before = await gNames();
+  assert.ok(before.has("img_251.png"), "deep tile loaded before: " + before.size);
+  await post("/test/remove", { hash: "p251" }); const add = await post("/test/add", { old: true });
+  const nm = "new_" + Number(add.hash.slice(1)) + ".png";
+  await waitFor(`!!window.__galScanRefresh`, 9000);
+  await post("/test/scan", { running: false });
+  await waitFor(`window.__galIndexMode === "full"`, 9000); await sleep(1500);
+  assert.equal(await ev(`window.__galIndexMode || null`), "full", "full refresh on indexing -> idle");
+  const after = await gNames();
+  assert.equal(after.has("img_251.png"), false, "the removed deep tile is gone");
+  assert.equal(after.has(nm), true, "the new old-dated tile is shown: " + nm);
+});
+console.log("Media Library: end of indexing");
+await check("ML: indexing ends -> shared indexRefresh 'full', removed deep card gone", async () => {
+  await post("/test/reset"); await post("/test/scan", { running: true });
+  await c.send("Page.navigate", { url: BASE + "/reflib/media-library/" });
+  if (!await waitFor(`document.querySelectorAll('.reflib-ib-card').length > 5`, 10000)) throw new Error("no cards");
+  const mHashes = async () => { const out = new Set(); for (let y = 0; y <= 40; y++) { const r = await ev(`(() => { const m = document.querySelector('.reflib-ib-main'); m.scrollTop = ${y} * m.scrollHeight / 40; return [...document.querySelectorAll('.reflib-ib-card')].map(e => e.dataset.hash || e.querySelector('[data-hash]')?.dataset.hash); })()`); await sleep(120); (r || []).forEach((n) => n && out.add(n)); } return out; };
+  const before = await mHashes();
+  assert.ok(before.has("p251"), "deep card seen before: " + before.size);
+  await post("/test/remove", { hash: "p251" }); await post("/test/add", { old: true });
+  await sleep(2500);
+  await post("/test/scan", { running: false });
+  await waitFor(`window.__mlIndexMode === "full"`, 9000); await sleep(1500);
+  assert.equal((await mHashes()).has("p251"), false, "the removed deep card is gone");
+  assert.equal(await ev(`window.__mlIndexMode || null`), "full", "ML full refresh on indexing -> idle");
+});
+const ex = c.logs.filter((l) => l.startsWith("EXC ")); if (ex.length) { console.log(ex.slice(0, 5)); fails.push("exceptions"); }
 console.log(fails.length ? `test_browser_indexing: ${fails.length} FAILED` : "test_browser_indexing: all OK");
 done(fails.length ? 1 : 0);

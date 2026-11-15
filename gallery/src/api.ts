@@ -1,5 +1,6 @@
 // Cliente del puente de la Media Library: cada llamada es exactamente una acción de plugin.ilib(...)
 import "../../request_priority.js";
+import "../../tag_complete.js";   // 1.12.17: shared tag autocomplete (ReflibTagComplete)
 const Net: any = (globalThis as any).ReflibNet;
 const viewSched = Net?.createScheduler?.() || null;
 const lanes = Net?.createLanes?.() || null;   // 1.12.16: preview / media in their own lane, never behind a slow query
@@ -82,47 +83,37 @@ export function metaOf(r: any): Meta | null {
 }
 
 // Miniaturas: el servidor acepta hasta 24 hashes por llamada; se agrupan y se cachean.
+// 1.12.17: shared pull-based queue (ReflibNet.createThumbQueue): each batch is picked when a slot frees, visible tiles
+// first (positions *now*), tiles scrolled past and unmounted are dropped before they are sent; 2 batches in flight in
+// their own lane. Before, a FIFO kept every tile ever mounted, so after a long scroll the screen waited for all of it.
 const thumbCache = new Map<string, string>();
-const waiting = new Map<string, ((u: string) => void)[]>();
-let queue: string[] = [];
-let timer: number | undefined;
+const thumbSend = async (hashes: string[]) => call<{ thumbs: Record<string, string>; pending: string[] }>("thumbs", { hashes });
+export const thumbQ = Net?.createThumbQueue?.({
+  send: thumbSend, batch: 24, inflight: 2,
+  pos: (el: Element) => (el.isConnected ? el.getBoundingClientRect() : null),
+  view: () => ({ top: 0, bottom: innerHeight }),
+  margin: () => innerHeight * 0.6,
+  blocked: () => !!thumbGate.blocked,
+}) || null;
+if (thumbQ && typeof window !== "undefined") {
+  let t = 0;   // positions changed: re-rank before the next batch
+  addEventListener("scroll", () => { if (!t) t = window.setTimeout(() => { t = 0; thumbQ.poke(); }, 60); }, { passive: true });
+  (window as any).__thumbQ = thumbQ;   // tests
+}
+
+/** Thumbnail for a tile: cb(url) once loaded; returns release() (call on unmount). */
+export function wantThumb(hash: string, el: Element | null, cb: (u: string) => void): () => void {
+  const c = thumbCache.get(hash);
+  if (c) { cb(c); return () => {}; }
+  if (thumbQ) return thumbQ.want(hash, el, (u: string) => { thumbCache.set(hash, u); cb(u); });
+  let on = true; thumbSend([hash]).then((r) => { const u = r.thumbs?.[hash]; if (u) { thumbCache.set(hash, u); if (on) cb(u); } }).catch(() => {});
+  return () => { on = false; };
+}
 
 export function thumb(hash: string): Promise<string> {
   const c = thumbCache.get(hash);
   if (c) return Promise.resolve(c);
-  return new Promise((res) => {
-    const w = waiting.get(hash);
-    if (w) { w.push(res); return; }
-    waiting.set(hash, [res]);
-    queue.push(hash);
-    if (timer === undefined) timer = window.setTimeout(flush, 30);
-  });
-}
-
-async function flush() {
-  timer = undefined;
-  if (thumbGate.blocked) {   // 1.12.9: defer off-screen thumb backlog while viewer/zoom is active
-    if (queue.length) timer = window.setTimeout(flush, 250);
-    return;
-  }
-  const batch = queue.splice(0, 24);
-  if (queue.length) timer = window.setTimeout(flush, thumbGate.blocked ? 250 : 40);
-  if (!batch.length) return;
-  try {
-    const r = await call<{ thumbs: Record<string, string>; pending: string[] }>("thumbs", { hashes: batch });
-    const retry: string[] = [];
-    for (const h of batch) {
-      const u = r.thumbs?.[h];
-      if (u) {
-        thumbCache.set(h, u);
-        (waiting.get(h) || []).forEach((f) => f(u));
-        waiting.delete(h);
-      } else retry.push(h);
-    }
-    if (retry.length) window.setTimeout(() => { queue.push(...retry); if (timer === undefined) timer = window.setTimeout(flush, 0); }, 1200);
-  } catch {
-    window.setTimeout(() => { queue.push(...batch); if (timer === undefined) timer = window.setTimeout(flush, 0); }, 2000);
-  }
+  return new Promise((res) => { wantThumb(hash, null, res); });
 }
 export const forgetThumb = (h: string) => thumbCache.delete(h);
 export const thumbNow = (h: string) => thumbCache.get(h) || null;   // 1.9.7: miniatura ya en caché (síncrona)

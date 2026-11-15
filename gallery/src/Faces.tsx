@@ -158,7 +158,7 @@ export function PersonHeader({ name, rev, after }: { name: string; rev: number; 
   const pid = p?.id;
   const [lim, setLim] = useState(40);
   useEffect(() => { if (pid) call("face_suggest", { person: pid, limit: lim + 1 }).then((r) => setSug(r.ok ? r.faces || [] : [])).catch(() => {}); else setSug([]); }, [pid, tick, lim]);
-  useEffect(() => { if (pid && showFaces) call("person_get", { person: pid, limit: 500 }).then((r) => r.ok && setFaces(r.faces || [])); }, [pid, showFaces, tick]);
+  useEffect(() => { if (pid && showFaces) call("person_get", { person: pid, limit: 500 }).then((r) => r.ok && setFaces(r.faces || [])).catch(() => {}); }, [pid, showFaces, tick]);
   if (!p) return null;
   const others = persons.filter((x) => x.id !== p.id);
   const fs = [...fsel];

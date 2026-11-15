@@ -6,11 +6,16 @@ export async function launch(port = 9333) {
   let ver; for (let i = 0; i < 50; i++) { try { ver = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (ver.length) break; } catch {} await sleep(200); }
   const pg = ver.find((t) => t.type === "page");
   const ws = new WebSocket(pg.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener("open", r));
-  let id = 0; const pend = new Map(); const logs = [];
+  let id = 0; const pend = new Map(); const logs = []; let navAt = 0;
+  // 1.12.17: a fetch the TEST aborted by navigating / reloading (page unload) rejects with "Failed to fetch"; that is
+  // logged as "EXC-NAV …" (not "EXC …") when it comes within 3 s of a navigation the test issued. Any other exception
+  // still counts.
+  const excLine = (txt) => (/Failed to fetch/.test(txt) && Date.now() - navAt < 3000 ? "EXC-NAV " : "EXC ") + txt;
   ws.addEventListener("message", (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); }
     else if (d.method === "Runtime.consoleAPICalled") logs.push(d.params.args.map((a) => a.value ?? a.description).join(" "));
-    else if (d.method === "Runtime.exceptionThrown") logs.push("EXC " + JSON.stringify(d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text)); });
-  const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+    else if (d.method === "Runtime.exceptionThrown") logs.push(excLine(JSON.stringify(d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text))); });
+  const send = (method, params = {}) => new Promise((r) => { if (method === "Page.navigate" || method === "Page.reload") navAt = Date.now();
+    const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
   await send("Runtime.enable"); await send("Page.enable");
   const ev = async (expr, gesture = false) => { const r = await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true, userGesture: gesture });
     if (r.result?.exceptionDetails) throw new Error("eval: " + JSON.stringify(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text)); return r.result?.result?.value; };

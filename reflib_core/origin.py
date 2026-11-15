@@ -84,11 +84,11 @@ def _auto(i: Dict[str, Any], ai_dirs: List[str]) -> bool:
             names = _dir_names.get(d)
             if names is None:
                 try:
-                    names = _dir_names[d] = frozenset(os.listdir(d))
+                    names = _dir_names[d] = frozenset(os.path.normcase(x) for x in os.listdir(d))   # 1.12.17: Windows case
                 except OSError:
                     names = _dir_names[d] = frozenset()
             b = os.path.splitext(n)[0]
-            _side[p] = (b + ".json") in names or (b + "_settings.json") in names
+            _side[p] = os.path.normcase(b + ".json") in names or os.path.normcase(b + "_settings.json") in names
         if _side[p]:
             return True
     return False

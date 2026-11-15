@@ -1,5 +1,5 @@
 import { ItemFaces } from "./Faces";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FAV, Item, Meta, call, isPerson, personName, personTag } from "./api";
 import { renameOne } from "./Manage";
 import DeleteDialog, { startDelete } from "./DeleteDialog";
@@ -20,7 +20,8 @@ interface Props {
 export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }: Props) {
   const hashes = items.map((i) => i.hash);
   const n = items.length;
-  const [tagIn, setTagIn] = useState("");
+  const tagRef = useRef<HTMLInputElement>(null);
+  const tagList = useRef<string[]>([]);
   const [plan, setPlan] = useState<any>(null);
   const [modelIn, setModelIn] = useState("");
   const [newCol, setNewCol] = useState("");
@@ -46,6 +47,8 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
     return m;
   }, [items]);
   const allTags = meta.tags.map((t) => t.tag);
+  tagList.current = allTags.filter((t) => !isPerson(t));
+  useEffect(() => { const TC = (globalThis as any).ReflibTagComplete; if (TC && tagRef.current) TC.attach(tagRef.current, () => tagList.current, { key: "gal-tag" }); });
   const models = [...tagCount.keys()].filter(isPerson);
   const plain = [...tagCount.keys()].filter((t) => !isPerson(t) && t.toLowerCase() !== FAV);
   const favN = items.filter((i) => i.tags.some((t) => t.toLowerCase() === FAV)).length;
@@ -113,9 +116,9 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
           ))}
           {!plain.length && <span className="muted">Sin etiquetas</span>}
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); addTags(splitTags(tagIn)); setTagIn(""); }}>
-          <input list="dl-tags" value={tagIn} onChange={(e) => setTagIn(e.target.value)} placeholder="Añadir etiquetas (separadas por comas)…" />
-          <datalist id="dl-tags">{allTags.filter((t) => !isPerson(t)).map((t) => <option key={t} value={t} />)}</datalist>
+        {/* 1.12.17: shared inline completion + ranked suggestions (tag_complete.js, same as the Media Library) */}
+        <form onSubmit={(e) => { e.preventDefault(); const el = tagRef.current; if (!el) return; addTags(splitTags(el.value)); el.value = ""; }}>
+          <input ref={tagRef} className="tagin" autoComplete="off" placeholder="Añadir etiquetas (separadas por comas)…" />
         </form>
       </section>
 

@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 await import(path.join(root, "request_priority.js"));
 const N = globalThis.ReflibNet;
-assert.equal(N.version, 2);
+assert.equal(N.version, 4);
+// indexRefresh (1.12.17): indexing -> idle is always a full refresh, even with the same rev
+assert.equal(N.indexRefresh({ was: true, running: false, revChanged: false }), "full");
+assert.equal(N.indexRefresh({ was: true, running: false, revChanged: true }), "full");
+assert.equal(N.indexRefresh({ was: false, running: false, revChanged: true }), "full");
+assert.equal(N.indexRefresh({ was: false, running: false, revChanged: false }), "none");
+assert.equal(N.indexRefresh({ was: true, running: true, revChanged: true }), "scan");
+assert.equal(N.indexRefresh({ was: false, running: true, revChanged: true }), "scan");
+assert.equal(N.indexRefresh({ was: true, running: true, revChanged: false }), "none");
+assert.equal(N.indexRefresh(), "none");
 // scanRefresh
 let d = N.scanRefresh({ ids: ["a", "b", "c"], total: 10, groups: null }, { ids: ["a", "b", "c"], total: 10, groups: null });
 assert.deepEqual(d, { countsOnly: true, applyPage: false, relayout: false, resize: false, refetchOthers: false });
@@ -20,7 +29,7 @@ d = N.scanRefresh({ ids: [undefined, "b"], total: 2 }, { ids: ["a", "b"], total:
 assert.equal(d.applyPage, true, "a page not loaded yet counts as changed");
 assert.equal(N.sameIds([], []), true); assert.equal(N.scanRefresh(null, null).countsOnly, true);
 // lanes: preview never waits behind a slow query; same-lane order still by priority
-assert.equal(N.lane("preview"), "pv"); assert.equal(N.lane("media_url"), "pv"); assert.equal(N.lane("query"), "q"); assert.equal(N.lane("thumbs"), "q");
+assert.equal(N.lane("preview"), "pv"); assert.equal(N.lane("media_url"), "pv"); assert.equal(N.lane("query"), "q"); assert.equal(N.lane("thumbs"), "th");   // 1.12.17: own lane
 const L = N.createLanes(), order = [];
 const slow = (name, ms) => () => new Promise((r) => setTimeout(() => { order.push(name); r(name); }, ms));
 const pq = L.enqueue("query", slow("query", 300), 10);

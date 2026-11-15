@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.12.17
+
+Fixes from the peer retest of 1.12.16 (speed unchanged), thumbnails after a long scroll, and tag autocomplete.
+
+- **No stale results after an edit during indexing.** With a scan running, a rebuild that started before an edit (forget, restore, remove folder, tags, collections…) could still be served after the edit. The catalog now has an edit counter (`epoch`) bumped by `invalidate()` and the in-place patches. The previous catalog is served only when nothing was edited since it was built, and a rebuild that started before an edit is stored as not current (the next request rebuilds).
+- **"Olvidar los no encontrados" while the background missing check runs** now waits for that pass to finish, then checks the disk itself. Before, it could return without the file that had just been deleted.
+- **Both UIs refresh fully when indexing ends** (shared `ReflibNet.indexRefresh`, request_priority.js v3). While indexing, a change deep in the list (total and first page unchanged) only refreshed the counts; at the end of the scan the Galería kept stale tiles further down. Now the indexing→idle transition re-fetches every loaded page in the Galería and the Media Library.
+- **Galería: thumbnails after a long or fast scroll.** The Galería kept every thumbnail request in a first-in, first-out queue, including every tile ever mounted. After a long scroll, the tiles on screen waited behind everything scrolled past. Synthetic bench (`tests/test_browser_thumbs.mjs`: 20 000 items, 12 ms per thumbnail, 2 server workers, a 2.5 s fling): visible thumbnails took 11.6–11.7 s before and take ~0.4 s now; ~1 100 thumbnails were requested before, ~500 now. The fix is a shared pull-based queue (`ReflibNet.createThumbQueue`, request_priority.js v4):
+  - each batch of 24 is picked when a slot frees, ranked on the positions at that moment: visible tiles first, then those near the viewport (`ReflibNet.rankThumbs`);
+  - a tile that unmounts before its turn is dropped and never sent;
+  - thumbnails have their own lane (2 batches at a time), so they no longer queue behind list queries, and queries no longer queue behind them;
+  - the Media Library already loaded visible-first (~0.4 s in the same test); it now uses the same `rankThumbs`.
+- **Tag autocomplete in both UIs** (shared `tag_complete.js`, `ReflibTagComplete`), in the Galería "Etiquetas" field and the Media Library tag field:
+  - while you type, the field completes inline with the first existing tag that starts with the typed text, ignoring case and accents. The completed part is selected, so typing on replaces it;
+  - Tab accepts the completion; Enter accepts it and adds the tag;
+  - Backspace or Delete never re-completes;
+  - the suggestion list (replacing the browser's datalist) ranks matches at the start of the tag first, then matches at the start of a word, then other matches (so "an" no longer mixes "fake company+" in among the first results). ↓/↑ plus Enter or Tab picks a suggestion, and Esc closes the list;
+  - each comma-separated tag completes on its own, and tags already in the field are skipped.
+- **Windows: AI sidecars matched without regard to case** (`Foto.png` + `foto.JSON`), in the scan and in the per-folder listing fallback (`os.path.normcase`).
+- Galería: missing `.catch` on a few background calls (list refresh, person_get, pause indexing).
+- Tests:
+  - `tests/catalog_race_check.py` (run by `tests/test_catalog_races.py`): the retest repros as permanent cases. They cover edits during indexing (forget, restore, remove folder), a late rebuild landing, the forced missing check racing the background pass (×2), case-insensitive sidecars, sidecar index migration and previewing a deleted file. The first seven fail on 1.12.16.
+  - `test_browser_indexing.mjs`: deep tiles / cards refreshed when indexing ends, in the Galería and the Media Library.
+  - `indexRefresh` cases in `test_scan_refresh_rules.mjs`.
+  - `test_thumb_queue.mjs` and `test_browser_thumbs.mjs` (time to visible thumbnails after a big scroll, both UIs; `THUMB_DIST=` measures another build).
+  - `test_tag_complete.mjs` and `test_browser_tagcomplete.mjs` (both UIs, synthetic tags).
+  - Mock server: `N_ITEMS`, `THUMB_MS` / `THUMB_CONC`, `MOCK_TAGS`, `/test/thumblog`, `/test/tags`. The browser tests use OS-assigned free ports.
+  - Browser tests under parallel runs: condition waits instead of fixed sleeps; "Failed to fetch" errors raised by a navigation the test itself started are logged separately (`EXC-NAV`), while every other page exception still fails the test.
+  - `bench_catalog_scan.py` marks the scan as running, so serving the previous catalog is measured.
+
 ## 1.12.16
 
 - **Faster search results and photos, above all while a folder is being indexed** (diagnosis in the slow-search report; synthetic bench `tests/bench_catalog_scan.py`, 23k files + 2.3k new, `isfile` slowed like Google Drive: cold rebuild + query 20.9 s → 0.5 s; queries during the scan p95 237 ms → 2 ms, max 34.5 s → 0.05–0.5 s).

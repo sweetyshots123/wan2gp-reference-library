@@ -407,7 +407,8 @@ def _patch_tags(new_tags: Dict[str, List[str]]) -> None:
             data["tags"] = sorted(tagc.values(), key=lambda x: (-x["count"], _fold(x["tag"])))
             _cat["rev"] = _cat.get("rev", 0) + 1
             data["rev"] = _cat["rev"]
-            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[])
+            _cat["epoch"] = _cat.get("epoch", 0) + 1   # 1.12.17: an edit; an older in-flight build never lands as current
+            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[], data_epoch=_cat["epoch"])
     except Exception as e:
         print(f"[Reference Library] tag patch failed, full rebuild: {e}")
         invalidate()
@@ -440,7 +441,8 @@ def _patch_cols(changes: Dict[str, Any]) -> None:
             data["n_unassigned"] = sum(1 for i in data["items"] if i["in_pool"] and not i["colids"])
             _cat["rev"] = _cat.get("rev", 0) + 1
             data["rev"] = _cat["rev"]
-            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[])
+            _cat["epoch"] = _cat.get("epoch", 0) + 1   # 1.12.17: an edit; an older in-flight build never lands as current
+            _cat.update(key=_index_key(), fkey=None, flist=None, lru=[], data_epoch=_cat["epoch"])
     except Exception as e:
         print(f"[Reference Library] collection patch -> full rebuild: {e!r}")
         invalidate()
@@ -1312,7 +1314,8 @@ def _candidates(folder: Dict[str, Any], with_stat: bool = False):
         except OSError:
             continue
         subdirs = []
-        names = {e.name for e in entries} if with_stat else ()   # 1.12.16: sidecars from this listing, no extra stat
+        nc = os.path.normcase   # 1.12.17: Windows names are case-insensitive (Foo.png + foo.json / .JSON)
+        names = {nc(e.name) for e in entries} if with_stat else ()   # 1.12.16: sidecars from this listing, no extra stat
         for e in entries:
             n = e.name
             if n.startswith("."):
@@ -1332,7 +1335,7 @@ def _candidates(folder: Dict[str, Any], with_stat: bool = False):
                 except OSError:
                     continue
                 b = os.path.splitext(n)[0]
-                out.append((e.path, st.st_size, st.st_mtime, 1 if (b + ".json" in names or b + "_settings.json" in names) else 0))
+                out.append((e.path, st.st_size, st.st_mtime, 1 if (nc(b + ".json") in names or nc(b + "_settings.json") in names) else 0))
             else:
                 out.append(e.path)
             if len(out) >= FOLDER_MAX_FILES:
@@ -1921,7 +1924,8 @@ def catalog() -> Dict[str, Any]:
         if _cat["key"] == key and _cat["data"] is not None:
             return _cat["data"]
         stale, skey = _cat["data"], _cat["key"]
-    can_stale = stale is not None and _scan_state.get("running") and _only_scan_changed(skey, key)
+        same_epoch = _cat.get("data_epoch") == _cat.get("epoch", 0)   # 1.12.17: no edit (invalidate / patch) since this data was built
+    can_stale = stale is not None and same_epoch and _scan_state.get("running") and _only_scan_changed(skey, key)
     if not _cat_build.acquire(blocking=not can_stale):
         return stale
     try:
@@ -1929,17 +1933,25 @@ def catalog() -> Dict[str, Any]:
         with _cat_lock:
             if _cat["key"] == key and _cat["data"] is not None:
                 return _cat["data"]
-        return _catalog_build(key)
+        with _cat_lock:
+            ep = _cat.get("epoch", 0)
+        return _catalog_build(key, ep)
     finally:
         _cat_build.release()
 
 
 def _missing_recheck(paths, force: bool = False) -> None:
     """Background: which watched-folder files are gone now. Throttled; one at a time; bumps the catalog key on change."""
-    with _miss_lock:
-        if _miss["running"] or (not force and time.time() - _miss["last"] < MISSING_RECHECK_S):
+    while True:   # 1.12.17: a forced check waits for a running background pass, then runs its own (exact disk state)
+        with _miss_lock:
+            if not _miss["running"]:
+                if not force and time.time() - _miss["last"] < MISSING_RECHECK_S:
+                    return
+                _miss["running"] = True
+                break
+        if not force:
             return
-        _miss["running"] = True
+        time.sleep(0.02)
 
     def run():
         try:
@@ -1970,7 +1982,7 @@ def missing_recheck_now() -> None:
     _missing_recheck(list(fdata["files"]), force=True)
 
 
-def _catalog_build(key) -> Dict[str, Any]:
+def _catalog_build(key, epoch=None) -> Dict[str, Any]:
     import sys as _sys
     intern = _sys.intern
     items = []
@@ -2004,12 +2016,12 @@ def _catalog_build(key) -> Dict[str, Any]:
         _og.resolve(items)
     except Exception as e:
         print(f"[Reference Library] origin: {e!r}")
-    data = _derive(items, key, fdata)
+    data = _derive(items, key, fdata, epoch)
     _missing_recheck(list(ffiles))
     return data
 
 
-def _derive(items: List[Dict[str, Any]], key, fdata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _derive(items: List[Dict[str, Any]], key, fdata: Optional[Dict[str, Any]] = None, epoch=None) -> Dict[str, Any]:
     """1.9.7: everything catalog() computes from the item list (tree, counts, tags, folders...). Cheap next to building the
     items (list_images + a stat per file), so a delete can drop items from the cached list and re-derive (_patch_remove)."""
     folders = list_folders(fdata)
@@ -2079,7 +2091,11 @@ def _derive(items: List[Dict[str, Any]], key, fdata: Optional[Dict[str, Any]] = 
     except Exception:
         pass
     with _cat_lock:
-        _cat.update(key=key, data=data, fkey=None, flist=None, lru=[])
+        cur = _cat.get("epoch", 0)
+        ep = cur if epoch is None else epoch
+        # 1.12.17: a build that started before an edit (invalidate / patch) still lands, but never as current: no key
+        # (the next call rebuilds) and its epoch is old (never served as the previous catalog either)
+        _cat.update(key=key if ep == cur else None, data=data, fkey=None, flist=None, lru=[], data_epoch=ep)
     return data
 
 
@@ -2096,7 +2112,10 @@ def _patch_remove(hashes: Iterable[str], was_fresh: bool) -> None:
         if data is None:
             return
         items = [i for i in data["items"] if i["hash"] not in hs and not (i.get("virtual") and i["virtual"].get("orig") in hs)]
-        _derive(items, _index_key())
+        with _cat_lock:   # 1.12.17: an in-flight rebuild that started before this edit is never served as stale
+            _cat["epoch"] = _cat.get("epoch", 0) + 1
+            ep = _cat["epoch"]
+        _derive(items, _index_key(), None, ep)
     except Exception as e:
         print(f"[Reference Library] remove patch -> full rebuild: {e!r}")
         invalidate()
@@ -2581,6 +2600,7 @@ def _origin_marks() -> Dict[str, str]:
 
 def invalidate() -> None:
     with _cat_lock:
+        _cat["epoch"] = _cat.get("epoch", 0) + 1
         _cat.update(key=None, data=None, fkey=None, flist=None, lru=[])
 
 
