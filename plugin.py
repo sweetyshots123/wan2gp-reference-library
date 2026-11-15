@@ -84,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.18"
+PLUGIN_VERSION = "1.12.19"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -3859,12 +3859,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     vid = _rapi.add_video(path, name=f"{base} (crop)", source="media-browser", meta={"source_hash": srch})
                     out = {"ok": bool(vid), "kind": "video", "video_id": vid} if vid else {"ok": False, "error": "not saved"}
             elif action == "media_url":   # 1.6.0: stream one video/audio in the browser (hover, viewer, details)
-                u = imagelib.media_url(str(req.get("hash") or ""))
+                # 1.12.19: media_play may start a cached transcode; it does not invalidate the catalog
+                out = imagelib.media_play(str(req.get("hash") or ""))
                 ve = (imagelib.entry_for(str(req.get("hash") or "")) or {}).get("virtual")
-                if not u and ve and not ve.get("broken"):   # 1.6.6: a virtual copy still rendering is not an error
-                    out = {"ok": True, "url": None, "rendering": True}
-                else:
-                    out = {"ok": bool(u), "url": u}
+                if not out.get("url") and ve and not ve.get("broken") and out.get("play") != "failed":
+                    out = dict(out, ok=True, url=None, rendering=True, play=out.get("play") or "preparing")
             elif action == "media_dur":   # 1.6.0: durations probed so far (background, throttled)
                 from .reflib_core import mediainfo
                 dd = {}

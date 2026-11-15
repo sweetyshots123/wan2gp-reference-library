@@ -12,6 +12,12 @@ type PB = {
   offerFor: (offer: { hash: string; t: number } | null, hash: string | null | undefined) => number | null;
   unplayable: (v: HTMLVideoElement | null) => boolean;
   UNPLAYABLE_EVENTS: string[];
+  PREPARE_POLL_MS: number;
+  playReply: (r: any) => any;
+  playLabels: (lang?: string) => { preparing: string; preparingTip: string; unplayable: string };
+  showPreparing: (s: any, v: HTMLVideoElement | null) => boolean;
+  showUnplayable: (s: any, v: HTMLVideoElement | null) => boolean;
+  watchPlay: (fetchReply: () => Promise<any>, onState: (s: any) => void, video?: HTMLVideoElement | null) => () => void;
 };
 export const Playback: PB = (globalThis as any).ReflibPlayback;
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.12.19
+
+Play MPEG-4 Part 2 (mp4v) and other browser-unplayable video codecs in both the Galería and the Media Library (embedded Gradio and standalone).
+
+- **Shared playable path** (`reflib_core/playable.py`, used by `imagelib.media_play` / the `media_url` action and `GET /reflib/play/{hash}`):
+  - Detects codecs the browser cannot play via ffprobe (mp4v / MPEG-4 Part 2 at minimum; also mpeg1/mpeg2, xvid/divx, wmv/vc1, hevc/h265, and other legacy codecs). HEVC is transcoded for Chrome consistency.
+  - Serves a browser-playable H.264 + AAC MP4 from a plugin-owned cache (`<plugin or $REFLIB_DATA_DIR>/cache/play`). The original is never modified, moved, or written next to. The cache is size-capped (default 4 GiB, `$REFLIB_PLAY_CACHE_MAX`) with LRU eviction, and concurrent requests share a single flight per file.
+  - Uses `h264_nvenc` when a short probe succeeds (e.g. an RTX 5090), otherwise `libx264`. Override with `$REFLIB_PLAY_ENCODER=libx264`.
+  - While the cache is building, `/reflib/play/{hash}` can stream a growing fragmented MP4; once finished the file is remuxed with `+faststart` for seeking and may be served via the Gradio file URL (Range + Vidosser). Frame capture still vouchers the original, so timing stays correct.
+  - Respects `ILIB_READONLY`: starting a transcode does not invalidate the catalog.
+- **UI:** a short «Preparando vídeo…» / “Preparing video…” state replaces the unsupported-codec notice while the copy is built. The notice is shown only if conversion fails (or the browser still cannot play). Shared rules in `playback_rules.js` (`playReply`, `playLabels`, `showPreparing`, `showUnplayable`, `watchPlay`); both UIs reuse them (lightbox, details, hover, Galería viewer). Seeking, resume-position, fullscreen navigation and frame-capture keep working; a src swap from the stream to the finished file keeps `currentTime`.
+- **Tests:** `tests/test_playable.py` (probe, classify, transcode + cache hit, single-flight, remux, eviction, catalog epoch, original untouched); `tests/test_playback_rules.mjs`; `tests/test_browser_playable.mjs` (headless Chrome: a real mp4v fixture transcoded by the Python module ends up playing, seeking works, cache is not next to the source). The existing `test_browser_vbad.mjs` still uses the Node mock that serves raw mp4v, so the notice-clearing regression stays valid.
+- **Trade-off:** first play of an unconverted file waits for ffmpeg to produce the first fMP4 boxes (typically a short delay; longer for big files / software encoding). Later plays hit the cache.
+
 ## 1.12.18
 
 Fixes from the peer retest of 1.12.17, including the real cause of the slow Media Library search with blank thumbnails.

@@ -121,9 +121,14 @@ export function thumb(hash: string): Promise<string> {
 export const forgetThumb = (h: string) => thumbCache.delete(h);
 export const thumbNow = (h: string) => thumbCache.get(h) || null;   // 1.9.7: miniatura ya en caché (síncrona)
 
-export async function mediaUrl(hash: string): Promise<{ url: string | null; rendering?: boolean }> {
+export type PlayState = {
+  url: string | null; play?: string; preparing?: boolean; failed?: boolean; ready?: boolean;
+  rendering?: boolean; codec?: string; progress?: number | null; error?: string | null;
+};
+export async function mediaUrl(hash: string): Promise<PlayState> {
   const r = await call("media_url", { hash }, { prio: Net?.itemPrio?.("current") });   // 1.12.18: before neighbour preloads
-  return { url: r.url || null, rendering: !!r.rendering };
+  const P: any = (globalThis as any).ReflibPlayback;
+  return P?.playReply ? P.playReply(r) : { url: r.url || null, rendering: !!r.rendering, play: r.play };
 }
 
 export async function upload(files: File[], extra: Record<string, any> = {}): Promise<Resp> {

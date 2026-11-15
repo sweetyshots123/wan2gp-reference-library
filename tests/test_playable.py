@@ -39,9 +39,16 @@ def _h(s):
 
 @pytest.fixture(autouse=True)
 def _isolate():
+    prev = os.environ.get("REFLIB_DATA_DIR")
+    os.environ["REFLIB_DATA_DIR"] = td
+    os.environ["REFLIB_PLAY_ENCODER"] = "libx264"
     P._reset_for_tests()
     yield
     P._reset_for_tests()
+    if prev is None:
+        os.environ.pop("REFLIB_DATA_DIR", None)
+    else:
+        os.environ["REFLIB_DATA_DIR"] = prev
 
 
 @need_ff

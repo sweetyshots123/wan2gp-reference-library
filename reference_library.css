@@ -699,6 +699,12 @@ input.reflib-ib-tagin { flex: 0 1 160px; min-width: 90px; }
 .reflib-ib-aplay.on { background: #16a34a; }
 .reflib-ib-hvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .15s; pointer-events: none; z-index: 1; background: #000; }
 .reflib-ib-hvid.on { opacity: 1; }
+
+/* 1.12.19: preparing / unsupported-codec overlays (lightbox, details, hover) */
+.reflib-ib-pv-img { position: relative; }
+.reflib-ib-vprep, .reflib-ib-vbad { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; background: rgba(0,0,0,.78); color: #f2f2f5; padding: 10px 14px; border-radius: 10px; text-align: center; max-width: 90%; font: 600 13px/1.3 system-ui,sans-serif; pointer-events: none; }
+.reflib-ib-vbad { pointer-events: auto; }
+.reflib-ib-thumb .reflib-ib-vprep, .reflib-ib-thumb .reflib-ib-vbad { font-size: 11px; padding: 6px 8px; max-width: 96%; }
 .reflib-ib-lbmedia { margin: auto; display: block; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px); }
 .reflib-ib-lightbox[data-kind="audio"] .reflib-ib-lbstage { flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
 .reflib-ib-lightbox[data-kind="audio"] .reflib-ib-lbstage img { margin: 0; max-height: 50vh; }

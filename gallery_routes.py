@@ -29,7 +29,7 @@ class _Req:   # minimal stand-in for gr.Request (ilib only reads request.client.
 
 def mount(app, dependencies=None) -> None:
     from fastapi import APIRouter, Request, UploadFile, File, Form
-    from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+    from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
     from starlette.concurrency import run_in_threadpool
 
     r = APIRouter(dependencies=dependencies or [])
@@ -83,6 +83,63 @@ def mount(app, dependencies=None) -> None:
             return Response("not found", status_code=404)
         return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
 
+
+    @r.get("/reflib/play/{digest}")
+    async def play_media(digest: str, request: Request):
+        """1.12.19: stream a browser-playable copy (cached H.264/AAC, or a growing fragmented MP4 while it builds)."""
+        import asyncio, mimetypes
+        from .reflib_core import imagelib, playable as _play
+        digest = str(digest or "")
+        src = imagelib.media_path(digest)
+        if not src or not os.path.isfile(src):
+            return Response("not found", status_code=404)
+        st = _play.ensure(digest, src, start=True)
+        if st.get("play") == "failed":
+            return JSONResponse({"ok": False, "error": st.get("error") or "transcode failed"}, status_code=415)
+        if st.get("play") == "original":
+            mt = mimetypes.guess_type(src)[0] or "video/mp4"
+            return FileResponse(src, media_type=mt, filename=os.path.basename(src))
+        # Wait until the cache has the first box (or is ready), so the <video> can start.
+        deadline = asyncio.get_event_loop().time() + 45
+        while asyncio.get_event_loop().time() < deadline:
+            cur = _play.status(digest, src)
+            if cur.get("play") == "failed":
+                return JSONResponse({"ok": False, "error": cur.get("error") or "transcode failed"}, status_code=415)
+            if cur.get("play") == "ready" and cur.get("path") and os.path.isfile(cur["path"]):
+                return FileResponse(cur["path"], media_type="video/mp4",
+                                    filename=_play.serve_name(digest, src),
+                                    headers={"Cache-Control": "private, max-age=3600"})
+            if _play.part_ready(digest, src, 256):
+                part = _play.play_file(digest, src)
+                if part:
+                    return StreamingResponse(_grow_play(part, digest, src, _play), media_type="video/mp4",
+                                             headers={"Cache-Control": "no-store"})
+            await asyncio.sleep(0.12)
+        return Response("preparing", status_code=425)
+
+    async def _grow_play(path, digest, src, _play):
+        import asyncio
+        fh = open(path, "rb")
+        try:
+            while True:
+                chunk = fh.read(64 * 1024)
+                if chunk:
+                    yield chunk
+                    continue
+                cur = _play.status(digest, src)
+                if cur.get("play") == "ready":
+                    rest = fh.read()
+                    if rest:
+                        yield rest
+                    break
+                if cur.get("play") == "failed":
+                    break
+                await asyncio.sleep(0.12)
+        finally:
+            try:
+                fh.close()
+            except OSError:
+                pass
 
     @r.get("/reflib/media-library")
     async def media_library_root():

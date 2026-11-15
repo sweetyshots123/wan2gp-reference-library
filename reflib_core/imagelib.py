@@ -807,20 +807,73 @@ def media_path(digest: str) -> Optional[str]:
     return next((c for c in [img["path"]] + list(img.get("files") or []) if c and os.path.isfile(c)), None)
 
 
+def _serve(path: Optional[str]) -> Optional[str]:
+    if not path or not SERVE_URL:
+        return None
+    try:
+        return SERVE_URL(path)
+    except Exception:
+        return None
+
+
 def media_url(digest: str) -> Optional[str]:
-    img = catalog()["by_hash"].get(str(digest or ""))
+    """URL the browser can stream. 1.12.19: for videos, a playable copy (see media_play)."""
+    return media_play(digest).get("url")
+
+
+def media_play(digest: str) -> Dict[str, Any]:
+    """1.12.19: {ok, url, play, codec, progress, rendering, error?} for one media hash.
+
+    play is 'original' (the file is already browser-safe), 'ready' (cached H.264/AAC copy),
+    'preparing' (a transcode/remux is running; url may already point at /reflib/play/<hash>)
+    or 'failed'. Never invalidates the catalog; never writes next to the user's file.
+    """
+    digest = str(digest or "")
+    img = catalog()["by_hash"].get(digest)
+    p = None
+    kind = (img or {}).get("kind") or ""
     if img and img.get("virtual"):   # 1.6.6: never block a hover / viewer on a video render
         from . import virtuals as _vc
         st = _vc.render_async(img["virtual"]["id"])
-        p = st.get("path") if st.get("state") == "ready" else None
+        if st.get("state") == "failed":
+            return {"ok": False, "url": None, "play": "failed", "rendering": False, "error": st.get("error")}
+        if st.get("state") != "ready":
+            return {"ok": True, "url": None, "play": "preparing", "rendering": True}
+        p = st.get("path")
     else:
         p = media_path(digest)
-    if not p or not SERVE_URL:
-        return None
-    try:
-        return SERVE_URL(p)
-    except Exception:
-        return None
+        kind = kind or (kind_of(p) if p else "")
+    kind = kind or (kind_of(p) if p else "")
+    if kind == "mask":
+        kind = "video"
+    if kind != "video":
+        u = _serve(p)
+        return {"ok": bool(u), "url": u, "play": "original" if u else "failed", "rendering": False}
+    if not p:
+        return {"ok": False, "url": None, "play": "failed", "error": "file not found", "rendering": False}
+    from . import playable as _play
+    _serve(p)   # vouch for the ORIGINAL too (frame capture / Vidosser owns())
+    st = _play.ensure(digest, p, start=True)
+    play = st.get("play") or "failed"
+    out = {"ok": play != "failed", "play": play, "rendering": play == "preparing",
+           "codec": st.get("codec") or "", "progress": st.get("progress") or 0.0,
+           "mode": st.get("mode") or "", "encoder": st.get("encoder") or ""}
+    if st.get("error"):
+        out["error"] = st["error"]
+    if play == "original":
+        out["url"] = _serve(p)
+        out["ok"] = bool(out["url"])
+        return out
+    if play == "failed":
+        out["url"] = None
+        return out
+    # ready / preparing: plugin route (handles a growing fMP4 and the finished cache)
+    out["url"] = f"/reflib/play/{digest}"
+    if play == "ready" and st.get("path"):
+        gradio = _serve(st["path"])   # Gradio URL once the copy is finished (Range + Vidosser)
+        if gradio:
+            out["url"] = gradio
+    return out
 
 
 def _virtual_preview(img: Dict[str, Any], size: int) -> Dict[str, Any]:
@@ -898,7 +951,15 @@ def _preview(img: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
                 for k in ("fps", "codec", "rate", "ch"):
                     if mi.get(k):
                         out[k] = mi[k]
-                out["url"] = media_url(img["hash"])
+                play = media_play(img["hash"])
+                out["url"] = play.get("url")
+                out["play"] = play.get("play")
+                if play.get("error"):
+                    out["play_error"] = play["error"]
+                if play.get("progress") is not None:
+                    out["progress"] = play["progress"]
+                if play.get("rendering"):
+                    out["rendering"] = True
                 try:
                     out["size"] = os.path.getsize(src)
                 except OSError:

@@ -2239,7 +2239,7 @@
         // <video> node (never detached: position, play state and fullscreen survive); only the rest is rebuilt
         const oldAside = host.querySelector("aside.reflib-ib-preview");
         const oldVid = oldAside && oldAside.querySelector("video.reflib-ib-pvmedia");
-        const keepVid = !!(oldVid && oldVid.dataset.hash === h && pmk === "video" && full && full.url && oldVid.getAttribute("src") === full.url);
+        const keepVid = !!(oldVid && oldVid.dataset.hash === h && pmk === "video" && full);
         const html = `<aside class="reflib-ib-preview k-${pmk}"><button type="button" class="reflib-ib-pv-x" data-act="pvclose" title="${esc(it("close"))}">×</button>
               <div class="reflib-ib-pv-img">${pmk === "video" && full && full.url ? `<video class="reflib-ib-pvmedia" data-hash="${esc(h)}" src="${esc(full.url)}" ${src ? `poster="${src}"` : ""} controls preload="metadata" playsinline></video>`
                   : (src ? `<img src="${src}" alt="">` : "") + (pmk === "audio" && full && full.url ? `<audio class="reflib-ib-pvmedia" src="${esc(full.url)}" controls preload="metadata"></audio>` : "")}</div>
@@ -2267,6 +2267,14 @@
                 if (before) oldAside.insertBefore(n, oldImg); else oldAside.appendChild(n);
             });
         } else host.innerHTML = html;
+        if (pmk === "video") {
+            const v = host.querySelector("video.reflib-ib-pvmedia");
+            const imgh = host.querySelector(".reflib-ib-pv-img");
+            if (v && full && full.url) applyPlaySrc(v, full.url);
+            const st = full ? { play: full.play, url: full.url, preparing: full.play === "preparing" || !!full.rendering, failed: full.play === "failed", error: full.play_error } : null;
+            paintPlayNotice(imgh, st, v);
+            if (v && !v._playWired) { v._playWired = true; wirePlayNotice(v, imgh, () => (ilib.pvSrc && ilib.pvSrc.hash === h) ? { play: ilib.pvSrc.play, url: ilib.pvSrc.url, preparing: ilib.pvSrc.play === "preparing" || !!ilib.pvSrc.rendering, failed: ilib.pvSrc.play === "failed", error: ilib.pvSrc.play_error } : st); }
+        }
         if (pmk === "image" && (!ilib.at.img || ilib.at.img.hash !== h)) loadAutoImage(h);
     }
     // ---- selection footer: the server summarises the selection (it can be "all 11 207 matching") ----
@@ -2807,6 +2815,7 @@
         for (const c of ilib.cards.values()) c.classList.toggle("cur", c.dataset.hash === hh);
         renderPreview();
         if (!viewPref().details) return Promise.resolve();   // 1.5.9: a click only selects; details load when the panel is on
+        if (ilib._pvPlayCancel) { try { ilib._pvPlayCancel(); } catch (e) {} ilib._pvPlayCancel = null; }
         return sendIlib({ action: "preview", hash: hh }).then(r => { if (r && r.image && ilib.preview === hh) { ilib.pvSrc = Object.assign({}, r.image, { hash: hh }); renderPreview();
             // 1.12.0-videofaces: jump to best matching frame when the row carries best_t
             const bt = (ilib.pvItem && ilib.pvItem.best_t != null) ? Number(ilib.pvItem.best_t) : NaN;
@@ -2816,6 +2825,15 @@
                     const go = () => { try { v.currentTime = Math.max(0, bt); } catch (e) {} };
                     if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
                 }
+            }
+            // 1.12.19: if this file still needs a transcode, poll and swap the preview <video> to the playable URL
+            const P = window.ReflibPlayback;
+            if (P && P.watchPlay && (r.image.play === "preparing" || r.image.rendering) && ((ilib.pvItem && ilib.pvItem.kind) || r.image.kind) === "video") {
+                ilib._pvPlayCancel = P.watchPlay(() => sendIlib({ action: "media_url", hash: hh }), (s) => {
+                    if (ilib.preview !== hh || !ilib.pvSrc || ilib.pvSrc.hash !== hh) return;
+                    ilib.pvSrc = Object.assign({}, ilib.pvSrc, { url: s.url, play: s.play, play_error: s.error, rendering: s.rendering });
+                    renderPreview();
+                });
             }
         } }).catch(() => {});
     }
@@ -2887,6 +2905,8 @@
         // aspect undistorted inside the kept box; the "load" listener re-fits with the new item's size.
         // 1.6.0: videos and audio play in the viewer (audio over its waveform)
         const stage = box.querySelector(".reflib-ib-lbstage");
+        if (box._playCancel) { try { box._playCancel(); } catch (e) {} box._playCancel = null; }
+        stage.querySelectorAll(".reflib-ib-vprep, .reflib-ib-vbad").forEach(n => n.remove());
         stage.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); } catch (e) {} });
         stage.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} m.remove(); });
         stage.querySelectorAll(".reflib-ib-resume").forEach(o => o.remove());   // 1.12.12: offers belong to the item being left
@@ -2899,17 +2919,28 @@
         if (img.complete && img.naturalWidth) lightboxFit(box);   // cached thumb → sized now, not at the next load
         if (mk !== "image") {
             stopAudio();
-            mediaUrl(it2.hash).then(u => {
-                if (!u || ilib.lightbox !== box || img.dataset.hash !== it2.hash) return;
-                const m = document.createElement(mk === "video" ? "video" : "audio");
-                m.className = "reflib-ib-lbmedia"; m.controls = true; m.autoplay = true; m.preload = "auto"; m.src = u;
-                if (mk === "video") { m.playsInline = true; if (th) m.poster = th; }
-                // 1.12.6: remember play-intent across Vidosser's pause-for-capture
-                if (window.ReflibFrameCapture) ReflibFrameCapture.trackIntent(m);   // 1.12.14: shared play intent
-                stage.appendChild(m);
-                if (mk === "video") wireResume(m, it2.hash, box);
-                else m.play().catch(() => {});
-            });
+            const still = () => ilib.lightbox === box && img.dataset.hash === it2.hash;
+            const applyLb = (s) => {
+                if (!still()) return;
+                let m = stage.querySelector(mk === "video" ? "video.reflib-ib-lbmedia" : "audio.reflib-ib-lbmedia");
+                paintPlayNotice(stage, s, m);
+                if (!s.url) return;
+                if (!m) {
+                    m = document.createElement(mk === "video" ? "video" : "audio");
+                    m.className = "reflib-ib-lbmedia"; m.controls = true; m.autoplay = true; m.preload = "auto";
+                    if (mk === "video") { m.playsInline = true; if (th) m.poster = th; }
+                    if (window.ReflibFrameCapture) ReflibFrameCapture.trackIntent(m);   // 1.12.14: shared play intent
+                    stage.appendChild(m);
+                    if (mk === "video") { wireResume(m, it2.hash, box); wirePlayNotice(m, stage, () => box._playSt || s); }
+                    else m.play().catch(() => {});
+                }
+                box._playSt = s;
+                applyPlaySrc(m, s.url);
+                if (mk !== "video") m.play().catch(() => {});
+            };
+            const P = window.ReflibPlayback;
+            if (P && P.watchPlay) box._playCancel = P.watchPlay(() => sendIlib({ action: "media_url", hash: it2.hash }), applyLb);
+            else mediaUrl(it2.hash).then(u => { if (u) applyLb({ url: u, play: "original" }); });
         }
         showPreview(it2.hash, idx);
         // 1.12.9: progressive — medium preview first (zooms immediately), then full media_url swap without resetting fit/1:1
@@ -2992,6 +3023,7 @@
     function closeLightbox(silent) {
         if (ilib.lightbox) {
             if (ilib._lbGate) { thumbGate.leaveViewer(); ilib._lbGate = false; queueThumbs(); }
+            if (ilib.lightbox._playCancel) { try { ilib.lightbox._playCancel(); } catch (e) {} ilib.lightbox._playCancel = null; }
             ilib.lightbox.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); m.pause(); } catch (e) {} });
             ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} });
             if (ilib.lightbox._fsOff) { try { ilib.lightbox._fsOff(); } catch (e) {} }
@@ -3252,13 +3284,67 @@
             + ogKindBar(k);   // 1.10.0
     }
     const murl = new Map();
-    function mediaUrl(h, tries = 0) {
-        if (murl.has(h)) return Promise.resolve(murl.get(h));
+    function playLab() {
+        const P = window.ReflibPlayback;
+        return (P && P.playLabels) ? P.playLabels(lang()) : { preparing: "Preparando vídeo…", preparingTip: "", unplayable: "Este navegador no puede reproducir este vídeo (códec no compatible, p. ej. mp4v / MPEG-4 Part 2)." };
+    }
+    function paintPlayNotice(host, s, video) {
+        if (!host) return;
+        host.querySelectorAll(".reflib-ib-vprep, .reflib-ib-vbad").forEach(n => n.remove());
+        const P = window.ReflibPlayback, lab = playLab();
+        if (P && P.showPreparing(s, video)) {
+            const d = document.createElement("div");
+            d.className = "reflib-ib-vprep"; d.setAttribute("role", "status");
+            d.textContent = lab.preparing; if (lab.preparingTip) d.title = lab.preparingTip;
+            host.appendChild(d);
+        } else if ((P && P.showUnplayable(s, video)) || (s && s.failed)) {
+            const d = document.createElement("div");
+            d.className = "reflib-ib-vbad"; d.setAttribute("role", "status");
+            d.textContent = lab.unplayable;
+            host.appendChild(d);
+        }
+    }
+    function wirePlayNotice(video, host, getState) {
+        if (!video || !window.ReflibPlayback) return () => {};
+        const P = window.ReflibPlayback;
+        const upd = () => paintPlayNotice(host, getState && getState(), video);
+        const evs = P.UNPLAYABLE_EVENTS || ["error", "emptied", "loadstart", "loadedmetadata", "loadeddata", "canplay", "playing"];
+        for (const e of evs) video.addEventListener(e, upd);
+        upd();
+        return () => { for (const e of evs) video.removeEventListener(e, upd); };
+    }
+    function applyPlaySrc(m, url) {
+        if (!m || !url) return;
+        const cur = m.getAttribute("src") || "";
+        if (cur === url) return;
+        const keep = cur && (m.currentTime || 0) > 0.05 ? { t: m.currentTime, paused: m.paused } : null;
+        m.src = url;
+        if (keep) {
+            const on = () => {
+                try { if (isFinite(keep.t)) m.currentTime = keep.t; } catch (e) {}
+                if (!keep.paused) m.play().catch(() => {});
+                m.removeEventListener("loadedmetadata", on);
+            };
+            m.addEventListener("loadedmetadata", on);
+        }
+    }
+    function mediaPlay(h) {
+        const cached = murl.get(h);
+        if (cached && cached.url && cached.play !== "preparing") return Promise.resolve(cached);
         return sendIlib({ action: "media_url", hash: h }).then(r => {
-            const u = r && r.ok ? r.url : null; if (u) murl.set(h, u);
-            if (!u && r && r.rendering && tries < 90) return new Promise(res => setTimeout(res, 1500)).then(() => mediaUrl(h, tries + 1));   // 1.6.6 virtual copy
-            return u;
-        }).catch(() => null);
+            const P = window.ReflibPlayback;
+            const s = P && P.playReply ? P.playReply(r) : { url: r && r.ok ? (r.url || null) : null, rendering: !!(r && r.rendering), play: (r && r.play) || ((r && r.url) ? "original" : "failed"), failed: !(r && (r.ok || r.url)), preparing: !!(r && r.rendering && !r.url) };
+            if (s.url && s.play !== "preparing") murl.set(h, s);
+            else murl.delete(h);
+            return s;
+        }).catch(() => ({ url: null, play: "failed", failed: true }));
+    }
+    function mediaUrl(h, tries = 0) {
+        return mediaPlay(h).then(s => {
+            if (s.url) return s.url;
+            if ((s.preparing || s.rendering) && tries < 90) return new Promise(res => setTimeout(res, s.preparing ? (window.ReflibPlayback && ReflibPlayback.PREPARE_POLL_MS) || 400 : 1500)).then(() => mediaUrl(h, tries + 1));   // 1.6.6 virtual copy / 1.12.19 transcode
+            return null;
+        });
     }
     function stopAudio() {
         if (ilib.audio) { try { ilib.audio.pause(); } catch (e) {} ilib.audio = null; }
@@ -3278,7 +3364,7 @@
     }
     function hoverWire(bg) {
         let timer = null, cur = null;
-        const clear = () => { clearTimeout(timer); timer = null; if (cur) { const v = cur.querySelector(".reflib-ib-hvid"); if (v) { try { v.pause(); } catch (e) {} v.remove(); } cur = null; } };
+        const clear = () => { clearTimeout(timer); timer = null; if (cur) { if (cur._playCancel) { try { cur._playCancel(); } catch (e) {} cur._playCancel = null; } const th = cur.querySelector(".reflib-ib-thumb"); if (th) th.querySelectorAll(".reflib-ib-vprep, .reflib-ib-vbad").forEach(n => n.remove()); const v = cur.querySelector(".reflib-ib-hvid"); if (v) { try { v.pause(); } catch (e) {} v.remove(); } cur = null; } };
         bg.addEventListener("mouseover", (e) => {
             const card = e.target.closest(".reflib-ib-card[data-kind='video'], .reflib-ib-card[data-kind='mask']");
             if (card === cur) return;
@@ -3287,14 +3373,25 @@
             cur = card;
             timer = setTimeout(() => {   // a short delay so sweeping across the grid starts nothing
                 const h = card.dataset.hash;
-                mediaUrl(h).then(u => {
-                    if (!u || cur !== card) return;
+                const applyH = (s) => {
+                    if (cur !== card) return;
                     const th = card.querySelector(".reflib-ib-thumb"); if (!th) return;
-                    const v = document.createElement("video");
-                    v.className = "reflib-ib-hvid"; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata"; v.src = u;
-                    v.addEventListener("loadeddata", () => v.classList.add("on"));
-                    th.appendChild(v); v.play().catch(() => {});
-                });
+                    let v = th.querySelector(".reflib-ib-hvid");
+                    paintPlayNotice(th, s, v);
+                    if (!s.url) return;
+                    if (!v) {
+                        v = document.createElement("video");
+                        v.className = "reflib-ib-hvid"; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata";
+                        v.addEventListener("loadeddata", () => v.classList.add("on"));
+                        th.appendChild(v);
+                        wirePlayNotice(v, th, () => s);
+                    }
+                    applyPlaySrc(v, s.url);
+                    v.play().catch(() => {});
+                };
+                const P = window.ReflibPlayback;
+                if (P && P.watchPlay) card._playCancel = P.watchPlay(() => sendIlib({ action: "media_url", hash: h }), applyH);
+                else mediaUrl(h).then(u => { if (u && cur === card) applyH({ url: u, play: "original" }); });
             }, 450);
         });
         bg.addEventListener("mouseleave", clear);

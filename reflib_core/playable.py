@@ -48,7 +48,9 @@ _encoder_name: Optional[str] = None
 
 
 def cache_dir() -> str:
-    return os.path.join(storage.PLUGIN_DIR, "cache", "play")
+    # Prefer the live env so tests (and a late configure) don't keep a PLUGIN_DIR frozen at import time.
+    root = os.environ.get("REFLIB_DATA_DIR") or storage.PLUGIN_DIR
+    return os.path.join(root, "cache", "play")
 
 
 def cache_max() -> int:
@@ -505,7 +507,7 @@ def _transcode(job: Dict[str, Any], src: str, info: Dict[str, Any], mode: str, p
         if r.returncode == 0 and os.path.isfile(tmp_final) and os.path.getsize(tmp_final) > 0:
             os.replace(tmp_final, final)
             try:
-                os.remove(part)
+                os.remove(part)   # may fail on Windows if the part is still being streamed; evict cleans it later
             except OSError:
                 pass
         else:

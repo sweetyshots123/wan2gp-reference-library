@@ -330,6 +330,7 @@ html{overflow-anchor:none}
 .versions button.link { display: flex; flex-direction: column; }
 .versions .vsub { font-size: 12px; }
 .vbad { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.85); padding: 16px 20px; border-radius: 10px; max-width: 420px; text-align: center; z-index: 5; }
+.vprep { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.72); padding: 12px 18px; border-radius: 10px; z-index: 5; font: 600 14px/1.3 system-ui,sans-serif; color: #f2f2f5; pointer-events: none; white-space: nowrap; }
 
 /* 1.12.7 resume offer */
 .vresume { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; z-index: 6; max-width: 92%; }

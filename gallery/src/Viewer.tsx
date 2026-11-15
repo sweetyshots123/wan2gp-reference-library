@@ -1,6 +1,6 @@
 import { takeSeek, segChips } from "./videoT";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from "./api";
+import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow, PlayState } from "./api";
 import { WheelStepper, normDelta, medium, loadFull, ViewerRules as VR } from "./viewerNav";
 import { viewerNet } from "./api";
 import "../../progressive_media.js";
@@ -31,7 +31,8 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
   const [panel, setPanel] = useState(() => localStorage.getItem("gal.panel") === "1");
   const [ve, setVe] = useState<VEdit | null>(null);
-  const [vbad, setVbad] = useState(false);   // 1.12.2: el navegador no puede reproducir este vídeo (p. ej. mp4v)
+  const [vbad, setVbad] = useState(false);   // 1.12.2 / 1.12.19: aviso solo si la conversión falló o el original no se puede reproducir
+  const [playSt, setPlaySt] = useState<PlayState | null>(null);
   const [offerSt, setOfferSt] = useState<{ hash: string; t: number } | null>(null);   // 1.12.7 / 1.12.12: oferta ligada a su hash
   const [settled, setSettled] = useState<string | null>(null);
   const panelIt = useRef<Item | null>(null);
@@ -74,16 +75,31 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   useEffect(() => {
     if (!it) return;
     let on = true, tries = 0, full: { p: Promise<boolean>; abort: () => void } | null = null, unhold: (() => void) | null = null;
-    setUrl(null); setZ(VR.navZoom()); setVe(null); setDraft(null);   // 1.12.17: shared rule (ML too): every item opens in Fit
+    setUrl(null); setZ(VR.navZoom()); setVe(null); setDraft(null); setPlaySt(null);   // 1.12.17: shared rule (ML too): every item opens in Fit
     // 1.12.18: the open item's original first: neighbour preloads wait until it has loaded (or failed / holdMs)
+    // 1.12.19: videos that need a transcode (mp4v, …) arrive as play=preparing with a /reflib/play URL; keep polling and swap to the finished file
     const load = () => { const p = mediaUrl(it.hash).then((r) => {
       if (!on) return;
-      setRendering(!!r.rendering);
+      setPlaySt(r);
+      setRendering(!!r.rendering || r.play === "preparing");
       if (r.url && (!it.kind || it.kind === "image")) {   // 1.9.7: decodificada antes de mostrarla (sin tirón)
         const f = loadFull(r.url); full = f;
         f.p.then((ok) => { if (on && ok) setUrl(r.url); });
-      } else if (r.url) setUrl(r.url);
-      else if (r.rendering && tries++ < 60) window.setTimeout(load, 1000);
+      } else if (r.url) {
+        const v = media.current as HTMLVideoElement | null;
+        const keep = v && v.tagName === "VIDEO" && v.getAttribute("src") && v.getAttribute("src") !== r.url && (v.currentTime || 0) > 0.05
+          ? { t: v.currentTime, paused: v.paused } : null;
+        setUrl(r.url);
+        if (keep && v) {
+          const onMeta = () => {
+            try { if (isFinite(keep.t)) v.currentTime = keep.t; } catch {}
+            if (!keep.paused) v.play()?.catch(() => {});
+            v.removeEventListener("loadedmetadata", onMeta);
+          };
+          v.addEventListener("loadedmetadata", onMeta);
+        }
+      }
+      if ((r.rendering || r.play === "preparing") && tries++ < 90) window.setTimeout(load, 400);
       return full?.p;
     }); if (!unhold && (!it.kind || it.kind === "image")) unhold = medium.hold(p); return p; };
     // 1.9.7: la resolución completa (y el panel de edición) solo cuando el índice se asienta; girando rápido
@@ -156,7 +172,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   useEffect(() => {
     const v = media.current as HTMLVideoElement | null;
     if (!v || v.tagName !== "VIDEO") { setVbad(false); return; }
-    const upd = () => setVbad(Playback ? Playback.unplayable(v) : !!v.error && (v.error.code === 3 || v.error.code === 4));
+    const upd = () => setVbad(Playback ? Playback.showUnplayable(playSt, v) : !!v.error && (v.error.code === 3 || v.error.code === 4));
     const evs = Playback?.UNPLAYABLE_EVENTS || ["error", "emptied", "loadstart", "loadedmetadata", "loadeddata", "canplay", "playing"];
     for (const e of evs) v.addEventListener(e, upd);
     upd();
@@ -423,12 +439,17 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
           )}
           {src && vbad && (kind === "video" || kind === "mask") && (
             <div className="vbad" onPointerDown={(e) => e.stopPropagation()}>
-              <p>Este navegador no puede reproducir este vídeo (códec no compatible, p. ej. mp4v / MPEG-4 Part 2).</p>
+              <p>{(Playback && Playback.playLabels(uiLang()).unplayable) || "Este navegador no puede reproducir este vídeo (códec no compatible, p. ej. mp4v / MPEG-4 Part 2)."}</p>
               <div className="row">
                 <button className="primary" onClick={() => act("open_file", { hash: it.hash }, () => {}, { quiet: true })}>▶ Abrir en reproductor externo</button>
                 <button onClick={() => act("reveal", { hash: it.hash }, () => {}, { quiet: true })}>📂 Mostrar en carpeta</button>
               </div>
               <p className="muted">Solo funciona en el mismo PC que WanGP.</p>
+            </div>
+          )}
+          {(kind === "video" || kind === "mask") && Playback && Playback.showPreparing(playSt, media.current as HTMLVideoElement | null) && (
+            <div className="vprep" role="status" onPointerDown={(e) => e.stopPropagation()} title={Playback.playLabels(uiLang()).preparingTip}>
+              {Playback.playLabels(uiLang()).preparing}
             </div>
           )}
           {src && kind === "video" && segChips(it).length > 0 && (
