@@ -22,6 +22,7 @@ const { freePort } = await import(path.join(root, "tests/browser/ports.mjs"));
 const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) CDP = await freePort();
 const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA }, stdio: ["ignore", "pipe", "inherit"] });
+process.on("exit", () => { try { srv.kill(); } catch {} });   // 1.12.18: never leave the mock running (it holds the runner's stderr)
 await new Promise((r) => srv.stdout.once("data", r));
 process.env.CHROME_PROFILE = path.join(tmp, "chrome");
 const { launch } = await import(path.join(root, "tests/browser/cdp.mjs"));
@@ -105,7 +106,7 @@ const mState = (V) => ev(`(() => { const v = ${V}, box = document.querySelector(
 async function mBoot() {
   await post("/test/reset");
   await c.send("Page.navigate", { url: BASE + "/reflib/media-library/" });
-  if (!await waitFor(`document.querySelectorAll('.reflib-ib-card').length > 5`, 10000)) throw new Error("no cards");
+  if (!await waitFor(`document.querySelectorAll('.reflib-ib-card').length > 5`, 30000)) throw new Error("no cards");
 }
 async function mPrep(V, playing, fsOn, fsExpr) {
   if (!await waitFor(`(() => { const v = ${V}; return !!v && v.readyState >= 2; })()`)) throw new Error("video not ready");

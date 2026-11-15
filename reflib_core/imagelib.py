@@ -627,13 +627,25 @@ def thumb(img: Dict[str, Any], size: int = 220) -> Optional[str]:
     return _img_data_uri(img["path"], size, os.path.join(_thumbs_dir(), img["hash"] + ".jpg"))
 
 
-def paths_for_hashes(hashes: Iterable[str]) -> Dict[str, List[str]]:
-    """Candidate source files per hash (collection/pool copies first), from the cached catalog (1.4.4)."""
+def _by_hash(stale_ok: bool = False) -> Dict[str, Any]:
+    """by_hash of the catalog; 1.12.18 `stale_ok`: the last built one if a rebuild is due (never waits for it)."""
+    if stale_ok:
+        with _cat_lock:
+            last = _cat.get("data") or _cat.get("prev")
+        if last is not None:
+            return last["by_hash"]
+    return catalog()["by_hash"]
+
+
+def paths_for_hashes(hashes: Iterable[str], stale_ok: bool = False) -> Dict[str, List[str]]:
+    """Candidate source files per hash (collection/pool copies first), from the cached catalog (1.4.4).
+    1.12.18 `stale_ok`: use the catalog already built even if a rebuild is due (thumbnail sources: a file's paths
+    rarely change, and a hash it doesn't know yet is reported as pending by thumbs_for, not as "no source")."""
     want = {h for h in hashes if _HASH_RE.match(str(h or ""))}
     out: Dict[str, List[str]] = {h: [] for h in want}
     if not want:
         return out
-    by = catalog()["by_hash"]
+    by = _by_hash(stale_ok)
     for h in want:
         i = by.get(h)
         if i:
@@ -671,8 +683,8 @@ def _media_thumb(src: str, cache: str, kind: str) -> Optional[str]:
         return None
 
 
-def _make_thumb(h: str, cands: List[str], size: int = 220) -> Optional[str]:
-    ent = catalog()["by_hash"].get(h)
+def _make_thumb(h: str, cands: List[str], size: int = 220, by: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    ent = (by if by is not None else catalog()["by_hash"]).get(h)
     if ent and ent.get("virtual"):   # 1.6.6: crop / in-out frame / trimmed waveform, from the original
         from . import virtuals as _vc
         cache = os.path.join(_thumbs_dir(), h + ".jpg")
@@ -742,6 +754,7 @@ def thumbs_for(hashes: Iterable[str], size: int = 220, budget: Optional[float] =
     stale); otherwise the first readable source is thumbnailed and cached. None = no readable source (placeholder).
     1.4.4: with `budget` (seconds) and a `pending` list, generation stops when the budget is spent; the rest is handed
     to the background worker and listed in `pending` (value None), so a request never waits on a pile of 4K originals."""
+    t0 = time.time()   # 1.12.18: the budget counts from the start of the request (cache reads, catalog lookup)
     hashes = [h for h in dict.fromkeys(str(h) for h in hashes or []) if _HASH_RE.match(h)]
     out: Dict[str, Optional[str]] = {}
     missing = []
@@ -752,19 +765,24 @@ def thumbs_for(hashes: Iterable[str], size: int = 220, budget: Optional[float] =
         else:
             missing.append(h)
     if missing:
-        t0 = time.time()
-        cands = paths_for_hashes(missing)
+        timed = budget is not None and pending is not None
+        # 1.12.18: with a budget, never wait for a catalog rebuild here (that made a thumbnail request pay the rebuild)
+        cands = paths_for_hashes(missing, stale_ok=timed)
         later = {}
         for h in missing:
             out[h] = None
-            if budget is not None and pending is not None and time.time() - t0 > budget:
+            if timed and not cands.get(h) and _cat.get("key") != _index_key():
+                pending.append(h)   # not in the (stale) catalog yet: ask again later instead of "no source"
+                continue
+            # 1.12.18: budget checked before the FIRST generation too (the old t0 started after the lookup)
+            if timed and time.time() - t0 > budget:
                 with _thumb_lock:
                     failed = h in _thumb_state["failed"]
                 if not failed and cands.get(h):
                     later[h] = cands[h]
                     pending.append(h)
                 continue
-            out[h] = _make_thumb(h, cands.get(h) or [], size)
+            out[h] = _make_thumb(h, cands.get(h) or [], size, by=_by_hash(True) if timed else None)
         if later:
             _queue_thumbs(later)
     return out
@@ -2095,7 +2113,7 @@ def _derive(items: List[Dict[str, Any]], key, fdata: Optional[Dict[str, Any]] = 
         ep = cur if epoch is None else epoch
         # 1.12.17: a build that started before an edit (invalidate / patch) still lands, but never as current: no key
         # (the next call rebuilds) and its epoch is old (never served as the previous catalog either)
-        _cat.update(key=key if ep == cur else None, data=data, fkey=None, flist=None, lru=[], data_epoch=ep)
+        _cat.update(key=key if ep == cur else None, data=data, prev=None, fkey=None, flist=None, lru=[], data_epoch=ep)
     return data
 
 
@@ -2121,6 +2139,9 @@ def _patch_remove(hashes: Iterable[str], was_fresh: bool) -> None:
         invalidate()
 
 
+FAV_TAG = "favorita"   # 1.12.18: the favourite tag (same constant as filter_rules.js ReflibFilters.FAV_TAG)
+
+
 def _clean_filter(f) -> Dict[str, Any]:
     f = f if isinstance(f, dict) else {}
     node = f.get("node") if isinstance(f.get("node"), dict) else None
@@ -2142,7 +2163,10 @@ def _clean_filter(f) -> Dict[str, Any]:
             "sort": str(f.get("sort") or "") if str(f.get("sort") or "") in SORTS else "",
             "sim": str(f.get("sim") or "")[:40],
             # 1.10.0 origin toggles (IA / Real); [] = both
-            "origins": sorted({str(k) for k in (f.get("origins") or []) if str(k) in ("ai", "real")}) if isinstance(f.get("origins"), list) else []}
+            "origins": sorted({str(k) for k in (f.get("origins") or []) if str(k) in ("ai", "real")}) if isinstance(f.get("origins"), list) else [],
+            "fav": bool(f.get("fav"))}
+    if out["fav"]:   # 1.12.18: favourites (both UIs, filter_rules.js) = the FAV_TAG tag filter, one rule in the core
+        out["tags"] = sorted(set(out["tags"]) | {_fold(FAV_TAG)})
     from . import origin as _og
     out["q"], oq = _og.parse_query(out["q"])   # origin:ia / origin:real in the universal search
     qa = []
@@ -2601,7 +2625,8 @@ def _origin_marks() -> Dict[str, str]:
 def invalidate() -> None:
     with _cat_lock:
         _cat["epoch"] = _cat.get("epoch", 0) + 1
-        _cat.update(key=None, data=None, fkey=None, flist=None, lru=[])
+        # 1.12.18: the dropped catalog is kept (until the next build lands) only as a source of thumbnail paths
+        _cat.update(key=None, data=None, prev=_cat.get("data") or _cat.get("prev"), fkey=None, flist=None, lru=[])
 
 
 def entry_for(digest: str) -> Optional[Dict[str, Any]]:

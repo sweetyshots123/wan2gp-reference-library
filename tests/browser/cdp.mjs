@@ -3,8 +3,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function launch(port = 9333) {
   const p = spawn("google-chrome", ["--headless=new", `--remote-debugging-port=${port}`, "--user-data-dir=" + (process.env.CHROME_PROFILE || "/tmp/reflib-test-chrome-" + port),
     "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required", "--mute-audio", "--window-size=1280,900", "about:blank"], { stdio: "ignore" });
-  let ver; for (let i = 0; i < 50; i++) { try { ver = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (ver.length) break; } catch {} await sleep(200); }
-  const pg = ver.find((t) => t.type === "page");
+  // 1.12.18: under parallel runs Chrome can list other targets before its page: wait for a page (up to 30 s), else open one
+  let pg = null;
+  for (let i = 0; i < 150 && !pg; i++) {
+    try { const ls = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); pg = ls.find((t) => t.type === "page") || null;
+      if (!pg && i >= 25) pg = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json(); } catch {}
+    if (!pg) await sleep(200);
+  }
+  if (!pg) { p.kill("SIGKILL"); throw new Error("chrome did not start (no page target on port " + port + ")"); }
   const ws = new WebSocket(pg.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener("open", r));
   let id = 0; const pend = new Map(); const logs = []; let navAt = 0;
   // 1.12.17: a fetch the TEST aborted by navigating / reloading (page unload) rejects with "Failed to fetch"; that is

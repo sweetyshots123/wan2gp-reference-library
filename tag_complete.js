@@ -10,6 +10,11 @@
     const SEP = /[\s\-_/+.:()&|·]/;
     const LIST_SEP = /[,;]/;
 
+    // 1.12.18: person tags ("persona:…", legacy "modelo:…") are not offered in the plain tag fields (both UIs)
+    const PERSON_PREFIXES = ["persona:", "modelo:"];
+    const isPersonTag = (t) => { const n = String(t || "").toLowerCase(); return PERSON_PREFIXES.some((p) => n.startsWith(p)); };
+    const plainTags = (tags) => (tags || []).map((t) => (t && typeof t === "object" ? t.tag : t)).filter((t) => t && !isPersonTag(t));
+
     /** tags matching `typed`: prefix, then word start, then contains (stable within each group). */
     function rank(typed, tags, limit, exclude) {
         const q = norm(typed).trim();
@@ -60,7 +65,7 @@
     /** inline completion after an input event: {value, selStart, selEnd, tag} or null. Only for insertions at the end. */
     function inline(value, caret, inputType, tags) {
         const v = String(value || "");
-        if (!/^insert/.test(String(inputType || "")) || /^insertFromPaste|^insertLineBreak/.test(inputType)) return null;
+        if (!/^insert/.test(String(inputType || "")) || /^insertFromPaste|^insertLineBreak|^insertCompositionText|^insertFromComposition/.test(inputType)) return null;
         if (caret !== v.length) return null;
         const seg = segment(v, caret);
         if (!seg.text.trim()) return null;
@@ -107,6 +112,10 @@
         list.setAttribute("role", "listbox"); list.dataset.key = key;
         document.body.appendChild(list); lists.set(key, list);
         let items = [], on = -1, inl = null;
+        // 1.12.18: IME (Japanese, Chinese…) and dead keys (´ + a on Windows / macOS) compose text in place; the field
+        // is never rewritten between compositionstart and compositionend. After the composition is committed, a
+        // completion is offered like after typing (the value is final then).
+        let composing = false;
         const tags = () => { try { return getTags() || []; } catch (e) { return []; } };
         function hide() { list.style.display = "none"; items = []; on = -1; }
         function show() {
@@ -130,17 +139,34 @@
             if (opts.onPick) opts.onPick(t);
         }
         const inlineActive = () => inl && input.value === inl.value && input.selectionStart === inl.selStart && input.selectionEnd === inl.selEnd && inl.selEnd > inl.selStart;
+        function complete(inputType) {
+            const r = inline(input.value, input.selectionStart, inputType, tags());
+            if (r) { input.value = r.value; input.setSelectionRange(r.selStart, r.selEnd); inl = r; }
+        }
+        input.addEventListener("compositionstart", () => { composing = true; inl = null; });
+        input.addEventListener("compositionend", () => {
+            composing = false;
+            // the committed text is in the field now (Chrome: after this event); complete then, if the caret is at the end
+            setTimeout(() => { if (!composing && document.activeElement === input) { inl = null; complete("insertText"); show(); } }, 0);
+        });
         input.addEventListener("input", (e) => {
             inl = null;
-            const r = inline(input.value, input.selectionStart, e.inputType, tags());
-            if (r) { input.value = r.value; input.setSelectionRange(r.selStart, r.selEnd); inl = r; }
+            if (composing || e.isComposing || /Composition/.test(e.inputType || "")) { show(); return; }   // never rewrite mid-composition
+            complete(e.inputType);
             show();
         });
         input.addEventListener("keydown", (e) => {
+            // IME candidate selection / commit (Enter, arrows, Esc) and dead keys belong to the composition
+            if (composing || e.isComposing || e.keyCode === 229 || e.key === "Dead" || e.key === "Process") return;
             const open = list.style.display !== "none" && items.length;
             if (e.key === "ArrowDown" && open) { e.preventDefault(); hi(Math.min(items.length - 1, on + 1)); return; }
             if (e.key === "ArrowUp" && open) { e.preventDefault(); hi(Math.max(-1, on - 1)); return; }
-            if (e.key === "Escape") { if (inlineActive()) { e.preventDefault(); input.value = input.value.slice(0, inl.selStart) + input.value.slice(inl.selEnd); input.setSelectionRange(inl.selStart, inl.selStart); inl = null; } if (open) { e.preventDefault(); e.stopPropagation(); hide(); } return; }
+            if (e.key === "Escape") {   // 1.12.18: dismissing the completion / list consumes Esc (no selection clear, no panel close)
+                const had = inlineActive() || open;
+                if (inlineActive()) { input.value = input.value.slice(0, inl.selStart) + input.value.slice(inl.selEnd); input.setSelectionRange(inl.selStart, inl.selStart); inl = null; }
+                if (had) { e.preventDefault(); e.stopPropagation(); hide(); }
+                return;
+            }
             if ((e.key === "Enter" || e.key === "Tab") && open && on >= 0) { e.preventDefault(); e.stopPropagation(); pick(items[on]); return; }
             if (e.key === "Tab" && inlineActive()) { e.preventDefault(); const n = input.value.length; input.setSelectionRange(n, n); inl = null; hide(); return; }
             if (e.key === "Enter" && inlineActive()) { const n = input.value.length; input.setSelectionRange(n, n); inl = null; hide(); /* the field's own Enter adds it */ }
@@ -149,10 +175,13 @@
         input.addEventListener("blur", () => setTimeout(hide, 120));
         input.addEventListener("focus", () => { if (input.value) show(); });
         list.addEventListener("mousedown", (e) => { e.preventDefault(); const d = e.target.closest("div[data-i]"); if (d) pick(items[+d.dataset.i]); });
-        const api = { hide, show, get items() { return items.slice(); }, get inline() { return inl; }, list };
+        // 1.12.18: `busy` = Esc / Enter belong to the field now (suggestions shown, inline completion, or composing)
+        const api = { hide, show, get items() { return items.slice(); }, get inline() { return inl; }, list,
+                      get open() { return list.style.display !== "none" && items.length > 0; },
+                      get busy() { return composing || inlineActive() || (list.style.display !== "none" && items.length > 0); } };
         input.__reflibTC = api;
         return api;
     }
 
-    root.ReflibTagComplete = { version: 1, norm, rank, completion, prefixLen, segment, inline, accept, attach };
+    root.ReflibTagComplete = { version: 2, norm, rank, completion, prefixLen, segment, inline, accept, attach, isPersonTag, plainTags };
 })(typeof globalThis !== "undefined" ? globalThis : window);

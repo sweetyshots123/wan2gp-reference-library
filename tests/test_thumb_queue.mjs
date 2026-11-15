@@ -68,4 +68,41 @@ const L = N.createLanes(); let par = 0, maxPar = 0;
 const job = () => L.enqueue("thumbs", async () => { par++; maxPar = Math.max(maxPar, par); await sleep(20); par--; }, 0);
 await Promise.all([job(), job(), job(), job()]);
 assert.equal(maxPar, 2);
+// 1.12.18 (retest bug 4): a failed batch drops the tiles released meanwhile; they are never re-sent ahead of visible ones
+{
+  const sentF = []; let fail = true, rel;
+  const gateF = new Promise((r) => { rel = r; });
+  const posF = new Map();
+  const QF = N.createThumbQueue({ batch: 4, inflight: 1, delay: 0, failMs: 20,
+    pos: (el) => (posF.has(el) ? { top: posF.get(el), bottom: posF.get(el) + 100 } : null), view: () => view, margin: () => 300,
+    send: async (hs) => { sentF.push(hs.slice()); if (fail) { await gateF; fail = false; throw new Error("network"); } return { thumbs: Object.fromEntries(hs.map((h) => [h, "u"])), pending: [] }; } });
+  const w = (h, top) => { const el = { h }; posF.set(el, top); return QF.want(h, el, () => {}); };
+  const rs = ["a", "b", "c", "d"].map((h, i) => w(h, 1000 + i * 10));
+  await sleep(5);
+  rs.forEach((r) => r());                         // scrolled away while the batch is in flight
+  ["v1", "v2", "v3"].forEach((h, i) => w(h, 1100 + i * 10));
+  rel(); await sleep(60);
+  assert.deepEqual(sentF[0], ["a", "b", "c", "d"]);
+  assert.deepEqual(sentF[1], ["v1", "v2", "v3"], "only the visible tiles after the failure: " + JSON.stringify(sentF));
+  assert.ok(!sentF.slice(1).flat().some((h) => "abcd".includes(h)), "released tiles not re-sent");
+  assert.equal(QF.size, 0);
+}
+// 1.12.18 (retest C): supersede — a newer keystroke cancels queued older requests of the same group
+{
+  assert.equal(N.supersedes({ group: "suggest", sig: "est" }, { group: "suggest", sig: "es" }), true);
+  assert.equal(N.supersedes({ group: "query", sig: "A" }, { group: "query", sig: "A" }), false, "pages of the same filter stay");
+  assert.equal(N.supersedes({ group: "query", sig: "A" }, { group: "facets", sig: "B" }), false);
+  assert.equal(N.supersedes({ group: "query", sig: "A" }, null), false);
+  const S = N.createScheduler(); const ran = []; const res = [];
+  let open; const block = new Promise((r) => { open = r; });
+  const first = S.enqueue(() => block.then(() => ran.push("running")), 5, { group: "suggest", sig: "e" });
+  const p1 = S.enqueue(async () => ran.push("es"), 5, { group: "suggest", sig: "es" }).then(() => res.push("es ok"), (e) => res.push("es " + e.message));
+  const pq = S.enqueue(async () => ran.push("q-p0"), 5, { group: "query", sig: "F" }).then(() => res.push("q0 ok"));
+  const pq1 = S.enqueue(async () => ran.push("q-p1"), 5, { group: "query", sig: "F" }).then(() => res.push("q1 ok"));
+  const p2 = S.enqueue(async () => ran.push("est"), 5, { group: "suggest", sig: "est" }).then(() => res.push("est ok"));
+  open(); await Promise.all([first, p1, pq, pq1, p2]);
+  assert.deepEqual(ran, ["running", "q-p0", "q-p1", "est"], "the running one finishes, the queued older suggestion is dropped: " + JSON.stringify(ran));
+  assert.ok(res.includes("es superseded"));
+  assert.equal(S.stats.superseded, 1);
+}
 console.log("test_thumb_queue: ok");

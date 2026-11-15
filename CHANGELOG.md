@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.12.18
+
+Fixes from the peer retest of 1.12.17, including the real cause of the slow Media Library search with blank thumbnails.
+
+- **New: ♥ Favoritas filter in the Media Library Explorador.** A toggle in the type bar (with the favourites count) shows only favourites and adds a removable filter chip.
+  - It's the same filter the Galería's ♥ Favoritas view uses. Both now send `fav: true`; the core (`imagelib._clean_filter`) turns it into the favourite-tag filter (`favorita`, case-insensitive) and combines it with the other filters.
+  - The rule and the tag constant live in the new shared `filter_rules.js` (`ReflibFilters`), used by both UIs.
+
+- **Viewer, both UIs (shared `viewer_rules.js`, `ReflibViewer`):**
+  - The mouse wheel goes to the previous / next item in the Media Library lightbox too (same `ReflibWheel` stepper as the Galería; photos and videos). In 1:1 the wheel pans; Ctrl + wheel switches between 1:1 at the cursor and Fit.
+  - Every item opens in Fit in both UIs, and the ML's Fit ("Ajustar") is sized from the original, so it no longer shows small at the 220 px / 1024 px preview sizes while the full file loads.
+  - Zoom to the cursor: clicking the photo or Ctrl + wheel zooms keeping the clicked point under the pointer (the Galería math, now shared).
+- **Galería viewer: the open photo's original loads first.** Before, it waited behind the preview preloads of the neighbouring photos (synthetic test, 250 ms per preview: original requested 2,030 ms → 255 ms after opening). Neighbour preloads now have lower priority (`ReflibNet.itemPrio`), wait until the original has loaded (at most 2.5 s) and download at low fetch priority.
+
+- **The search box no longer drops the whole catalog on every typing pause.**
+  - `at_suggest` (search-box autocomplete) and `col_peek` (collection hover) were missing from the read-only action list, so each one invalidated the catalog and the next query paid a full rebuild. The retest measured 4.5–9 s per pause on the PC with 1.12.15.
+  - Both are now read-only, as is `at_tax_list`. The list was audited (`tests/ilib_readonly_check.py` runs the real `plugin.py` handler).
+  - Simulated ML inside WanGP, typing "esth" with a 5 s rebuild: results 10.2 s → 0.26 s, 20 thumbnails 15.6 s → 0.40 s.
+- **Media Library inside WanGP: read-only actions call `/reflib/api` directly** (the same handler, served in a thread pool) when it answers. Thumbnails get their own lane instead of waiting one at a time behind query, facets and suggestions on the single Gradio fast channel.
+  - If `/reflib/api` doesn't answer, it falls back to the Gradio channel. `form_busy` always uses Gradio.
+  - A single network error, such as a keep-alive connection the server closed just as the request went out, is retried once directly instead of switching to Gradio. After a real fallback it checks `/reflib/api` again 5 s later.
+  - Set `localStorage.reflib_direct_api = "0"` to turn it off.
+- **Earlier keystrokes don't hold up the latest one.** A queued suggestion, facet or search request is cancelled when a newer keystroke or filter sends another of the same kind (shared `ReflibNet.supersedes` / scheduler `sup`, request_priority.js v5). This applies in both UIs: ML query, facets and suggestions; Galería pages, facets, the search box preview and its suggestions. Pages of the same filter are never cancelled.
+- **Thumbnail requests keep to their time budget:**
+  - the budget now counts from the start of the request, so the first missing thumbnail is not always generated synchronously;
+  - a thumbnail request never waits for a catalog rebuild (it uses the last built catalog for source paths). A file that catalog doesn't know yet is reported as pending, so the client retries; it is not marked as having no source.
+- **Tag autocomplete:**
+  - **IME and dead keys:** the field is never rewritten during a composition. Japanese "日本" used to turn into "日本日本", and a Latin composition "an" into "aan". After the composition is committed, a completion is offered as after typing. Keys that belong to the composition (Enter to commit, arrows, Esc) are left to it.
+  - **Media Library, Esc in the tag field:** Esc now closes the suggestions or inline completion and stops there. It used to clear the whole selection. With nothing to dismiss, Esc still clears the selection.
+  - **Media Library:** `persona:` tags (and legacy `modelo:`) are no longer suggested in the tag field. This is the same rule as the Galería, now shared (`ReflibTagComplete.plainTags`).
+  - Enter still accepts the inline completion and adds the tag, as designed.
+- **Thumbnail queue:** after a failed batch, tiles released in the meantime are dropped. Before, they were re-sent ahead of the visible ones. The Galería `Thumb` also keeps its element when the hash changes while an image is shown.
+- **Tests:**
+  - `tests/ilib_readonly_check.py` (run by `test_ilib_readonly.py`; fails on 1.12.17);
+  - `catalog_race_check.py thumbs_budget`;
+  - `test_browser_ml_search.mjs` (simulated WanGP bridge: direct API, fallback, cancelled keystrokes; `MEASURE=1 INVAL=1` for the before/after timings);
+  - IME, dead-key, Esc and persona cases in `test_browser_tagcomplete.mjs` (both UIs);
+  - failure-path and supersede cases in `test_thumb_queue.mjs`;
+  - `test_tag_complete.mjs`.
+
 ## 1.12.17
 
 Fixes from the peer retest of 1.12.16 (speed unchanged), thumbnails after a long scroll, and tag autocomplete.

@@ -1,7 +1,7 @@
 import { takeSeek, segChips } from "./videoT";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { FAV, Item, Meta, call, mediaUrl, personName, isPerson, thumbNow } from "./api";
-import { WheelStepper, normDelta, medium, loadFull } from "./viewerNav";
+import { WheelStepper, normDelta, medium, loadFull, ViewerRules as VR } from "./viewerNav";
 import { viewerNet } from "./api";
 import "../../progressive_media.js";
 import "../../fullscreen_rules.js";
@@ -63,7 +63,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     const d = dirRef.current, keep = new Set<string>([it.hash]), order: string[] = [];
     for (const k of [1, 2, 3, 4, 5, -1, -2]) { const x = items[index + k * d]; if (x && (!x.kind || x.kind === "image")) { keep.add(x.hash); order.push(x.hash); } }
     medium.prune(keep);
-    const t = window.setTimeout(() => order.forEach((h) => medium.get(h)), 30);
+    const t = window.setTimeout(() => order.forEach((h) => medium.get(h, true)), 30);   // 1.12.18: neighbour = after the original
     return () => window.clearTimeout(t);
   }, [index, !!it]);
   const vid = useVidosser();
@@ -73,9 +73,10 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   // medio a resolución completa (imagen original, vídeo o copia virtual renderizada)
   useEffect(() => {
     if (!it) return;
-    let on = true, tries = 0, full: { abort: () => void } | null = null;
-    setUrl(null); setZ({ s: 1, x: 0, y: 0 }); setVe(null); setDraft(null);
-    const load = () => mediaUrl(it.hash).then((r) => {
+    let on = true, tries = 0, full: { p: Promise<boolean>; abort: () => void } | null = null, unhold: (() => void) | null = null;
+    setUrl(null); setZ(VR.navZoom()); setVe(null); setDraft(null);   // 1.12.17: shared rule (ML too): every item opens in Fit
+    // 1.12.18: the open item's original first: neighbour preloads wait until it has loaded (or failed / holdMs)
+    const load = () => { const p = mediaUrl(it.hash).then((r) => {
       if (!on) return;
       setRendering(!!r.rendering);
       if (r.url && (!it.kind || it.kind === "image")) {   // 1.9.7: decodificada antes de mostrarla (sin tirón)
@@ -83,11 +84,12 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
         f.p.then((ok) => { if (on && ok) setUrl(r.url); });
       } else if (r.url) setUrl(r.url);
       else if (r.rendering && tries++ < 60) window.setTimeout(load, 1000);
-    });
+      return full?.p;
+    }); if (!unhold && (!it.kind || it.kind === "image")) unhold = medium.hold(p); return p; };
     // 1.9.7: la resolución completa (y el panel de edición) solo cuando el índice se asienta; girando rápido
     // no se encola nada y la carga en curso se cancela
     const settle = window.setTimeout(() => { if (!on) return; setSettled(it.hash); load(); }, 40);
-    return () => { on = false; window.clearTimeout(settle); full?.abort(); };
+    return () => { on = false; window.clearTimeout(settle); full?.abort(); unhold?.(); };
   }, [it?.hash]);
 
   // 1.12.12: ÚNICO camino para cambiar de elemento (teclas, ‹ ›, rueda, tira de miniaturas): mueve la pantalla
@@ -132,14 +134,20 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
   useEffect(() => { live.current = z; }, [z]);
   const animate = () => { const st = stage.current; if (!st) return; st.classList.add("anim"); window.setTimeout(() => st.classList.remove("anim"), 160); };
   const stageRect = () => rect.current || stage.current!.getBoundingClientRect();
-  const zoomAt = (factor: number, cx: number, cy: number, commit: "now" | "later" | "no" = "now") => setLive(((o) => {
+  // 1.12.17: zoom to cursor = shared ReflibViewer.zoomAt (the ML lightbox's zoomScroll keeps the same invariant)
+  const zoomAt = (factor: number, cx: number, cy: number, commit: "now" | "later" | "no" = "now") => {
     const r = stageRect();
-    const px = cx - r.left - r.width / 2, py = cy - r.top - r.height / 2;
-    const s = clamp(o.s * factor, 1, 12);
-    if (s === 1) return { s: 1, x: 0, y: 0 };
-    const k = s / o.s;
-    return { s, x: px - (px - o.x) * k, y: py - (py - o.y) * k };
-  })(live.current), commit);
+    setLive(VR.zoomAt(live.current, factor, cx - r.left - r.width / 2, cy - r.top - r.height / 2, 1, 12), commit);
+  };
+  // 1.12.17: the placeholder (thumb / 1024 px medium) gets the size the original will have in Fit (shared
+  // ReflibViewer.fitSize, same as the ML lightbox): no fill-then-shrink jump for originals smaller than the screen;
+  // unknown original = fill (as before)
+  const fitPh = (el: HTMLImageElement) => {
+    const st = stage.current, d = it && medium.dims.get(it.hash); if (!st || !d) return;
+    const r = st.getBoundingClientRect();
+    const sz = VR.fitSize({ natW: el.naturalWidth, natH: el.naturalHeight, origW: d[0], origH: d[1], boxW: r.width, boxH: r.height });
+    if (sz) { el.style.width = sz.w + "px"; el.style.height = sz.h + "px"; }
+  };
   const zoomCenter = (f: number) => { const r = stage.current!.getBoundingClientRect(); animate(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
 
   // 1.12.15: el aviso refleja lo que el <video> tiene cargado AHORA (ReflibPlayback.unplayable, compartido); antes era
@@ -253,11 +261,14 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
     const el = stage.current; if (!el) return;
     const w = (e: WheelEvent) => {
       if (ve) return;
+      // 1.12.17: shared ReflibViewer.wheelIntent (same as the Media Library lightbox)
+      const wi = VR.wheelIntent({ ctrl: e.ctrlKey || e.metaKey, zoomed: live.current.s > 1, canPan: true, prevented: e.defaultPrevented });
+      if (wi === "none") return;
       e.preventDefault();   // también evita el zoom de página del navegador con Ctrl
       const dy = normDelta(e);
       const dx = e.deltaMode === 1 ? e.deltaX * 40 : e.deltaX;
-      if (e.ctrlKey || e.metaKey) { rect.current = null; zoomAt(Math.exp(-dy * 0.0025), e.clientX, e.clientY, "later"); return; }
-      if (live.current.s > 1) { const o = live.current; setLive({ ...o, x: o.x - dx, y: o.y - dy }, "later"); return; }
+      if (wi === "zoom") { rect.current = null; zoomAt(Math.exp(-dy * 0.0025), e.clientX, e.clientY, "later"); return; }
+      if (wi === "pan") { const o = live.current; setLive({ ...o, x: o.x - dx, y: o.y - dy }, "later"); return; }
       // 1.9.7: tantas fotos como pasos acumulados, sin bloqueo: girar rápido recorre muchas seguidas
       const n = stepper.current.push(e, e.timeStamp || performance.now());
       if (!n) return;
@@ -390,7 +401,7 @@ function Viewer({ items, index, meta, total, setIndex, close, onChanged, ensure 
       <div className="vbody">
         <div className={`stage ${z.s > 1 ? "zoomed" : ""} ${ve ? "cropping" : ""}`} ref={stage}
           onPointerDown={ve ? cropDown : onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          {!src && !isVid && (ph && !rendering ? <img className="phimg" ref={(el) => { tgt.current = el; }} src={ph} alt="" draggable={false} style={{ transform: xf(z) }} />
+          {!src && !isVid && (ph && !rendering ? <img className="phimg" ref={(el) => { tgt.current = el; }} src={ph} alt="" draggable={false} style={{ transform: xf(z) }} onLoad={(e) => fitPh(e.currentTarget)} />
             : <div className="loading">{rendering ? "Renderizando copia virtual…" : "Cargando…"}<Thumb hash={it.hash} className="blur" /></div>)}
           {src && kind === "image" && (
             <img ref={(el) => { (media as any).current = el; tgt.current = el; }} src={src} alt={it.name} draggable={false} onLoad={() => setDraft((d) => d && [...d] as Rect)}

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 await import(path.join(root, "tag_complete.js"));
 const T = globalThis.ReflibTagComplete;
-assert.equal(T.version, 1);
+assert.equal(T.version, 2);
 const TAGS = ["fake company+", "planta", "animal", "Antonio", "big andamio", "Ánimo feliz", "x_anexo", "zz+an"];
 // ranking: prefix → word start (space, -, _, +…) → contains; stable inside each group
 assert.deepEqual(T.rank("an", TAGS), ["animal", "Antonio", "Ánimo feliz", "big andamio", "x_anexo", "zz+an", "fake company+", "planta"]);
@@ -39,4 +39,11 @@ assert.equal(T.inline("x, ", 3, "insertText", TAGS), null);
 // accept: replace the caret's segment
 assert.deepEqual(T.accept("planta, an", 10, "animal"), { value: "planta, animal", caret: 14 });
 assert.deepEqual(T.accept("an, planta", 2, "Antonio"), { value: "Antonio, planta", caret: 7 });
+// 1.12.18: composition (IME / dead keys) never completes
+assert.equal(T.inline("an", 2, "insertCompositionText", TAGS), null);
+assert.equal(T.inline("an", 2, "insertFromComposition", TAGS), null);
+// 1.12.18: shared person-tag rule (both UIs)
+assert.equal(T.isPersonTag("persona:Laura"), true); assert.equal(T.isPersonTag("Modelo: X"), true); assert.equal(T.isPersonTag("pelo largo"), false);
+assert.deepEqual(T.plainTags(["persona:Laura", "Pelo largo", { tag: "modelo:Ana" }, { tag: "perro" }]), ["Pelo largo", "perro"]);
+assert.equal(T.completion("pe", T.plainTags(["persona:Laura", "Pelo largo"])), "Pelo largo");
 console.log("test_tag_complete: ok");

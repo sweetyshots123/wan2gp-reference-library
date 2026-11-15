@@ -47,7 +47,8 @@ export default function EditPanel({ items, meta, onChanged, onVirtual, onClose }
     return m;
   }, [items]);
   const allTags = meta.tags.map((t) => t.tag);
-  tagList.current = allTags.filter((t) => !isPerson(t));
+  const TCm = (globalThis as any).ReflibTagComplete;   // 1.12.18: same person-tag rule as the Media Library
+  tagList.current = TCm?.plainTags ? TCm.plainTags(allTags) : allTags.filter((t) => !isPerson(t));
   useEffect(() => { const TC = (globalThis as any).ReflibTagComplete; if (TC && tagRef.current) TC.attach(tagRef.current, () => tagList.current, { key: "gal-tag" }); });
   const models = [...tagCount.keys()].filter(isPerson);
   const plain = [...tagCount.keys()].filter((t) => !isPerson(t) && t.toLowerCase() !== FAV);

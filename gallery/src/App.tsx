@@ -111,7 +111,7 @@ export default function App() {
   const routeFilter = (r: Route): Filter | null => {
     switch (r.v) {
       case "explorar": return {};
-      case "favoritas": return { tags: [FAV] };
+      case "favoritas": return { fav: true };   // 1.12.18: shared favourites filter (filter_rules.js / core), same as the ML
       case "videos": return { kind: "video" };
       case "sin": return { none: true };
       case "buscar": return chipsFilter(chips);
@@ -147,7 +147,8 @@ export default function App() {
     if (!filter) return;
     pages.current.set(p, g);
     try {
-      const r = pre || await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz }, { bg });
+      // 1.12.18: a new filter cancels the still-queued pages of the previous one (shared supersede)
+      const r = pre || await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz }, { bg, supersede: { group: "query", sig: fkey } });
       if (g !== gen.current) return;
       if (r.v && typeof __REFLIB_BUILD__ === "string" && staleShow(r.v, __REFLIB_BUILD__, localStorage.getItem(STALE_KEY))) setStale(String(r.v));   // 1.12.13: old tab / old build
       if (withSections) { applyMeta(r); setSections(r.page.sections || null); if (r.page.kinds) setKc(r.page.kinds); }

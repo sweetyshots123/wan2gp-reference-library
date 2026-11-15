@@ -32,14 +32,14 @@ export function Toasts() {
 // 1.12.17: the tile's own element is passed so the queue can rank by on-screen position; unmount releases the request
 export function Thumb({ hash, className, alt }: { hash: string; className?: string; alt?: string }) {
   const [src, setSrc] = useState<string>(() => thumbNow(hash) || "");
-  const ph = useRef<HTMLDivElement>(null);
+  const ph = useRef<HTMLElement | null>(null);   // 1.12.18: the img too, so a hash change while an img shows keeps a position
   useEffect(() => {
     let on = true; const c = thumbNow(hash); setSrc(c || "");
     if (c) return;
     const release = wantThumb(hash, ph.current, (u) => { if (on) setSrc(u); });
     return () => { on = false; release(); };
   }, [hash]);
-  return src ? <img className={className} src={src} alt={alt || ""} draggable={false} /> : <div ref={ph} className={`ph ${className || ""}`} />;
+  return src ? <img ref={(e) => { ph.current = e; }} className={className} src={src} alt={alt || ""} draggable={false} /> : <div ref={(e) => { ph.current = e; }} className={`ph ${className || ""}`} />;
 }
 
 export const fmtDur = (s?: number) => {

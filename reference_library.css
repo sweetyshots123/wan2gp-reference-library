@@ -1010,3 +1010,4 @@ html.reflib-standalone .reflib-standalone-tip {
 .reflib-ib-lightbox:fullscreen { background: #000; }
 .reflib-ib-lightbox:-webkit-full-screen { background: #000; }
 .reflib-ib-lightbox:fullscreen .reflib-ib-lbstage video.reflib-ib-lbmedia { max-height: calc(100vh - 64px); }
+.reflib-ib-lbstage img.reflib-ib-lbsizing { visibility: hidden; }   /* 1.12.17: until sized from the original (never the thumb at 220 px) */

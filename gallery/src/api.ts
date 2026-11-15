@@ -1,6 +1,7 @@
 // Cliente del puente de la Media Library: cada llamada es exactamente una acción de plugin.ilib(...)
 import "../../request_priority.js";
-import "../../tag_complete.js";   // 1.12.17: shared tag autocomplete (ReflibTagComplete)
+import "../../tag_complete.js";
+import "../../filter_rules.js";   // 1.12.18: shared filters (favourites)
 const Net: any = (globalThis as any).ReflibNet;
 const viewSched = Net?.createScheduler?.() || null;
 const lanes = Net?.createLanes?.() || null;   // 1.12.16: preview / media in their own lane, never behind a slow query
@@ -20,10 +21,11 @@ export interface Filter {
   kinds?: string[]; origins?: string[];
   cols?: string[]; tags?: string[]; atags?: string[]; sim?: string; q?: string; qall?: string[]; kind?: string; sort?: string; none?: boolean; recent?: boolean;
   node?: { fid: string; rel: string }; sub?: boolean;
+  fav?: boolean;   // 1.12.18: favourites (core filter, shared with the Media Library)
 }
 export interface Resp { ok: boolean; message?: string; toast?: string; kind?: string; error?: string; [k: string]: any }
 
-export const FAV = "favorita";
+export const FAV: string = (globalThis as any).ReflibFilters?.FAV_TAG || "favorita";   // 1.12.18: shared constant
 // Personas: etiqueta manual «persona:<Nombre>». Las antiguas «modelo:<Nombre>» se siguen reconociendo como personas
 // (no se reescribe nada); al añadir una persona que ya existe con «modelo:» se reutiliza esa etiqueta, así no hay duplicados.
 export const PERSON = "persona:";
@@ -48,15 +50,16 @@ async function rawCall<T = Resp>(action: string, body: Record<string, any> = {})
 }
 
 /** 1.12.9: viewer actions (preview/media_url/…) jump the queue; thumbs wait while the viewer is open. */
-export async function call<T = Resp>(action: string, body: Record<string, any> = {}, opts: { bg?: boolean } = {}): Promise<T & Resp> {
+// 1.12.18 opts.supersede {group, sig}: a newer keystroke's request cancels the still-queued older ones (shared ReflibNet)
+export async function call<T = Resp>(action: string, body: Record<string, any> = {}, opts: { bg?: boolean; supersede?: { group: string; sig: string }; prio?: number } = {}): Promise<T & Resp> {
   const ch = Net?.channel?.(action) || (action === "thumbs" ? "thumb" : "normal");
   // 1.12.16: bg = refresh while indexing: behind anything the user asked for
-  const prio = opts.bg ? (Net?.bgPrio ?? 1) : ch === "view" ? 10 : ch === "thumb" ? 0 : 5;
+  const prio = opts.prio != null ? opts.prio : opts.bg ? (Net?.bgPrio ?? 1) : ch === "view" ? 10 : ch === "thumb" ? 0 : 5;   // 1.12.18 prio: ReflibNet.itemPrio
   // Gate wait is outside the scheduler so parked thumbs never block preview/media_url.
   if (ch === "thumb") await thumbGate.whenFree();
   const run = () => rawCall<T>(action, body);
-  if (lanes) return lanes.enqueue(action, run, prio);
-  if (viewSched) return viewSched.enqueue(run, prio);
+  if (lanes) return lanes.enqueue(action, run, prio, opts.supersede);
+  if (viewSched) return viewSched.enqueue(run, prio, opts.supersede);
   return run();
 }
 
@@ -119,7 +122,7 @@ export const forgetThumb = (h: string) => thumbCache.delete(h);
 export const thumbNow = (h: string) => thumbCache.get(h) || null;   // 1.9.7: miniatura ya en caché (síncrona)
 
 export async function mediaUrl(hash: string): Promise<{ url: string | null; rendering?: boolean }> {
-  const r = await call("media_url", { hash });
+  const r = await call("media_url", { hash }, { prio: Net?.itemPrio?.("current") });   // 1.12.18: before neighbour preloads
   return { url: r.url || null, rendering: !!r.rendering };
 }
 

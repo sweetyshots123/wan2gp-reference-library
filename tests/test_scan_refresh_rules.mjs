@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 await import(path.join(root, "request_priority.js"));
 const N = globalThis.ReflibNet;
-assert.equal(N.version, 4);
+assert.equal(N.version, 5);
 // indexRefresh (1.12.17): indexing -> idle is always a full refresh, even with the same rev
 assert.equal(N.indexRefresh({ was: true, running: false, revChanged: false }), "full");
 assert.equal(N.indexRefresh({ was: true, running: false, revChanged: true }), "full");

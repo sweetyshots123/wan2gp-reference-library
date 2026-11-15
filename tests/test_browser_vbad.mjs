@@ -24,6 +24,7 @@ const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) 
 const BASE = `http://127.0.0.1:${PORT}`;
 // video-only order (date_desc): v000 v005 c010 v015 v020 v025 …  → v005 and v020 are undecodable
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA, BAD_HASHES: "v005,v020" }, stdio: ["ignore", "pipe", "inherit"] });
+process.on("exit", () => { try { srv.kill(); } catch {} });   // 1.12.18: never leave the mock running (it holds the runner's stderr)
 await new Promise((r) => srv.stdout.once("data", r));
 process.env.CHROME_PROFILE = path.join(tmp, "chrome");
 const { launch } = await import(path.join(root, "tests/browser/cdp.mjs"));

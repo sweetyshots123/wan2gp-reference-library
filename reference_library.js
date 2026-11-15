@@ -753,6 +753,7 @@
             stale_tab: "This tab runs Reference Library {mine}, the server runs {srv}: reload the page (F5) to get the current version.",
             in_n: "In {n} collection(s): {names}", in_none: "Not in any collection", from_folder: "From a watched folder",
             sel_n: "{n} selected", sel_visible: "Select shown", sel_clear: "Clear selection",
+            fav_filter: "Favourites", fav_filter_tip: "Only favourites (the ♥ / \"favorita\" tag), same as the Galería's ♥ Favoritas",
             tag_ph: "Add tag…", tag_add: "Add tag", tag_remove: "Remove “{tag}” from the selected images",
             add_to: "Add to collection…", add_go: "Add", add_new: "+ New collection…", add_new_ph: "New collection name",
             add_title: "Add {n} image(s) to", del: "Delete", del_confirm: "Confirm delete", del_tip: "Only unassigned pool images can be deleted",
@@ -853,6 +854,7 @@
             stale_tab: "Esta pestaña ejecuta Reference Library {mine} y el servidor {srv}: recarga la página (F5) para usar la versión actual.",
             in_n: "En {n} colección(es): {names}", in_none: "No está en ninguna colección", from_folder: "De una carpeta vigilada",
             sel_n: "{n} seleccionadas", sel_visible: "Seleccionar las mostradas", sel_clear: "Quitar selección",
+            fav_filter: "Favoritas", fav_filter_tip: "Solo las favoritas (♥ / etiqueta «favorita»), igual que ♥ Favoritas de la Galería",
             tag_ph: "Añadir etiqueta…", tag_add: "Añadir etiqueta", tag_remove: "Quitar «{tag}» de las imágenes elegidas",
             add_to: "Añadir a colección…", add_go: "Añadir", add_new: "+ Nueva colección…", add_new_ph: "Nombre de la colección nueva",
             add_title: "Añadir {n} imagen(es) a", del: "Borrar", del_confirm: "Confirmar borrado", del_tip: "Solo se pueden borrar imágenes de la bolsa sin colección",
@@ -911,7 +913,7 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [] },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [], fav: false },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
                    expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
@@ -928,30 +930,66 @@
         fast: (Net && Net.createScheduler) ? Net.createScheduler() : null,
         lanes: (Net && Net.createLanes) ? Net.createLanes() : null,   // 1.12.16: fetch mode: preview never waits behind a query
     };
+    window.__reflibSched = sched;   // tests (1.12.18: superseded counts)
     const thumbGate = (Net && Net.createThumbGate) ? Net.createThumbGate() : { enterViewer() {}, leaveViewer() {}, blocked: false, whenFree() { return Promise.resolve(); } };
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };   // fallback if request_priority.js missing
+    // 1.12.18: direct /reflib/api for read-only actions inside WanGP (form_busy needs the Gradio session: excluded)
+    const DIRECT_OK = (a) => FAST_ACTIONS.has(a) && a !== "form_busy";
+    let directP = null;
+    function directApi() {
+        if (directP) return directP;
+        if (localStorage.getItem("reflib_direct_api") === "0") return (directP = Promise.resolve(false));
+        directP = fetch("/reflib/api", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                                         body: JSON.stringify({ action: "scan_status", lang: lang() }) })
+            .then(r => (r.ok ? r.json() : null)).then(d => !!(d && d.ok)).catch(() => false)
+            .then(ok => { window.__reflibDirect = ok; return ok; });
+        return directP;
+    }
+    function directOff(e) {
+        console.warn("[Reference Library] /reflib/api unreachable, using the Gradio channel", e);
+        directP = Promise.resolve(false); window.__reflibDirect = false;
+        // 1.12.18: a transient network error must not switch it off for the whole session: probe again later
+        clearTimeout(directOff.t); directOff.t = setTimeout(() => { directP = null; }, 5000);
+    }
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
         const bg = !!req.bg; delete req.bg;   // 1.12.16: background refresh (indexing): behind what the user asked for
-        const useFetch = !!window.__REFLIB_STANDALONE__ || !document.getElementById("reflib_ilib_btn");
+        const sup = req.supersede || null; delete req.supersede;   // 1.12.18: {group, sig}: newer keystroke cancels queued older ones
+        const standalone = !!window.__REFLIB_STANDALONE__ || !document.getElementById("reflib_ilib_btn");
         const chName = Net ? Net.channel(req.action) : (req.action === "thumbs" ? "thumb" : "normal");
         const prio = bg ? ((Net && Net.bgPrio) || 1) : chName === "view" ? 10 : chName === "thumb" ? 0 : 5;
         // Wait for the thumb gate OUTSIDE the scheduler so a parked thumb never blocks preview/media_url.
+        const viaFetch = (direct) => {
+            const body = Object.assign({ tz: -new Date().getTimezoneOffset() }, req);
+            const run = () => fetch("/reflib/api", {
+                method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+                body: JSON.stringify(body),
+            }).then(r => { if (!r.ok) throw Object.assign(new Error("HTTP " + r.status), { direct: true, status: r.status }); return r.json(); },
+                    e => { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { direct: true }); })
+              .then(data => {
+                  if (data && data.v && data.v !== VERSION) staleTab(data.v);
+                  return data;
+              });
+            if (sched.lanes) return sched.lanes.enqueue(req.action, run, prio, sup);
+            if (sched.fast) return sched.fast.enqueue(run, prio, sup);
+            return run();
+        };
         const start = async () => {
             if (chName === "thumb") await thumbGate.whenFree();
-            if (useFetch) {
-                const body = Object.assign({ tz: -new Date().getTimezoneOffset() }, req);
-                const run = () => fetch("/reflib/api", {
-                    method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-                    body: JSON.stringify(body),
-                }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-                  .then(data => {
-                      if (data && data.v && data.v !== VERSION) staleTab(data.v);
-                      return data;
-                  });
-                if (sched.lanes) return sched.lanes.enqueue(req.action, run, prio);
-                if (sched.fast) return sched.fast.enqueue(run, prio);
-                return run();
+            if (standalone) return viaFetch(false);
+            // 1.12.18: inside WanGP, read-only actions call /reflib/api directly (same handler, served in a thread
+            // pool) when it answers, so thumbnails get their own lane instead of queueing one at a time behind the
+            // query / facets / suggestions on the single Gradio fast channel. Falls back to the Gradio channel.
+            if (!req.slow && DIRECT_OK(req.action) && await directApi()) {
+                try { return await viaFetch(true); }
+                catch (e) {
+                    if (!e || !e.direct) throw e;
+                    // 1.12.18: a network error on a reused keep-alive connection (the server closed it as we sent) is
+                    // not "unreachable": these actions are read-only, so retry once directly before falling back
+                    let err = e;
+                    if (!e.status) { try { return await viaFetch(true); } catch (e2) { if (!e2 || !e2.direct) throw e2; err = e2; } }
+                    directOff(err);   // unreachable now: this and later requests use Gradio (probed again in 5 s)
+                }
             }
             const fast = !req.slow && FAST_ACTIONS.has(req.action) && document.getElementById("reflib_ilib_fast_btn");
             const ch = fast ? "fast" : "main";
@@ -963,7 +1001,7 @@
                 pending.set(req.id, { resolve, reject, timer });
                 setTimeout(() => btn.click(), 0);   // let Gradio take the new textbox value first
             });
-            if (sched[ch]) return sched[ch].enqueue(run, prio);
+            if (sched[ch]) return sched[ch].enqueue(run, prio, sup);
             const p = chains[ch].then(run, run);
             chains[ch] = p.catch(() => {});
             return p;
@@ -983,7 +1021,7 @@
         const f = ilib.f;
         return { cols: [...f.cols].sort(), none: f.none, tags: [...f.tags].sort(), q: f.q.trim(), node: f.recent || f.used ? null : f.node,
                  sub: f.sub, recent: f.recent && !f.used, used: !!f.used, recent_pages: ilib.recentPages,
-                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, origins: [...(f.origins || [])], sort: sortCur(), sim: f.sim || "" };
+                 atags: [...f.atags].sort(), xtags: [...f.xtags].sort(), ranges: Object.entries(f.ranges).map(([k, v]) => [k, v[0], v[1]]).sort(), jst: f.jst || "", kind: f.kind || "", hasmask: !!f.hasmask, missing: !!f.missing, origins: [...(f.origins || [])], sort: sortCur(), sim: f.sim || "", fav: !!f.fav };
     }
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
@@ -1042,14 +1080,14 @@
             if (q.pages.has(pg) || q.loading.has(pg) || (q.ready && pg * PAGE >= q.total && pg > 0)) continue;
             q.loading.add(pg);
             const sig = q.sig, gen = q.gen;
-            sendIlib({ action: "query", f: filterSnap(), offset: pg * PAGE, limit: PAGE, tz: tz() }).then(r => {
+            sendIlib({ action: "query", f: filterSnap(), offset: pg * PAGE, limit: PAGE, tz: tz(), supersede: { group: "query", sig } }).then(r => {
                 if (r && r.v && r.v !== VERSION) staleTab(r.v);
                 if (!r || r.ok === false || !r.page) { if (ilib.q.gen === gen) { ilib.q.loading.delete(pg); ilib.qErr = (r && r.error) || "error"; renderGrid(); } return; }
                 ilib.qErr = null;
                 const relayout = applyPage(r.page, sig, gen);
                 if (relayout) renderGrid(); else renderWindow();
                 renderFooter();
-            }).catch((e) => { if (ilib.q.gen === gen) { ilib.q.loading.delete(pg); ilib.qErr = String((e && e.message) || e); renderGrid(); } });
+            }).catch((e) => { if (ilib.q.gen === gen) { ilib.q.loading.delete(pg); if (e && e.message === "superseded") return; ilib.qErr = String((e && e.message) || e); renderGrid(); } });
         }
     }
     function loadedItems() { return ilib.q.items.filter(Boolean); }
@@ -1509,7 +1547,7 @@
         const sig = JSON.stringify(filterSnap());
         if (!force && sig === ilib.at.sig && ilib.at.facets) return;
         ilib.at.sig = sig;
-        sendIlib({ action: "at_facets", f: filterSnap(), tax: !ilib.at.tax }).then(r => {
+        sendIlib({ action: "at_facets", f: filterSnap(), tax: !ilib.at.tax, supersede: { group: "facets", sig } }).then(r => {
             if (!r || !r.ok || sig !== ilib.at.sig) return;
             if (r.tax) setTax(r.tax);
             ilib.at.facets = r.facets; ilib.at.body = r.body; ilib.at.jobs = r.jobs; if (r.jrev !== undefined) ilib.at.jrev = r.jrev;
@@ -1558,6 +1596,7 @@
         if (f.kind) groups.push(chip("kind", f.kind, esc(it("chip_kind", { k: it("k_" + f.kind) })), "kind"));
         if (f.hasmask) groups.push(chip("hasmask", "", esc("🎭 " + mkt("hasmask")), "hasmask"));   // 1.7.0
         if (f.missing) groups.push(chip("missing", "", esc("⚠ " + fgt("f_missing")), "missing"));   // 1.7.1
+        if (f.fav) groups.push(chip("fav", "", esc("♥ " + it("fav_filter")), "fav"));   // 1.12.18
         EXT.forEach(x => { try { if (x.chips) groups.push(...(x.chips(f, chip) || [])); } catch (e) {} });
         if (!groups.length) return "";
         return `<div class="reflib-ib-fchips" title="${esc(it("chips_tip"))}">${join(groups, "chip_and")}<button type="button" class="reflib-ib-fclear" data-act="chipclear">${esc(it("chips_clear"))}</button></div>`;
@@ -1565,7 +1604,7 @@
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
         if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false; f.origins = [];
+            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false; f.origins = []; f.fav = false;
             EXT.forEach(x => { if (x.clear) x.clear(f); });
             const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
             newQuery(); return true;
@@ -1582,6 +1621,7 @@
             else if (kind === "kind") f.kind = "";
             else if (kind === "hasmask") f.hasmask = false;
             else if (kind === "missing") f.missing = false;
+            else if (kind === "fav") f.fav = false;
             else if (kind === "q") { f.q = ""; const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = ""; }
             newQuery(); return true;
         }
@@ -1616,10 +1656,10 @@
         if ((text || "").trim().length < 2) { closeSug(); return; }
         sug.timer = setTimeout(() => {
             const my = ++sug.seq;
-            sendIlib({ action: "at_suggest", text, f: filterSnap() }).then(r => {
+            sendIlib({ action: "at_suggest", text, f: filterSnap(), supersede: { group: "suggest", sig: text } }).then(r => {
                 if (my !== sug.seq || !r || !r.ok) return;
                 sug.list = r.sug || []; sug.idx = -1; drawSug();
-            });
+            }).catch(() => {});
         }, 120);
     }
     function drawSug() {
@@ -2319,7 +2359,7 @@
         const tagin = host.querySelector(".reflib-ib-tagin");
         if (tagin) {
             // 1.12.17: shared inline completion + ranked suggestions (tag_complete.js) instead of the native datalist
-            if (window.ReflibTagComplete) { tagin.removeAttribute("list"); window.ReflibTagComplete.attach(tagin, () => ((ilib.data && ilib.data.tags) || []).map(x => x.tag), { key: "ml-tag" }); }
+            if (window.ReflibTagComplete) { tagin.removeAttribute("list"); window.ReflibTagComplete.attach(tagin, () => window.ReflibTagComplete.plainTags((ilib.data && ilib.data.tags) || []), { key: "ml-tag" }); }   // 1.12.18: no persona: tags (shared rule)
             tagin.value = tagVal; if (tagFocused) tagin.focus();
         }
         const nn = host.querySelector(".reflib-ib-newname");
@@ -2805,9 +2845,16 @@
                 if (k === "vnew" || k === "vedit") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; if (!b.disabled) { closeLightbox(); vOpen(hh, k === "vedit" ? "edit" : "new"); } return; }
                 if (k === "resize") { const hh = (ilib.q.items[+box.dataset.idx] || {}).hash; const r0 = b.getBoundingClientRect(); closeLightbox(); openResizeMenu({ getBoundingClientRect: () => r0 }, { hash: hh }); return; } if (k === "prev" || k === "next") lightboxStep(k === "next" ? 1 : -1); else lightboxZoom(k === "one"); return; }
                 if (e.target.classList.contains("reflib-ib-lbclose") || e.target === box || e.target.classList.contains("reflib-ib-lbstage")) { closeLightbox(); return; }
-                if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"));
+                if (e.target.tagName === "IMG") lightboxZoom(box.classList.contains("fit"), e);   // 1.12.17: zoom to the clicked point
             });
             box.addEventListener("dblclick", (e) => e.stopPropagation());
+            // 1.12.17 (ml-wheel): wheel = previous / next like the Galería (shared ReflibWheel: 1 notch = 1 item);
+            // in 1:1 with a scrollable image the wheel pans (native scroll); Ctrl/⌘ + wheel = 1:1 at the cursor / Ajustar
+            box._wheel = window.ReflibWheel ? ReflibWheel.create() : null;
+            box.addEventListener("wheel", (e) => lightboxWheel(box, e), { passive: false });
+            box.querySelector("img").addEventListener("load", () => lightboxFit(box));   // each progressive stage: thumb → preview → full
+            box._onResize = () => lightboxFit(box);
+            window.addEventListener("resize", box._onResize);
             document.body.appendChild(box);
             ilib.lightbox = box;
             // 1.12.11: fullscreen lives on the stable lightbox box (shared fullscreen_rules.js); a native <video>
@@ -2828,9 +2875,15 @@
         vn.innerHTML = VICO + esc(vct("new")); vn.title = vct("new_tip"); vn.disabled = vbr;
         ve.textContent = "✎ " + vct("edit"); ve.title = vct("edit_tip"); ve.hidden = !it2.virtual; ve.disabled = vbr;
         box.querySelector('[data-lb="fs"]').title = it("lb_fs"); fb.textContent = it("lb_fit"); fb.title = it("lb_fit_tip"); ob.textContent = it("lb_1to1"); ob.title = it("lb_1to1_tip");
+        // 1.12.17: stepping always lands in "Ajustar" (like the Galería, which resets its zoom per item); the click / 1 key go to 1:1
+        if (box._lastHash != null && box._lastHash !== it2.hash && window.ReflibViewer) box.classList.toggle("fit", ReflibViewer.navZoom().s === 1);   // shared rule (Galería too)
+        box._lastHash = it2.hash;
         fb.classList.toggle("on", box.classList.contains("fit")); ob.classList.toggle("on", !box.classList.contains("fit"));
         if (!ilib._lbGate) { thumbGate.enterViewer(); ilib._lbGate = true; }   // 1.12.9: pause thumbs while lightbox open
-        const th = ilib.thumbs.get(it2.hash); img.src = th || ""; img.dataset.hash = it2.hash;
+        const th = ilib.thumbs.get(it2.hash); img.dataset.hash = it2.hash; img.src = th || "";
+        // 1.12.17: the inline size is NOT cleared here: until the new src is decoded the <img> still holds the previous pixels,
+        // and a cleared size showed them at their intrinsic (preview / thumb) size for a moment. object-fit: contain keeps any
+        // aspect undistorted inside the kept box; the "load" listener re-fits with the new item's size.
         // 1.6.0: videos and audio play in the viewer (audio over its waveform)
         const stage = box.querySelector(".reflib-ib-lbstage");
         stage.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); } catch (e) {} });
@@ -2839,6 +2892,10 @@
         const mk = it2.kind || "image";
         box.dataset.kind = mk;
         img.hidden = mk === "video";
+        // 1.12.17: with no size yet (first open, or after a video) the img stays invisible until lightboxFit sized it: the
+        // pixels can be painted one frame before the "load" event, which showed the 220 px thumb at its own size
+        img.classList.toggle("reflib-ib-lbsizing", mk === "image" && !img.style.width);
+        if (img.complete && img.naturalWidth) lightboxFit(box);   // cached thumb → sized now, not at the next load
         if (mk !== "image") {
             stopAudio();
             mediaUrl(it2.hash).then(u => {
@@ -2858,6 +2915,7 @@
         const hh = it2.hash;
         sendIlib({ action: "preview", hash: hh }).then(r => {
             if (ilib.lightbox !== box || img.dataset.hash !== hh || !r || !r.image || !r.image.src) return;
+            if (r.image.width && r.image.height) { LB_DIMS.set(hh, [+r.image.width, +r.image.height]); lightboxFit(box); }   // original size → fit / 1:1 exact
             img.src = r.image.src;
         }).catch(() => {});
         if (mk === "image") {
@@ -2870,21 +2928,65 @@
             }).catch(() => {});
         }
     }
-    function lightboxZoom(one) {
+    // 1.12.17 (ml-wheel): explicit <img> size from the ORIGINAL dimensions (shared ReflibViewer.fitSize). Root cause of
+    // "la foto se queda pequeña": the fit CSS only capped (max-width/height) and the img showed at the intrinsic size of
+    // the progressive stage loaded at that moment (220 px thumb, then the 1024 px preview) until the full file decoded.
+    const LB_DIMS = new Map();   // hash → [w, h] of the original (from the preview reply); small, per page session
+    function lightboxBox(box) {
+        const st = box.querySelector(".reflib-ib-lbstage");
+        return { w: Math.max(1, st.clientWidth - 24), h: Math.max(1, st.clientHeight - 24) };   // = the old calc(100vw - 24px) × calc(100vh - 80px)
+    }
+    function lightboxFit(box) {
+        const img = box && box.querySelector(".reflib-ib-lbstage img"); if (!img || !window.ReflibViewer) return;
+        if (box.dataset.kind !== "image") { img.style.width = img.style.height = ""; img.classList.remove("reflib-ib-lbsizing"); return; }   // video poster / audio waveform: CSS as before
+        const d = LB_DIMS.get(img.dataset.hash) || [0, 0], b = lightboxBox(box);
+        const sz = ReflibViewer.fitSize({ natW: img.naturalWidth, natH: img.naturalHeight, origW: d[0], origH: d[1], boxW: b.w, boxH: b.h, one: !box.classList.contains("fit") });
+        if (!sz) return;
+        img.style.width = sz.w + "px"; img.style.height = sz.h + "px"; img.classList.remove("reflib-ib-lbsizing");
+    }
+    function lightboxZoom(one, ev) {
         const box = ilib.lightbox; if (!box) return;
+        const img = box.querySelector(".reflib-ib-lbstage img"), st = box.querySelector(".reflib-ib-lbstage");
+        if (one && !ev && st) { const r = st.getBoundingClientRect(); ev = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }; }   // key 1 / button: around the centre
+        const before = ev && img && !img.hidden ? img.getBoundingClientRect() : null;
         box.classList.toggle("fit", !one);
         box.querySelector('[data-lb="fit"]').classList.toggle("on", !one); box.querySelector('[data-lb="one"]').classList.toggle("on", !!one);
+        lightboxFit(box);
+        // 1.12.17: zoom to cursor — the image point under the pointer stays under it (ReflibViewer.zoomScroll)
+        if (one && before && window.ReflibViewer) {
+            const sr = st.getBoundingClientRect(), ir = img.getBoundingClientRect();
+            const z = ReflibViewer.zoomScroll({ cx: ev.clientX, cy: ev.clientY, imgRect: before, stageRect: sr,
+                newOffLeft: ir.left - sr.left + st.scrollLeft, newOffTop: ir.top - sr.top + st.scrollTop, newW: ir.width, newH: ir.height });
+            st.scrollLeft = z.left; st.scrollTop = z.top;
+        }
+    }
+    function lightboxWheel(box, e) {
+        if (box.dataset.kind === "audio" && e.target.closest && e.target.closest("audio")) return;
+        const st = box.querySelector(".reflib-ib-lbstage");
+        const zoomed = !box.classList.contains("fit");
+        const canPan = zoomed && (st.scrollHeight > st.clientHeight + 1 || st.scrollWidth > st.clientWidth + 1);
+        const w = window.ReflibViewer ? ReflibViewer.wheelIntent({ ctrl: e.ctrlKey || e.metaKey, zoomed, canPan, prevented: e.defaultPrevented }) : "none";
+        if (w === "none" || w === "pan") return;   // pan = the stage's own scroll
+        e.preventDefault();   // also the browser's page zoom with Ctrl
+        if (w === "zoom") { if (e.deltaY < 0 && !zoomed && box.dataset.kind === "image") lightboxZoom(true, e); else if (e.deltaY > 0 && zoomed) lightboxZoom(false); return; }
+        if (!box._wheel) return;
+        const n = box._wheel.push(e.deltaY, e.deltaMode, e.timeStamp || performance.now());
+        if (n) lightboxStep(n);
     }
     function lightboxStep(d) {
         const box = ilib.lightbox; if (!box) return;
-        const i = +box.dataset.idx + d;
-        if (i < 0 || i >= ilib.q.total) return;
+        // 1.12.17: steps while a page is still loading chain from the pending target (fast wheel spins never repeat / drop)
+        const base = box._pend != null ? box._pend : +box.dataset.idx;
+        const i = Math.max(0, Math.min(ilib.q.total - 1, base + d));
+        if (i === base || i < 0) return;
+        box._pend = i;
         ensurePages(i, i);
         // 1.12.14: only a row of a page loaded in THIS query generation (after a refresh, e.g. a frame capture, rows of
         // pages not re-fetched yet are stale and point at the neighbour)
-        const go = () => { const it2 = ilib.q.pages.has(Math.floor(i / PAGE)) ? ilib.q.items[i] : null; if (!it2) return false; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
+        const go = () => { if (box._pend !== i) return true;   // superseded by a later step
+            const it2 = ilib.q.pages.has(Math.floor(i / PAGE)) ? ilib.q.items[i] : null; if (!it2) return false; box._pend = null; ilib.sel.clear(); ilib.sel.add(it2.hash); selChanged(); ilib.anchorIdx = i; openLightbox(i); return true; };
         // 1.12.12: fullscreen is kept by openLightbox() (single choke point, ReflibFullscreen.navigate inside it)
-        if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ++n > 40 || ilib.lightbox !== box) clearInterval(t); }, 100); }
+        if (!go()) { let n = 0; const t = setInterval(() => { if (go() || ilib.lightbox !== box) clearInterval(t); else if (++n > 40) { clearInterval(t); if (box._pend === i) box._pend = null; } }, 100); }
     }
     function closeLightbox(silent) {
         if (ilib.lightbox) {
@@ -2892,6 +2994,7 @@
             ilib.lightbox.querySelectorAll("video.reflib-ib-lbmedia").forEach(m => { try { saveResume(m); m.pause(); } catch (e) {} });
             ilib.lightbox.querySelectorAll(".reflib-ib-lbmedia").forEach(m => { try { m.pause(); } catch (e) {} });
             if (ilib.lightbox._fsOff) { try { ilib.lightbox._fsOff(); } catch (e) {} }
+            if (ilib.lightbox._onResize) window.removeEventListener("resize", ilib.lightbox._onResize);
             ilib.lightbox.remove(); ilib.lightbox = null;
         }
     }
@@ -3129,6 +3232,12 @@
         const r = Math.round(t), h = Math.floor(r / 3600), m = Math.floor((r % 3600) / 60), x = r % 60;
         return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
     }
+    // 1.12.18: ♥ Favoritas toggle in the Explorador: the shared favourites filter (filter_rules.js `fav`, the core turns
+    // it into the favourite-tag filter), the same one the Galería's ♥ Favoritas view uses
+    function favKindBar() {
+        const RF = window.ReflibFilters, n = RF ? RF.favCount((ilib.data && ilib.data.tags) || []) : 0;
+        return `<button type="button" class="reflib-ib-kbtn reflib-ib-fav ${ilib.f.fav ? "on" : ""}" data-act="favf" aria-pressed="${!!ilib.f.fav}" title="${esc(it("fav_filter_tip"))}">♥ ${esc(it("fav_filter"))} <i>${n}</i></button>`;
+    }
     function renderKindBar() {
         const host = ilib.root && ilib.root.querySelector(".reflib-ib-kinds"); if (!host) return;
         const k = ilib.kinds || (ilib.data && ilib.data.kinds) || {}, cur = ilib.f.kind || "";
@@ -3137,6 +3246,7 @@
         host.innerHTML = [["", it("k_all"), tot]].concat(KINDS.map(x => [x, it("k_" + x), k[x] || 0])).map(([v, l, n]) =>
             `<button type="button" class="reflib-ib-kbtn ${cur === v ? "on" : ""} ${v === "mask" ? "k-mask" : ""}" data-act="kind" data-v="${v}" aria-pressed="${cur === v}" title="${esc(l)} (${n})">${v === "mask" ? "🎭 " : ""}${esc(l)} <i>${n}</i></button>`).join("")
             + `<button type="button" class="reflib-ib-kbtn reflib-mk-hasmask ${ilib.f.hasmask ? "on" : ""}" data-act="hasmask" aria-pressed="${!!ilib.f.hasmask}" title="${esc(mkt("hasmask_tip"))}">🎭 ${esc(mkt("hasmask"))}</button>`
+            + favKindBar()   // 1.12.18
             + fgKindBar(k)   // 1.7.1
             + ogKindBar(k);   // 1.10.0
     }
@@ -3400,6 +3510,7 @@
         if (act === "vsize") { setView({ thumb: el.dataset.v }); return; }
         if (act === "kind") { ilib.f.kind = el.dataset.v || ""; newQuery(); renderKindBar(); render(); return; }
         if (act === "hasmask") { ilib.f.hasmask = !ilib.f.hasmask; newQuery(); renderKindBar(); render(); return; }   // 1.7.0
+        if (act === "favf") { ilib.f.fav = !ilib.f.fav; newQuery(); renderKindBar(); render(); return; }   // 1.12.18
         if (mkClick(act, el, e)) return;
         if (fgClick(act, el, e)) return;   // 1.7.1
         if (ogClick(act, el, e)) return;   // 1.10.0
@@ -3518,6 +3629,10 @@
         }
         if (ilib.lightbox && (e.key === "1" || e.key === "0")) { e.preventDefault(); e.stopPropagation(); lightboxZoom(e.key === "1"); return; }
         if (e.key !== "Escape") return;
+        // tag field: Esc first dismisses the inline completion / suggestion list (tag_complete.js), not the selection
+        // 1.12.18: tag field: while it shows suggestions / an inline completion (or composes), Esc is the field's
+        // (tag_complete.js dismisses them and stops the event); otherwise Esc clears the selection as before
+        if (e.target && e.target.__reflibTC && e.target.__reflibTC.busy) return;
         if (ilib.lightbox && window.ReflibFullscreen && ReflibFullscreen.escAction() !== "close") return;   // 1.12.11: Esc exits fullscreen only
         e.preventDefault(); e.stopPropagation();
         if (ilib.root.querySelector(".reflib-ib-ctx")) { closeCtx(); return; }

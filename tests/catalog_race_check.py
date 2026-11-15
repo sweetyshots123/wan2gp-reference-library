@@ -6,7 +6,7 @@ after the edit may get the pre-edit catalog), late_landing (a build started befo
 current), force_missing_a / force_missing_b ("forget missing" while the background re-check runs), sidecar_case."""
 import hashlib, os, subprocess, sys, tempfile, threading, time
 
-CASES = ["forget", "restore", "remove_folder", "late_landing", "force_missing_a", "force_missing_b", "sidecar_case", "sidecar_migration", "deleted_preview"]
+CASES = ["forget", "restore", "remove_folder", "late_landing", "force_missing_a", "force_missing_b", "sidecar_case", "sidecar_migration", "deleted_preview", "thumbs_budget", "fav_filter"]
 
 if len(sys.argv) < 2:
     bad = []
@@ -179,6 +179,52 @@ elif case == "deleted_preview":
     assert not L.thumbs_for([h]).get(h)
     assert L.media_path(h) is None
     assert L.preview(d["files"][ps[1]]["hash"])["src"], "an existing file still previews"
+elif case == "thumbs_budget":   # 1.12.18 (retest D)
+    from PIL import Image
+    files = setup(12); ps = sorted(files)
+    for k, p in enumerate(ps):
+        Image.new("RGB", (64, 48), (k * 20, 10, 10)).save(p, "PNG")
+    d = L.load_folders()
+    for p in ps:
+        st = os.stat(p); d["files"][p].update(size=st.st_size, mtime=st.st_mtime)
+    L._save_folders(d); L.invalidate(); L.catalog()
+    hs = [d["files"][p]["hash"] for p in ps]
+    made = []
+    real_make, real_cached = L._make_thumb, L._cached_thumb
+    L._make_thumb = lambda h, c, size, by=None: (made.append(h), real_make(h, c, size, by=by))[1]
+    L._queue_thumbs = lambda later: None   # keep the background worker out of the count
+    # the budget counts from the start: slow cache reads alone spend it, so nothing is generated synchronously
+    L._cached_thumb = lambda h: (time.sleep(0.03), real_cached(h))[1]
+    pend = []
+    L.thumbs_for(hs[:6], budget=0.1, pending=pend)
+    assert made == [] and len(pend) == 6, ("first generation must respect the budget", made, pend)
+    L._cached_thumb = real_cached
+    # a thumbnail request never waits for a catalog rebuild
+    builds = [0]; cb = L._catalog_build
+    def counting(*a, **k):
+        builds[0] += 1; import traceback as _tb; _tb.print_stack(limit=6) if os.environ.get("DBG") else None; return cb(*a, **k)
+    L._catalog_build = counting
+    L.invalidate()
+    pend = []; out = L.thumbs_for(hs[6:8], budget=5, pending=pend)
+    assert builds[0] == 0, "thumbs_for rebuilt the catalog"
+    assert all(out[h] for h in hs[6:8]) and not pend, (out, pend)
+    # a hash the stale catalog doesn't know yet is pending (retried), not "no source"
+    unknown = "e" * 64
+    pend = []; out = L.thumbs_for([unknown], budget=5, pending=pend)
+    assert out[unknown] is None and pend == [unknown] and builds[0] == 0
+    # without a budget (callers that need the answer now) the fresh catalog is still used
+    L.thumbs_for([unknown]); assert builds[0] == 1
+elif case == "fav_filter":   # 1.12.18: shared favourites filter (both UIs send f.fav)
+    files = setup(30); hs = [files[p]["hash"] for p in sorted(files)]
+    L.catalog()
+    L.set_tags(hs[:4], add=["favorita"]); L.set_tags(hs[4:6], add=["Favorita"]); L.set_tags(hs[3:8], add=["playa"])
+    tot = lambda f: L.query(f, 0, 100, 0)["total"]
+    ids = lambda f: [i["hash"] for i in L.query(f, 0, 100, 0)["items"]]
+    assert tot({"fav": True}) == 6, tot({"fav": True})
+    assert ids({"fav": True}) == ids({"tags": ["favorita"]}), "same as the tag filter"
+    assert tot({"fav": True, "tags": ["playa"]}) == 3, "combines with other tags (AND)"
+    assert tot({"fav": False}) == 30 and tot({}) == 30
+    assert L._clean_filter({"fav": True})["fav"] is True and L._clean_filter({})["fav"] is False
 else:
     raise SystemExit("unknown case " + case)
 print("ok", case)

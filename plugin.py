@@ -84,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.17"
+PLUGIN_VERSION = "1.12.18"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -899,7 +899,7 @@ def build_js(settings=None):
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
     try:   # 1.9.6 / 1.12.6 / 1.12.7: selection + frame-capture stay + playback resume rules shared with the Galería
-        for _shared in ("selection_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js", "fullscreen_rules.js", "tag_complete.js"):
+        for _shared in ("selection_rules.js", "wheel_rules.js", "viewer_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js", "fullscreen_rules.js", "tag_complete.js", "filter_rules.js"):
             with open(os.path.join(_PLUGIN_DIR, _shared), "r", encoding="utf-8") as reader:
                 script = reader.read() + "\n" + script
     except OSError:
@@ -4076,7 +4076,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
     ILIB_READONLY = ("open", "query", "range", "sel_info", "index_of", "locate", "pause_index", "list", "thumbs", "preview", "browse", "scan_status",
                      "at_status", "at_facets", "at_image", "at_settings", "at_estimate", "at_pause", "at_cancel", "at_unload", "at_enqueue", "at_jobfacets", "at_retry",
                      "hist_list", "hist_outputs", "hist_find", "hist_settings", "hist_delete", "hist_undo", "hist_config", "ui_pref", "hist_del", "hist_undo_batch", "hist_get", "at_tax_export", "media_url", "media_dur", "playback_get", "playback_settings", "media_src", "resize_status", "virt_src", "virt_status", "mask_list", "mask_info", "mask_rename", "mask_delete", "mask_undo", "mask_assign",
-                     "forget_plan", "forget_missing_plan", "folder_excluded", "forget_status")
+                     "forget_plan", "forget_missing_plan", "folder_excluded", "forget_status",
+                     # 1.12.18: read-only too. at_suggest (search-box autocomplete, every typing pause) and col_peek
+                     # (collection hover) used to drop the whole catalog, so the next query paid a full rebuild.
+                     # at_tax_list only reads the taxonomy. (Audit: tests/ilib_readonly_check.py)
+                     "at_suggest", "col_peek", "at_tax_list")
 
     def _autotag(self, action, req, hashes, lang):
         svc = autotag_service()

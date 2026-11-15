@@ -16,10 +16,18 @@
         return "normal";
     }
 
+    // 1.12.18: viewer request priority within the "view" channel: the item on screen (its preview, media_url and the
+    // original) before the neighbour preloads, so opening / settling on an item never waits behind ±N preview renders.
+    const VIEW_PRIO = { current: 12, view: 10, neighbour: 8 };
+    const itemPrio = (k) => VIEW_PRIO[k] != null ? VIEW_PRIO[k] : VIEW_PRIO.view;
+    /** 1.12.18: does a new request `a` ({group, sig}) cancel a queued `b`? Same group, different sig. */
+    function supersedes(a, b) { return !!(a && b && a.group && a.group === b.group && a.sig !== b.sig); }
+
     /** Promise chain with priority: high items run before normal ones already queued. */
     function createScheduler(conc) {
         const q = []; // {prio, run, resolve, reject}
         const max = Math.max(1, Number(conc) || 1);   // 1.12.17: optional concurrency (thumb lane: 2)
+        const stats = { superseded: 0 };
         let running = 0;
         function pump() {
             while (running < max) {
@@ -32,10 +40,17 @@
                     .finally(() => { running--; pump(); });
             }
         }
-        function enqueue(run, prio) {
+        // 1.12.18 `sup` = {group, sig}: a request from a newer keystroke / filter (same group, other sig) cancels the
+        // still-queued older ones of that group (rejected with Error("superseded")); running ones are left alone.
+        function enqueue(run, prio, sup) {
             const p = Number(prio) || 0;
+            if (sup && sup.group) {
+                for (let i = q.length - 1; i >= 0; i--) {
+                    if (supersedes(sup, q[i].sup)) { const it = q[i]; q.splice(i, 1); stats.superseded++; it.reject(new Error("superseded")); }
+                }
+            }
             return new Promise((resolve, reject) => {
-                const item = { prio: p, run, resolve, reject };
+                const item = { prio: p, run, resolve, reject, sup: sup || null };
                 // higher prio first; stable among equals
                 let i = 0;
                 while (i < q.length && q[i].prio >= p) i++;
@@ -55,6 +70,7 @@
             },
             get size() { return q.length; },
             get busy() { return running > 0; },
+            stats,
         };
     }
 
@@ -87,7 +103,7 @@
     function createLanes() {
         const lanes = { pv: createScheduler(), q: createScheduler(), th: createScheduler(2) };
         return {
-            enqueue(action, run, prio) { return lanes[lane(action)].enqueue(run, prio); },
+            enqueue(action, run, prio, sup) { return lanes[lane(action)].enqueue(run, prio, sup); },
             lane: (l) => lanes[l],
             get size() { return lanes.pv.size + lanes.q.size + lanes.th.size; },
         };
@@ -163,7 +179,8 @@
                         else w.retryAt = Date.now() + (o.retryMs || 450);
                     }
                 }, () => {
-                    for (const h of hashes) { const w = want.get(h); if (w) { w.busy = false; w.retryAt = Date.now() + (o.failMs || 2000); } }
+                    for (const h of hashes) { const w = want.get(h); if (!w) continue; w.busy = false;
+                        if (!w.cbs.size) { want.delete(h); stats.dropped++; } else w.retryAt = Date.now() + (o.failMs || 2000); }
                 }).finally(() => { inflight--; pump(); });
             }
         }
@@ -217,7 +234,7 @@
     }
 
     root.ReflibNet = {
-        version: 4, indexRefresh, rankThumbs, createThumbQueue,
+        version: 5, indexRefresh, rankThumbs, createThumbQueue, supersedes, VIEW_PRIO, itemPrio,
         VIEW, THUMB, channel, createScheduler, createThumbGate,
         PV, lane, createLanes, scanRefresh, sameIds, bgPrio: 1,
         isView: (a) => channel(a) === "view",

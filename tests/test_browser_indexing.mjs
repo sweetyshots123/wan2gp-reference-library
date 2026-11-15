@@ -22,6 +22,7 @@ const { freePort } = await import(path.join(root, "tests/browser/ports.mjs"));
 const PORT = await freePort(); let CDP = await freePort(); while (CDP === PORT) CDP = await freePort();
 const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn(process.execPath, [path.join(root, "tests/browser/server.mjs")], { env: { ...process.env, DIST, PLUGIN: root, VERSION, PORT: String(PORT), MEDIA, QDELAY: "60" }, stdio: ["ignore", "pipe", "inherit"] });
+process.on("exit", () => { try { srv.kill(); } catch {} });   // 1.12.18: never leave the mock running (it holds the runner's stderr)
 await new Promise((r) => srv.stdout.once("data", r));
 process.env.CHROME_PROFILE = path.join(tmp, "chrome");
 const { launch } = await import(path.join(root, "tests/browser/cdp.mjs"));

@@ -26,7 +26,7 @@ export function FacetPanel({ f, af, setAf, rev }: { f: Filter; af: AFilt; setAf:
   useEffect(() => { const h = () => setAtRev((x) => x + 1); window.addEventListener(AT_DONE, h); return () => window.removeEventListener(AT_DONE, h); }, []);
   const fk = JSON.stringify(f);
   useEffect(() => {
-    call("at_facets", { f, tax: !tax }).then((x) => { if (!x.ok) return; if (x.tax) { setTax(x.tax); setTx(x.tax); } setR(x); }).catch(() => {});
+    call("at_facets", { f, tax: !tax }, { supersede: { group: "facets", sig: fk } }).then((x) => { if (!x.ok) return; if (x.tax) { setTax(x.tax); setTx(x.tax); } setR(x); }).catch(() => {});
   }, [fk, rev, atRev]);
   if (!r) return <aside className="facetp"><p className="muted">Cargando…</p></aside>;
   const fc: Record<string, number> = r.facets || {};

@@ -64,7 +64,8 @@ export default function Omni({ meta, chips, setChips, text, setText, onSearch, o
     if (!open || (!ws.length && !chips.length)) { setPrev(null); return; }
     const my = ++seq.current;
     const t = window.setTimeout(() => {
-      call("query", { f: { ...chipsFilter(chips, text), sort: "date_desc" }, limit: 18 })
+      const f = { ...chipsFilter(chips, text), sort: "date_desc" };
+      call("query", { f, limit: 18 }, { supersede: { group: "omni-preview", sig: JSON.stringify(f) } })
         .then((r) => { if (my === seq.current) setPrev({ total: r.page.total, items: r.page.items }); }).catch(() => {});
     }, 160);
     return () => window.clearTimeout(t);
@@ -76,7 +77,7 @@ export default function Omni({ meta, chips, setChips, text, setText, onSearch, o
     if (!open || text.trim().length < 2) { setAutoS([]); return; }
     let on = true;
     const t = window.setTimeout(() => {
-      call("at_suggest", { text, f: chipsFilter(chips) }).then((r) => {
+      call("at_suggest", { text, f: chipsFilter(chips) }, { supersede: { group: "suggest", sig: text } }).then((r) => {
         if (!on || !r.ok) return;
         const taken = new Set(chips.filter((c) => c.k === "auto").map((c) => c.v));
         setAutoS((r.sug || []).filter((x: any) => x.kind === "at" && x.n > 0 && !taken.has(x.id)).slice(0, 6)
