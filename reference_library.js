@@ -746,7 +746,7 @@
             to_one: "Select a single file for this", only_images_refs: "{n} non-image file(s) skipped (references take images)",
             sent_to: "Sent to {what}", pv_dur: "Duration", pv_codec: "Codec", pv_fps: "Frame rate", pv_rate: "Sample rate",
             rescan: "Re-scan", rescan_tip: "Re-scan the watched folders",
-            f_cols: "Collections", f_all: "All", f_none: "Unassigned", f_tags: "Tags", f_folders: "Folders", no_tags: "no tags yet",
+            chip_q: "Filter…", chip_more: "Show {n} more (remembered)", chip_less: "Show one line", chip_people: "People (persona: / modelo:)", f_cols: "Collections", f_all: "All", f_none: "Unassigned", f_tags: "Tags", f_folders: "Folders", no_tags: "no tags yet",
             n_images: "{n} files", n_shown: "{shown} of {n}", more: "Show more",
             empty: "Nothing matches these filters.", empty_lib: "The library is empty. Import some files or add a folder.",
             q_loading: "Loading…", q_slow: "Still waiting for the server… If WanGP was restarted or updated, this tab is out of date: reload the page.", q_failed: "The server did not answer ({e}). If WanGP was restarted or updated, reload the page.", reload_page: "Reload page",
@@ -847,7 +847,7 @@
             to_one: "Selecciona un solo archivo para esto", only_images_refs: "{n} archivo(s) que no son imágenes omitidos (las referencias solo admiten imágenes)",
             sent_to: "Enviado a {what}", pv_dur: "Duración", pv_codec: "Códec", pv_fps: "Fotogramas/s", pv_rate: "Frecuencia",
             rescan: "Reescanear", rescan_tip: "Volver a escanear las carpetas vigiladas",
-            f_cols: "Colecciones", f_all: "Todas", f_none: "Sin colección", f_tags: "Etiquetas", f_folders: "Carpetas", no_tags: "aún no hay etiquetas",
+            chip_q: "Filtrar…", chip_more: "Mostrar {n} más (se recuerda)", chip_less: "Mostrar una sola línea", chip_people: "Personas (persona: / modelo:)", f_cols: "Colecciones", f_all: "Todas", f_none: "Sin colección", f_tags: "Etiquetas", f_folders: "Carpetas", no_tags: "aún no hay etiquetas",
             n_images: "{n} archivos", n_shown: "{shown} de {n}", more: "Mostrar más",
             empty: "Nada coincide con estos filtros.", empty_lib: "La librería está vacía. Importa archivos o añade una carpeta.",
             q_loading: "Cargando…", q_slow: "Esperando al servidor… Si WanGP se reinició o se actualizó, esta pestaña está desfasada: recarga la página.", q_failed: "El servidor no respondió ({e}). Si WanGP se reinició o se actualizó, recarga la página.", reload_page: "Recargar página",
@@ -1174,17 +1174,59 @@
               ${img.uses ? `<div class="reflib-ib-uses" title="${esc(it("used_last", { when: whenText(img.used_at) }))}">${esc(it("used_n", { n: img.uses, when: whenText(img.used_at) }))}</div>` : ""}
               <div class="reflib-ib-tags">${img.tags.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>`;
     }
+    // chips: compact Colecciones / Etiquetas rows (shared chip_rules.js, same as the Galería facets row): one line by
+    // default with a "+N" toggle and a filter field, expanded = ~3 lines with inner scroll, active chips first (always
+    // visible), tags most used first, people (persona: / modelo:) grouped without the prefix; open state in localStorage.
+    function chipRowHTML(row, label, items, render, empty) {
+        const C = window.ReflibChips;
+        if (!C) return `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(label)}</span>${items.map(x => render(x)).join("") || empty || ""}</div>`;
+        const q = (ilib.chipQ && ilib.chipQ[row]) || "", open = C.isOpen(null, row);
+        let grp = false;
+        const html = C.arrange(items).map(x => {
+            const g = !grp && !x.active && !x.fixed && x.group === "people" ? (grp = true, `<span class="reflib-ib-chipgrp" title="${esc(it("chip_people"))}">👤</span>`) : "";
+            return g + render(x, `data-ql="${esc(C.fold(x.label))}" data-qi="${esc(C.fold(x.id))}"${x.active ? ' data-on="1"' : ""}${x.fixed ? ' data-fx="1"' : ""}${C.match(x, q) ? "" : " hidden"}`);
+        }).join("");
+        return `<div class="reflib-ib-frow reflib-ib-chiprow ${open ? "open" : ""}" data-row="${row}"><span class="reflib-ib-flabel">${esc(label)}</span>`
+            + `<input type="search" class="reflib-ib-chipq" data-row="${row}" value="${esc(q)}" placeholder="${esc(it("chip_q"))}" aria-label="${esc(it("chip_q"))}">`
+            + `<button type="button" class="reflib-ib-chipmore" data-act="chipmore" data-row="${row}" aria-expanded="${open}" hidden></button>`
+            + `<div class="reflib-ib-chipbox">${html || empty || ""}</div></div>`;
+    }
+    function chipLayout() {   // "+N" = chips below the first line (shared ReflibChips.hiddenCount)
+        const C = window.ReflibChips, root = ilib.root; if (!C || !root) return;
+        root.querySelectorAll(".reflib-ib-chiprow").forEach(r => {
+            const box = r.querySelector(".reflib-ib-chipbox"), b = r.querySelector(".reflib-ib-chipmore"), open = r.classList.contains("open");
+            const tops = [...box.querySelectorAll(".reflib-ib-chip:not([hidden])")].map(c => c.offsetTop);
+            const n = C.hiddenCount(tops);
+            b.hidden = !open && !n;
+            b.textContent = open ? "−" : "+" + n; b.title = it(open ? "chip_less" : "chip_more", { n }); b.setAttribute("aria-expanded", String(open));
+        });
+    }
+    function chipFilter(inp) {
+        const C = window.ReflibChips, row = inp.dataset.row, q = inp.value;
+        (ilib.chipQ = ilib.chipQ || {})[row] = q;
+        inp.closest(".reflib-ib-chiprow").querySelectorAll(".reflib-ib-chip").forEach(c => {
+            c.hidden = !C.match({ label: c.dataset.ql || "", id: c.dataset.qi || "", active: !!c.dataset.on, fixed: !!c.dataset.fx }, q);
+        });
+        chipLayout();
+    }
+    function keepChipFocus(fn) {   // re-rendering the filter rows must not steal the chip filter field while typing
+        const a = document.activeElement, row = a && a.classList && a.classList.contains("reflib-ib-chipq") ? a.dataset.row : null, pos = row ? a.selectionStart : 0;
+        fn();
+        if (row && ilib.root) { const n = ilib.root.querySelector(`.reflib-ib-chipq[data-row="${row}"]`); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } }
+        chipLayout();
+    }
     function filtersHTML(d) {   // 1.12.16: also used by renderSide() (counts while indexing)
-        const f = ilib.f;
+        const f = ilib.f, C = window.ReflibChips;
         const all = !f.cols.size && !f.none;
-        let filters = `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_cols"))}</span>`
-            + chip(esc(it("f_all")), all, 'data-f="all"')
-            + chip(`${esc(it("f_none"))} <i>${d.n_unassigned}</i>`, f.none, 'data-f="none"')
-            + d.collections.map(c => chip(`${esc(c.name)} <i>${c.count}</i>`, f.cols.has(c.id), `data-f="col" data-id="${esc(c.id)}"`)).join("")
-            + `</div>`;
-        filters += `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_tags"))}</span>`
-            + (d.tags.length ? d.tags.map(x => chip(`${esc(x.tag)} <i>${x.count}</i>`, f.tags.has(fold(x.tag)), `data-f="tag" data-tag="${esc(fold(x.tag))}"`)).join("")
-                : `<span class="reflib-ib-muted">${esc(it("no_tags"))}</span>`) + `</div>`;
+        const cols = [{ id: "all", label: it("f_all"), fixed: true, active: all, kind: "all" }, { id: "none", label: it("f_none"), count: d.n_unassigned, fixed: true, active: f.none, kind: "none" }]
+            .concat(d.collections.map(c => ({ id: c.id, label: c.name, count: c.count, active: f.cols.has(c.id), kind: "col" })));
+        let filters = chipRowHTML("cols", it("f_cols"), cols, (x, a = "") => x.kind === "all" ? chip(esc(x.label), x.active, 'data-f="all" ' + a)
+            : x.kind === "none" ? chip(`${esc(x.label)} <i>${x.count}</i>`, x.active, 'data-f="none" ' + a)
+            : chip(`${esc(x.label)} <i>${x.count}</i>`, x.active, `data-f="col" data-id="${esc(x.id)}" ` + a));
+        const tags = C ? C.tagItems(d.tags, t => f.tags.has(fold(t))) : d.tags.map(x => ({ id: x.tag, label: x.tag, count: x.count, active: f.tags.has(fold(x.tag)) }));
+        filters += chipRowHTML("tags", it("f_tags"), tags,
+            (x, a = "") => chip(`${esc(x.active && x.group === "people" ? "👤 " + x.label : x.label)} <i>${x.count}</i>`, x.active, `data-f="tag" data-tag="${esc(fold(x.id))}" title="${esc(x.id)}" ` + a, x.group === "people" ? "people" : ""),
+            `<span class="reflib-ib-muted">${esc(it("no_tags"))}</span>`);
         return filters;
     }
     // 1.12.16: counts / collections / tags / folder tree only; the grid, its cards and the loaded pages stay as they are
@@ -1193,7 +1235,7 @@
         if (!root || !ilib.open || !d) return;
         renderKindBar(); renderProgress();
         const fl = root.querySelector(".reflib-ib-filters");
-        if (fl) fl.innerHTML = filtersHTML(d);
+        if (fl) keepChipFocus(() => { fl.innerHTML = filtersHTML(d); });
         const tr = root.querySelector(".reflib-ib-tree");
         if (tr) {
             const sc = tr.scrollTop, tmp = document.createElement("div");
@@ -1267,6 +1309,7 @@
         const keepTag = root.querySelector(".reflib-ib-tagin");
         const tagVal = keepTag ? keepTag.value : "";
         const tagFocused = keepTag && document.activeElement === keepTag;
+        const chipFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("reflib-ib-chipq") ? document.activeElement.dataset.row : null;
         // 1.12.14: the details-panel host is kept in place while the rest of the body is rebuilt, so a playing
         // preview <video> is never detached (detaching = reload + native fullscreen lost); renderPreview() then
         // keeps the same <video> when the item is the same.
@@ -1286,6 +1329,8 @@
         renderFooter();
         const tagin = body.querySelector(".reflib-ib-tagin");
         if (tagin) { tagin.value = tagVal; if (tagFocused) tagin.focus(); }
+        if (chipFocus) { const n = body.querySelector(`.reflib-ib-chipq[data-row="${chipFocus}"]`); if (n) n.focus(); }
+        chipLayout();
         if (!ilib.q.ready) ensurePages(0, PAGE - 1);
     }
     // ---- windowed grid ----
@@ -2520,6 +2565,8 @@
             if (files.length) uploadFiles(files);
         });
         bg.addEventListener("click", onClick);
+        bg.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("reflib-ib-chipq")) chipFilter(e.target); });
+        window.addEventListener("resize", () => { if (ilib.open) chipLayout(); });
         bg.addEventListener("contextmenu", (e) => {   // 1.5.2 right-click menu on a card
             const card = e.target.closest(".reflib-ib-card");
             if (!card || !card.dataset.hash) return;
@@ -3560,6 +3607,10 @@
             return;
         }
         const el = e.target.closest("[data-f], [data-act], .reflib-ib-card");
+        if (el && el.dataset.act === "chipmore" && window.ReflibChips) {   // compact chip rows: expand / collapse, remembered
+            const r = el.closest(".reflib-ib-chiprow"), on = !r.classList.contains("open");
+            r.classList.toggle("open", on); ReflibChips.setOpen(null, el.dataset.row, on); chipLayout(); return;
+        }
         if (!el && ilib.data && !e.shiftKey && !e.ctrlKey && !e.metaKey && e.target.closest(".reflib-ib-main")
             && !e.target.closest(".reflib-ib-crumbs, .reflib-ib-fchips, .reflib-ib-dayhead, .reflib-ib-more")) {
             if (ilib.justDragged || Date.now() - (ilib.dragEndAt || 0) < 400) { ilib.justDragged = false; return; }   // the click that ends a marquee

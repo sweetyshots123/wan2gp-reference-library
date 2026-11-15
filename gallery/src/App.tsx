@@ -20,6 +20,7 @@ import Viewer from "./Viewer";
 import { setRemover } from "./optimistic";
 import Grid, { Section } from "./Grid";
 import Omni, { Chip, chipsFilter } from "./Omni";
+import { ChipRow, Chips } from "./ChipRow";
 import { Thumb, Toasts, fmtDur, toast } from "./ui";
 import { resumeMinS, setResumeMinM } from "./playback";
 
@@ -364,7 +365,7 @@ export default function App() {
     const m = new Map<string, number>();
     loaded.forEach((i) => i.tags.forEach((t) => m.set(t, (m.get(t) || 0) + 1)));
     const b = new Set((filter?.tags || []).map((t) => t.toLowerCase()));
-    return [...m.entries()].filter(([t]) => !b.has(t.toLowerCase())).sort((a, b) => b[1] - a[1]).slice(0, 14);
+    return [...m.entries()].filter(([t]) => !b.has(t.toLowerCase())).sort((a, b) => b[1] - a[1]);   // compact ChipRow: no 14 cap
   }, [loaded, filter]);
 
   // página de resultados: personas / colecciones / etiquetas cuyo nombre coincide con los textos buscados
@@ -449,10 +450,8 @@ export default function App() {
             </div>
           )}
           {(facet.length > 0 || extraTags.length > 0) && (
-            <div className="facets">
-              {extraTags.map((t) => <button key={t} className="chip on" onClick={() => setExtraTags(extraTags.filter((x) => x !== t))}>{isPerson(t) ? personName(t) : t} ×</button>)}
-              {facet.map(([t, n]) => <button key={t} className={`chip ${isPerson(t) ? "model" : ""}`} onClick={() => setExtraTags([...extraTags, t])}>{isPerson(t) ? personName(t) : t} <small>{n}</small></button>)}
-            </div>
+            <ChipRow row="gtags" items={[...Chips.tagItems(extraTags.map((t) => ({ tag: t, count: 0 })), () => true).map((x) => ({ ...x, count: undefined })), ...Chips.tagItems(facet.map(([tag, count]) => ({ tag, count })), () => false)]}
+              onPick={(x) => setExtraTags(x.active ? extraTags.filter((t) => t !== x.id) : [...extraTags, x.id])} />
           )}
           {dateNote && <p className="muted datenote">{dateNote}</p>}
           {total > 0 && (

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.20
+
+Compact Colecciones / Etiquetas chip rows in both the Media Library and the Galería, so a large tag or collection list no longer fills the screen above the grid.
+
+- **Shared `chip_rules.js` (`ReflibChips`)**, loaded in `plugin.py`'s shared JS tuple (after `filter_rules.js`; `playback_rules.js` is unchanged) and used by the Galería (`gallery/src/ChipRow.tsx`). One line by default with a «+N» toggle and a filter field; most used first; `persona:` / `modelo:` grouped without the prefix; active chips always stay visible; open = about 3 lines with inner scroll; open state in `localStorage`.
+- **Media Library:** collection and tag filter rows use the shared layout (collapsed one line, open up to 3 lines).
+- **Galería:** the tag facets row uses the same rules and now lists all tags of the loaded items (the old 14-chip cap is gone).
+- **Tests:** `tests/test_chip_rules.mjs`, `tests/test_browser_chips.mjs` (synthetic 80 tags + 24 collections).
+
+
 ## 1.12.19
 
 Play MPEG-4 Part 2 (mp4v) and other browser-unplayable video codecs in both the Galería and the Media Library (embedded Gradio and standalone).

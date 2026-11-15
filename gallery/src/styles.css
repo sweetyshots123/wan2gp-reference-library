@@ -348,3 +348,12 @@ html{overflow-anchor:none}
 .stalebar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:#7a4b00;color:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 4px 16px #0006;font-size:14px}
 .stalebar button{margin-left:10px}
 .stalebar button.x{margin-left:6px;background:transparent;border:0;color:#fff;font-size:16px;cursor:pointer}
+/* compact chip row (shared chip_rules.js, same as the Media Library rows) */
+.facets.chiprow { flex-wrap:nowrap; align-items:flex-start; }
+.chiprow .chipq { flex:none; width:96px; height:26px; box-sizing:border-box; padding:0 8px; border-radius:14px; border:1px solid #33333d; background:var(--bg3); color:inherit; font-size:12px; }
+.chiprow .chipmore { flex:none; height:26px; min-width:26px; padding:0 8px; border-radius:14px; font-size:12px; }
+.chiprow .chipbox { flex:1; min-width:0; display:flex; flex-wrap:wrap; gap:6px; max-height:26px; overflow:hidden; position:relative; }
+.chiprow.open .chipbox { max-height:90px; overflow-y:auto; }   /* 3 lines */
+.chiprow .chipbox .chip { height:26px; box-sizing:border-box; }
+.chiprow .chipbox .chip[hidden] { display:none; }
+.chiprow .chipgrp { font-size:12px; opacity:.7; line-height:26px; }

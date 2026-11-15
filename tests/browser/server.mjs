@@ -25,14 +25,27 @@ reset();
 const MOCK_FAV = (process.env.MOCK_FAV || "").split(",").filter(Boolean);
 const applyFav = () => { for (const it of items) if (MOCK_FAV.includes(it.hash)) it.tags = ["favorita"]; };
 applyFav();
+// chips: MOCK_CHIPS = number of synthetic tags (¼ persona:, ⅛ modelo:, rest plain), MOCK_COLS = synthetic collections;
+// assigned to the generated items with decreasing frequency. Off (0) keeps the other tests identical.
+const MOCK_CHIPS = +process.env.MOCK_CHIPS || 0, MOCK_COLS = +process.env.MOCK_COLS || 0;
+const chipTag = (k) => k % 4 === 0 ? `persona:Persona ${String(k).padStart(2, "0")}` : k % 8 === 1 ? `modelo:Modelo ${String(k).padStart(2, "0")}` : `etiqueta_${String(k).padStart(2, "0")}`;
+const applyChips = () => { if (!MOCK_CHIPS) return; items.forEach((it, i) => { for (let k = 0; k < MOCK_CHIPS; k++) if (i % (k + 2) === 0) it.tags.push(chipTag(k));
+  for (let c = 0; c < MOCK_COLS; c++) if (i % (c + 3) === 0) it.cols.push("col" + c); }); };
+applyChips();
+const tagCounts = () => { const m = new Map(); for (const it of items) for (const t of it.tags || []) m.set(t, (m.get(t) || 0) + 1); return [...m].map(([tag, count]) => ({ tag, count, n: count })); };
 const BAD = new Set((process.env.BAD_HASHES || "").split(",").filter(Boolean));   // served as an mp4v (MPEG-4 Part 2) file the browser can't decode
 const sorted = (f) => { let a = items.slice(); if (f && f.kind === "video") a = a.filter((x) => x.kind === "video");
   if (f && Array.isArray(f.kinds) && f.kinds.length) a = a.filter((x) => f.kinds.includes(x.kind));
+  if (f && Array.isArray(f.tags) && f.tags.length) a = a.filter((x) => f.tags.every((t) => (x.tags || []).some((y) => y.toLowerCase() === t)));   // chips
+  if (f && Array.isArray(f.cols) && f.cols.length) a = a.filter((x) => f.cols.some((c) => (x.cols || []).includes(c)));
   if (f && f.fav) a = a.filter((x) => (x.tags || []).some((t) => String(t).toLowerCase() === "favorita"));   // 1.12.18 (core: _clean_filter)
   const s = (f && f.sort) || "date_desc"; a.sort((x, y) => s === "date_asc" ? x.added - y.added : y.added - x.added); return a; };
 const MOCK_TAGS = (process.env.MOCK_TAGS || "").split(",").filter(Boolean);   // 1.12.17: synthetic tags for the autocomplete test
 const favN = () => items.filter((x) => (x.tags || []).some((t) => String(t).toLowerCase() === "favorita")).length;
-const meta = () => ({ rev, total: items.length, collections: [], tags: MOCK_TAGS.map((tag, i) => ({ tag, n: 100 - i })).concat(favN() ? [{ tag: "favorita", n: favN(), count: favN() }] : []), folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } });
+const meta = () => MOCK_CHIPS ? { rev, total: items.length, n_unassigned: items.filter((x) => !x.cols.length).length,
+    collections: Array.from({ length: MOCK_COLS }, (_, c) => ({ id: "col" + c, name: "Colección " + String(c + 1).padStart(2, "0"), count: items.filter((x) => x.cols.includes("col" + c)).length })),
+    tags: tagCounts(), folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } }
+  : ({ rev, total: items.length, collections: [], tags: MOCK_TAGS.map((tag, i) => ({ tag, n: 100 - i })).concat(favN() ? [{ tag: "favorita", n: favN(), count: favN() }] : []), folders: [], kinds: { image: items.filter(x => x.kind === "image").length, video: items.filter(x => x.kind === "video").length } });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = []; const tl = []; const T0 = Date.now();   // 1.12.18: tl = timeline [ms, event] (viewer priority test)
 const THUMB_MS = +(process.env.THUMB_MS || 0), THUMB_CONC = +(process.env.THUMB_CONC || 2); let thumbBusy = 0; const thumbLog = []; const tagLog = []; const qlog = [];
@@ -74,7 +87,7 @@ http.createServer(async (req, res) => {
     let body = ""; for await (const c of req) body += c; const b = body ? JSON.parse(body) : {};
     let out;
     if (u.pathname === "/reflib/api") out = await api(b);
-    else if (u.pathname === "/test/reset") { reset(); applyFav(); log.length = 0; qlog.length = 0; scanning = false; out = { ok: true }; }
+    else if (u.pathname === "/test/reset") { reset(); applyFav(); applyChips(); log.length = 0; qlog.length = 0; scanning = false; out = { ok: true }; }
     else if (u.pathname === "/test/capture") { seq++; const h = "f" + String(seq).padStart(3, "0"); items.push({ hash: h, name: "frame_" + seq + ".png", names: [], cols: [], pool: true, folders: [], tags: [], added: 2e6 + seq, kind: "image" }); rev++; out = { ok: true, hash: h, name: "frame_" + seq + ".png" }; }
     else if (u.pathname === "/test/scan") { scanning = !!b.running; out = { ok: true }; }
     else if (u.pathname === "/test/add") { seq++; const h = "n" + String(seq).padStart(3, "0"); items.push({ hash: h, name: "new_" + seq + ".png", names: [], cols: [], pool: true, folders: [], tags: [], added: b.old ? 1 + seq : 3e6 + seq, kind: "image" }); rev++; out = { ok: true, hash: h }; }
