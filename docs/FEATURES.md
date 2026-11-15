@@ -6,6 +6,12 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.16 — Fast catalog while indexing
+
+- Server: `imagelib.catalog()` single flight (`_cat_build`) + stale-while-indexing (only when the key differs in the folders index / missing re-check and a scan runs); `_catalog_build` parses the folders index once; `forget.is_missing(i, known, gone)` uses the scan + background re-check (`_missing_recheck`, `MISSING_RECHECK_S = 60`, `missing_recheck_now()`); `SCAN_COMMIT_SECONDS = 10`; scan stores `side` (AI sidecar) from its listing, `origin.prime_sidecars`, fallback one listing per directory; `query()` passes the catalog to `_light`.
+- Clients: `ReflibNet.scanRefresh` / `createLanes` / `bgPrio` (request_priority.js, both UIs). Media Library `refreshData(true)` while indexing + `renderSide()`; Galería `refreshScan()` on rev change while `scan.running`.
+- Tests: `python3 tests/catalog_perf_check.py`, `node tests/test_scan_refresh_rules.mjs`, `node tests/test_browser_indexing.mjs`; bench `python3 tests/bench_catalog_scan.py 23000 2300 .`.
+
 ## 1.12.15 — Unsupported-codec notice matches the loaded video
 
 - Galería viewer: notice + «Abrir en reproductor externo» / «Mostrar en carpeta» only while the current `<video>` really can't decode its source (`ReflibPlayback.unplayable`, playback_rules.js, shared with the Media Library); recomputed on `ReflibPlayback.UNPLAYABLE_EVENTS`, never sticky across items. Test: `node tests/test_browser_vbad.mjs`.

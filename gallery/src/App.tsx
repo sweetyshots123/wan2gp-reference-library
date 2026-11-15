@@ -142,11 +142,12 @@ export default function App() {
   const applyMeta = (r: any) => { const m = metaOf(r); if (m) { setMeta(m); rev.current = m.rev; } };
   const tz = -new Date().getTimezoneOffset();
 
-  const fetchPage = useCallback(async (p: number, g: number, withSections = false) => {
+  const totalRef = useRef(0); totalRef.current = total;
+  const fetchPage = useCallback(async (p: number, g: number, withSections = false, bg = false, pre: any = null) => {
     if (!filter) return;
     pages.current.set(p, g);
     try {
-      const r = await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz });
+      const r = pre || await call("query", { f: filter, offset: p * PAGE, limit: PAGE, meta: withSections, sections: withSections, tz_min: tz }, { bg });
       if (g !== gen.current) return;
       if (r.v && typeof __REFLIB_BUILD__ === "string" && staleShow(r.v, __REFLIB_BUILD__, localStorage.getItem(STALE_KEY))) setStale(String(r.v));   // 1.12.13: old tab / old build
       if (withSections) { applyMeta(r); setSections(r.page.sections || null); if (r.page.kinds) setKc(r.page.kinds); }
@@ -191,14 +192,37 @@ export default function App() {
     fetchPage(0, g, true).then(() => loaded.filter((p) => p > 0).forEach((p) => fetchPage(p, g)));
   }, [fetchPage]);
 
+  // 1.12.16: while a folder is being indexed (shared ReflibNet.scanRefresh, same rule as the Media Library): page 0 +
+  // counts at background priority; nothing changed on it -> counts only (other loaded pages untouched); otherwise it
+  // is applied in place and the other loaded pages are re-fetched in the background, still shown meanwhile.
+  const refreshScan = useCallback(async () => {
+    const NetR: any = (globalThis as any).ReflibNet;
+    if (!filter || !NetR?.scanRefresh) { refresh(); return; }
+    const g0 = gen.current, prevIds: (string | undefined)[] = [];
+    for (let j = 0; j < PAGE && j < totalRef.current; j++) prevIds.push(store.current.get(j)?.hash);
+    let r: any;
+    try { r = await call("query", { f: filter, offset: 0, limit: PAGE, meta: true, sections: true, tz_min: tz }, { bg: true }); } catch { return; }
+    if (g0 !== gen.current || !r?.page) return;
+    const dec = NetR.scanRefresh({ ids: prevIds, total: totalRef.current, groups: null }, { ids: r.page.items.map((x: Item) => x.hash), total: r.page.total, groups: null });
+    (window as any).__galScanRefresh = dec;   // tests
+    if (dec.countsOnly) { applyMeta(r); setSections(r.page.sections || null); if (r.page.kinds) setKc(r.page.kinds); return; }
+    const g = ++gen.current, loaded = [...pages.current.keys()];
+    pages.current = new Map();
+    await fetchPage(0, g, true, true, r);
+    loaded.filter((p) => p > 0).forEach((p) => fetchPage(p, g, false, true));
+  }, [fetchPage, refresh]);
+
   // sincronía: si la Media Library cambia algo (otra pestaña / otra UI) se recarga sola
   useEffect(() => {
     const t = window.setInterval(async () => {
       if (document.hidden) return;
-      try { const r = await call("list"); const m = metaOf(r); if (m && m.rev !== rev.current) { applyMeta(r); refresh(); } } catch {}
+      try {
+        const r = await call("list", {}, { bg: true }); const m = metaOf(r);
+        if (m && m.rev !== rev.current) { applyMeta(r); if (r.scan?.running) refreshScan(); else refresh(); }   // 1.12.16
+      } catch {}
     }, 5000);
     return () => window.clearInterval(t);
-  }, [refresh]);
+  }, [refresh, refreshScan]);
 
   // 1.12.6 / 1.12.13: the open viewer is pinned by hash (shared ReflibFrameCapture.pinFollow/pinLocate).
   // The pin only follows the USER's navigation (viewer index changed); a refresh (frame capture, rev poll) never

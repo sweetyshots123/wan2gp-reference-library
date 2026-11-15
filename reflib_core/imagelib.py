@@ -76,9 +76,10 @@ def save_tags(tags: Dict[str, List[str]]) -> None:
     storage._atomic_write_json(_tags_path(), {"version": 1, "tags": {h: t for h, t in sorted(tags.items()) if t}})
 
 
-def list_images() -> List[Dict[str, Any]]:
+def list_images(fdata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Every image in live collections, one entry per content hash (first appearance order):
-    {hash, name, names, file, path, collections: [{id, name}], tags}."""
+    {hash, name, names, file, path, collections: [{id, name}], tags}.
+    1.12.16: `fdata` = an already parsed load_folders() (catalog() parses the multi-MB folders index once)."""
     with storage._lock:
         tags = load_tags()
         by_hash: Dict[str, Dict[str, Any]] = {}
@@ -118,7 +119,7 @@ def list_images() -> List[Dict[str, Any]]:
                 order.append(h)
             stamp(entry, it.get("added"), pool_path(it))
             entry["in_pool"] = True
-        fdata = load_folders()
+        fdata = load_folders() if fdata is None else fdata
         fpaths = {f["id"]: f["path"] for f in fdata["folders"]}
         excl = {f["id"]: f["exclude"] for f in fdata["folders"] if f.get("exclude")}   # 1.7.1
         for p, v in fdata["files"].items():
@@ -1159,6 +1160,8 @@ def load_folders() -> Dict[str, Any]:
         if isinstance(v, dict) and v.get("folder") in ids and _HASH_RE.match(str(v.get("hash") or "")):
             files[p] = {"folder": v["folder"], "size": int(v.get("size") or 0), "mtime": float(v.get("mtime") or 0), "hash": v["hash"],
                         "first": float(v.get("first") or 0)}
+            if "side" in v:   # 1.12.16: AI sidecar (<name>.json / <name>_settings.json) seen by the scan's own listing
+                files[p]["side"] = 1 if v["side"] else 0
     return {"folders": folders, "files": files}
 
 
@@ -1309,6 +1312,7 @@ def _candidates(folder: Dict[str, Any], with_stat: bool = False):
         except OSError:
             continue
         subdirs = []
+        names = {e.name for e in entries} if with_stat else ()   # 1.12.16: sidecars from this listing, no extra stat
         for e in entries:
             n = e.name
             if n.startswith("."):
@@ -1327,7 +1331,8 @@ def _candidates(folder: Dict[str, Any], with_stat: bool = False):
                     st = e.stat()
                 except OSError:
                     continue
-                out.append((e.path, st.st_size, st.st_mtime))
+                b = os.path.splitext(n)[0]
+                out.append((e.path, st.st_size, st.st_mtime, 1 if (b + ".json" in names or b + "_settings.json" in names) else 0))
             else:
                 out.append(e.path)
             if len(out) >= FOLDER_MAX_FILES:
@@ -1341,7 +1346,8 @@ _scan_state: Dict[str, Any] = {"running": False, "folder_id": "", "path": "", "d
 _scan_lock = threading.Lock()
 _scan_queue: List[str] = []
 _paused = threading.Event()
-SCAN_COMMIT_SECONDS = 1.0     # 1.4.4: partial commits at most once a second (each rewrites the whole index)
+SCAN_COMMIT_SECONDS = 10.0    # 1.4.4: partial commits (each rewrites the whole index and makes the catalog stale);
+                              # 1.12.16: every ~10 s instead of every second (one catalog rebuild per commit)
 AUTO_SCAN_INTERVAL = 10 * 60  # 1.4.4: opening the browser re-checks folders at most every 10 minutes
 
 
@@ -1411,13 +1417,15 @@ def _scan_folder(f: Dict[str, Any], progress=None) -> Dict[str, int]:
         pending.clear()
         return True
 
-    for i, (p, size, mtime) in enumerate(paths, 1):
+    for i, (p, size, mtime, side) in enumerate(paths, 1):
         while _paused.is_set():     # 1.4.4: "Pause indexing"
             _set_scan(paused=True)
             time.sleep(0.3)
         _set_scan(paused=False)
         prev = old.get(p)
         if prev and prev["size"] == size and abs(prev["mtime"] - mtime) < 1e-3:
+            if prev.get("side") != side:   # 1.12.16: sidecar flag new / changed -> recorded at the final commit
+                prev = dict(prev, side=side); changed[0] = True
             seen[p] = prev
             if progress and i % 50 == 0:
                 progress(i, len(paths))
@@ -1429,7 +1437,7 @@ def _scan_folder(f: Dict[str, Any], progress=None) -> Dict[str, int]:
         changed[0] = True
         added += 0 if prev else 1
         seen[p] = pending[p] = {"folder": fid, "size": size, "mtime": mtime, "hash": digest,
-                                "first": (prev or {}).get("first") or time.time()}
+                                "first": (prev or {}).get("first") or time.time(), "side": side}
         if progress:
             progress(i, len(paths))
         time.sleep(0)               # low priority: let request threads run between files
@@ -1514,8 +1522,8 @@ def wait_scan(timeout: float = 60.0) -> Dict[str, Any]:
     return scan_status()
 
 
-def list_folders() -> List[Dict[str, Any]]:
-    data = load_folders()
+def list_folders(fdata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    data = load_folders() if fdata is None else fdata
     counts: Dict[str, int] = {}
     for v in data["files"].values():
         counts[v["folder"]] = counts.get(v["folder"], 0) + 1
@@ -1845,6 +1853,13 @@ RANGE_MAX = 50000
 RECENT_DAYS, RECENT_MAX, RECENT_MIN = 30, 500, 24
 _cat: Dict[str, Any] = {"key": None, "data": None, "fkey": None, "flist": None}
 _cat_lock = threading.Lock()
+_cat_build = threading.Lock()   # 1.12.16: single-flight rebuild (one thread builds; the others wait or keep the old one)
+# 1.12.16 "archivo no encontrado" for files of watched folders: the scan has just listed them, so a rebuild doesn't stat
+# each one (~0.2 ms per file on Google Drive = seconds per rebuild). A background pass re-checks them (throttled) and
+# bumps "rev" (part of the catalog key) only when something appeared / disappeared.
+MISSING_RECHECK_S = 60.0
+_miss: Dict[str, Any] = {"gone": frozenset(), "rev": 0, "running": False, "last": 0.0, "paths": None}
+_miss_lock = threading.Lock()
 
 
 # 1.5.0 auto-tags: the host sets AUTOTAGS = callable -> (key, {hash: frozenset(effective tag ids incl. ancestors)})
@@ -1872,7 +1887,7 @@ def _auto_map():
 
 
 def _index_key() -> tuple:
-    out = [("auto", _auto_map()[0])]
+    out = [("auto", _auto_map()[0]), ("miss", _miss["rev"])]
     from . import virtuals as _vc
     from . import videostore as _vs
     from . import masks as _mk
@@ -1888,19 +1903,89 @@ def _index_key() -> tuple:
 from . import forget as _forget   # 1.7.1 (late import: forget imports imagelib lazily)
 
 
+def _only_scan_changed(old_key, new_key) -> bool:
+    """1.12.16: the keys differ only in the folders index (a scan commit) or the background missing re-check."""
+    if not old_key or len(old_key) != len(new_key):
+        return False
+    fi = _folders_index()
+    return all(a == b or (a[0] == b[0] and (a[0] == "miss" or a[0] == fi)) for a, b in zip(old_key, new_key))
+
+
 def catalog() -> Dict[str, Any]:
-    """{items, by_hash, tree, tags, collections, n_unassigned, folders} built from list_images(), cached."""
+    """{items, by_hash, tree, tags, collections, n_unassigned, folders} built from list_images(), cached.
+    1.12.16: single flight. Only one thread rebuilds; the others wait for it instead of rebuilding the same thing in
+    parallel. While a folder scan is running and only the scan's own index changed, callers keep getting the previous
+    catalog (stale-while-revalidate) instead of waiting; any other change (tags, collections, pool...) waits."""
     key = _index_key()
     with _cat_lock:
         if _cat["key"] == key and _cat["data"] is not None:
             return _cat["data"]
+        stale, skey = _cat["data"], _cat["key"]
+    can_stale = stale is not None and _scan_state.get("running") and _only_scan_changed(skey, key)
+    if not _cat_build.acquire(blocking=not can_stale):
+        return stale
+    try:
+        key = _index_key()   # may have been rebuilt (or changed again) while we waited
+        with _cat_lock:
+            if _cat["key"] == key and _cat["data"] is not None:
+                return _cat["data"]
+        return _catalog_build(key)
+    finally:
+        _cat_build.release()
+
+
+def _missing_recheck(paths, force: bool = False) -> None:
+    """Background: which watched-folder files are gone now. Throttled; one at a time; bumps the catalog key on change."""
+    with _miss_lock:
+        if _miss["running"] or (not force and time.time() - _miss["last"] < MISSING_RECHECK_S):
+            return
+        _miss["running"] = True
+
+    def run():
+        try:
+            gone = set()
+            for k, p in enumerate(paths):
+                if not os.path.isfile(p):
+                    gone.add(p)
+                if k % 200 == 0:
+                    time.sleep(0)   # low priority next to requests
+            gone = frozenset(gone)
+            with _miss_lock:
+                changed = gone != _miss["gone"]
+                _miss.update(gone=gone, last=time.time(), paths=len(paths))
+                if changed:
+                    _miss["rev"] += 1
+        finally:
+            with _miss_lock:
+                _miss["running"] = False
+    if force:
+        run()
+    else:
+        threading.Thread(target=run, name="reflib-missing", daemon=True).start()
+
+
+def missing_recheck_now() -> None:
+    """Synchronous re-check of every watched-folder file (tests; actions that need the exact state)."""
+    fdata = load_folders()
+    _missing_recheck(list(fdata["files"]), force=True)
+
+
+def _catalog_build(key) -> Dict[str, Any]:
     import sys as _sys
     intern = _sys.intern
     items = []
     _am = _auto_map()
     amap = _am[1]
     bmap = _am[2] if len(_am) > 2 else {}
-    for i in list_images():   # compact entries: ids/rels interned, tuples, no decoded data, ≤5 file paths
+    fdata = load_folders()   # 1.12.16: parsed once for list_images and list_folders
+    ffiles = fdata["files"]
+    gone = _miss["gone"]
+    try:   # 1.12.16: sidecar presence recorded by the scan -> origin needs no stat for these files
+        from . import origin as _og0
+        _og0.prime_sidecars({p: bool(v["side"]) for p, v in ffiles.items() if "side" in v})
+    except Exception:
+        pass
+    for i in list_images(fdata):   # compact entries: ids/rels interned, tuples, no decoded data, ≤5 file paths
         names = tuple(i["names"]) or (i["name"],)
         fold = _fold(" ".join(dict.fromkeys((i["name"],) + names)))
         items.append({"hash": i["hash"], "name": i["name"], "names": names, "path": i["path"], "files": tuple(i["files"][:5]),
@@ -1912,19 +1997,22 @@ def catalog() -> Dict[str, Any]:
                       "kind": ("mask" if i.get("mask") and all(fid == "__masks" for fid, _ in (i.get("locs") or [])) else i["virtual"]["kind"] if i.get("virtual") else (kind_of(i["path"]) or kind_of(i["name"]) or "image")),
                       "virtual": i.get("virtual"), "mask": tuple(i.get("mask") or ()), "vlib": i.get("vlib")})
         it_ = items[-1]
-        it_["missing"] = _forget.is_missing(it_)   # 1.7.1 "archivo no encontrado"
+        # 1.7.1 "archivo no encontrado"; 1.12.16: files of watched folders come from the scan / background re-check
+        it_["missing"] = _forget.is_missing(it_, known=ffiles, gone=gone)
     try:   # 1.10.0 origin (AI / real)
         from . import origin as _og
         _og.resolve(items)
     except Exception as e:
         print(f"[Reference Library] origin: {e!r}")
-    return _derive(items, key)
+    data = _derive(items, key, fdata)
+    _missing_recheck(list(ffiles))
+    return data
 
 
-def _derive(items: List[Dict[str, Any]], key) -> Dict[str, Any]:
+def _derive(items: List[Dict[str, Any]], key, fdata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """1.9.7: everything catalog() computes from the item list (tree, counts, tags, folders...). Cheap next to building the
     items (list_images + a stat per file), so a delete can drop items from the cached list and re-derive (_patch_remove)."""
-    folders = list_folders()
+    folders = list_folders(fdata)
     nvirt = sum(1 for i in items if i["virtual"])
     if nvirt:   # 1.6.6 pseudo folder "⧉ Copias virtuales" (not a real folder: no rescan / remove / reveal)
         from . import virtuals as _vc
@@ -2202,7 +2290,7 @@ def filtered(f, now: Optional[float] = None) -> Dict[str, Any]:
     return res
 
 
-def _light(i: Dict[str, Any]) -> Dict[str, Any]:
+def _light(i: Dict[str, Any], cat: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     out = {"hash": i["hash"], "name": i["name"], "names": list(i["names"][:4]), "cols": sorted(i["colids"]), "pool": bool(i["in_pool"]),
            "folders": list(i["folders"]), "tags": list(i["tags"]), "added": round(i["added"] or 0, 1)}
     if i.get("missing"):   # 1.7.1
@@ -2221,7 +2309,7 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
         m = i["mask"][0]
         out["mask"] = {"id": m["id"], "video": m["video"], "label": m["label"], "video_name": m.get("video_name") or "", "n": len(i["mask"])}
     else:
-        mn = (catalog().get("mcount") or {}).get(i["hash"])
+        mn = ((cat or catalog()).get("mcount") or {}).get(i["hash"])
         if mn:
             out["masks"] = mn
     v = i.get("virtual")
@@ -2230,7 +2318,7 @@ def _light(i: Dict[str, Any]) -> Dict[str, Any]:
         if i["kind"] != "image":
             out["dur"] = v.get("dur") or 0
     else:
-        n = (catalog().get("vcount") or {}).get(i["hash"])
+        n = ((cat or catalog()).get("vcount") or {}).get(i["hash"])
         if n:
             out["vcopies"] = n
     return out
@@ -2301,7 +2389,8 @@ def query(f, offset: int = 0, limit: int = 120, tz_min: int = 0, sections: bool 
     offset = max(0, int(offset or 0))
     limit = max(0, min(PAGE_MAX, int(limit if limit is not None else 120)))
     jrev, jmap = _jobmap()
-    page = [_light(i) for i in items[offset:offset + limit]]
+    cat = catalog()   # 1.12.16: once per page, not twice per item
+    page = [_light(i, cat) for i in items[offset:offset + limit]]
     try:   # on-screen media without a duration yet are probed first
         from . import mediainfo
         mediainfo.want(((i["hash"], i["path"], i["kind"]) for i in items[offset:offset + limit] if i["kind"] != "image" and not i.get("virtual")), front=True)

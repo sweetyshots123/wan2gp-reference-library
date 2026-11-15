@@ -926,14 +926,16 @@
     const sched = {
         main: (Net && Net.createScheduler) ? Net.createScheduler() : null,
         fast: (Net && Net.createScheduler) ? Net.createScheduler() : null,
+        lanes: (Net && Net.createLanes) ? Net.createLanes() : null,   // 1.12.16: fetch mode: preview never waits behind a query
     };
     const thumbGate = (Net && Net.createThumbGate) ? Net.createThumbGate() : { enterViewer() {}, leaveViewer() {}, blocked: false, whenFree() { return Promise.resolve(); } };
     const chains = { main: Promise.resolve(), fast: Promise.resolve() };   // fallback if request_priority.js missing
     function sendIlib(req) {
         req = Object.assign({ id: Math.random().toString(16).slice(2), lang: lang(), browser: browserLang() }, req || {});
+        const bg = !!req.bg; delete req.bg;   // 1.12.16: background refresh (indexing): behind what the user asked for
         const useFetch = !!window.__REFLIB_STANDALONE__ || !document.getElementById("reflib_ilib_btn");
         const chName = Net ? Net.channel(req.action) : (req.action === "thumbs" ? "thumb" : "normal");
-        const prio = chName === "view" ? 10 : chName === "thumb" ? 0 : 5;
+        const prio = bg ? ((Net && Net.bgPrio) || 1) : chName === "view" ? 10 : chName === "thumb" ? 0 : 5;
         // Wait for the thumb gate OUTSIDE the scheduler so a parked thumb never blocks preview/media_url.
         const start = async () => {
             if (chName === "thumb") await thumbGate.whenFree();
@@ -947,6 +949,7 @@
                       if (data && data.v && data.v !== VERSION) staleTab(data.v);
                       return data;
                   });
+                if (sched.lanes) return sched.lanes.enqueue(req.action, run, prio);
                 if (sched.fast) return sched.fast.enqueue(run, prio);
                 return run();
             }
@@ -1132,6 +1135,35 @@
               ${img.uses ? `<div class="reflib-ib-uses" title="${esc(it("used_last", { when: whenText(img.used_at) }))}">${esc(it("used_n", { n: img.uses, when: whenText(img.used_at) }))}</div>` : ""}
               <div class="reflib-ib-tags">${img.tags.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>`;
     }
+    function filtersHTML(d) {   // 1.12.16: also used by renderSide() (counts while indexing)
+        const f = ilib.f;
+        const all = !f.cols.size && !f.none;
+        let filters = `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_cols"))}</span>`
+            + chip(esc(it("f_all")), all, 'data-f="all"')
+            + chip(`${esc(it("f_none"))} <i>${d.n_unassigned}</i>`, f.none, 'data-f="none"')
+            + d.collections.map(c => chip(`${esc(c.name)} <i>${c.count}</i>`, f.cols.has(c.id), `data-f="col" data-id="${esc(c.id)}"`)).join("")
+            + `</div>`;
+        filters += `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_tags"))}</span>`
+            + (d.tags.length ? d.tags.map(x => chip(`${esc(x.tag)} <i>${x.count}</i>`, f.tags.has(fold(x.tag)), `data-f="tag" data-tag="${esc(fold(x.tag))}"`)).join("")
+                : `<span class="reflib-ib-muted">${esc(it("no_tags"))}</span>`) + `</div>`;
+        return filters;
+    }
+    // 1.12.16: counts / collections / tags / folder tree only; the grid, its cards and the loaded pages stay as they are
+    function renderSide() {
+        const root = ilib.root, d = ilib.data;
+        if (!root || !ilib.open || !d) return;
+        renderKindBar(); renderProgress();
+        const fl = root.querySelector(".reflib-ib-filters");
+        if (fl) fl.innerHTML = filtersHTML(d);
+        const tr = root.querySelector(".reflib-ib-tree");
+        if (tr) {
+            const sc = tr.scrollTop, tmp = document.createElement("div");
+            tmp.innerHTML = renderTree(d);
+            const nt = tmp.firstElementChild;
+            if (nt) { tr.replaceWith(nt); nt.scrollTop = sc; }
+        }
+        renderFooter();
+    }
     function render() {
         const root = ilib.root;
         if (!root || !ilib.open) return;
@@ -1188,16 +1220,7 @@
                 <div class="reflib-ib-split"><aside class="reflib-ib-tree slim"></aside><div class="reflib-ib-main"><div class="reflib-ib-vgrid">${'<div class="reflib-ib-skel"></div>'.repeat(12)}</div></div></div>`;
             return;
         }
-        const f = ilib.f;
-        const all = !f.cols.size && !f.none;
-        let filters = `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_cols"))}</span>`
-            + chip(esc(it("f_all")), all, 'data-f="all"')
-            + chip(`${esc(it("f_none"))} <i>${d.n_unassigned}</i>`, f.none, 'data-f="none"')
-            + d.collections.map(c => chip(`${esc(c.name)} <i>${c.count}</i>`, f.cols.has(c.id), `data-f="col" data-id="${esc(c.id)}"`)).join("")
-            + `</div>`;
-        filters += `<div class="reflib-ib-frow"><span class="reflib-ib-flabel">${esc(it("f_tags"))}</span>`
-            + (d.tags.length ? d.tags.map(x => chip(`${esc(x.tag)} <i>${x.count}</i>`, f.tags.has(fold(x.tag)), `data-f="tag" data-tag="${esc(fold(x.tag))}"`)).join("")
-                : `<span class="reflib-ib-muted">${esc(it("no_tags"))}</span>`) + `</div>`;
+        const filters = filtersHTML(d);
         const oldTree = root.querySelector(".reflib-ib-tree");
         if (oldTree) ilib.treeScroll = oldTree.scrollTop;
         const oldMain = body.querySelector(".reflib-ib-main");
@@ -2333,7 +2356,7 @@
                 pollWasRunning = true;
                 if (ilib.open && Date.now() - pollLastRefresh > 3000 && st.done !== pollLastDone) {
                     pollLastRefresh = Date.now(); pollLastDone = st.done;
-                    refreshData();
+                    refreshData(true);   // 1.12.16: counts / changed page only, loaded pages and cards stay
                 }
                 pollTimer = setTimeout(tick, 800);
                 return;
@@ -2349,14 +2372,34 @@
         pollTimer = setTimeout(tick, 300);
     }
     // the index changed (scan progress): counts + the pages on screen, never the whole list
-    function refreshData() {
+    // 1.12.16 `scanning`: shared ReflibNet.scanRefresh decides; nothing on screen changed -> counts only (no body
+    // rebuild, no page reset, no card / thumbnail reload); else the page is applied in place and the other loaded pages
+    // are re-fetched lazily while still shown. Background priority: a preview / page the user asked for goes first.
+    function refreshData(scanning) {
         const q = ilib.q, sig = q.sig;
         const main = ilib.root && ilib.root.querySelector(".reflib-ib-main");
         let first = 0;
         if (main && ilib.lay) { const r = visibleRows(0).find(x => !x.head); if (r) first = r.start; }
         const pg = Math.floor(first / PAGE);
-        sendIlib({ action: "query", f: filterSnap(), offset: pg * PAGE, limit: PAGE, tz: tz(), meta: true }).then(r => {
+        const prevIds = q.items.slice(pg * PAGE, pg * PAGE + PAGE).map(x => x && x.hash);
+        sendIlib({ action: "query", f: filterSnap(), offset: pg * PAGE, limit: PAGE, tz: tz(), meta: true, bg: !!scanning }).then(r => {
             if (!r || r.ok === false || !r.meta) return;
+            if (scanning && Net && Net.scanRefresh && ilib.data) {
+                setMeta(r);
+                const cq = ilib.q;
+                if (cq.sig !== sig || !r.page) { renderSide(); return; }
+                const dec = Net.scanRefresh({ ids: prevIds, total: cq.total, groups: cq.groups },
+                                            { ids: r.page.items.map(x => x.hash), total: r.page.total, groups: r.page.groups || null });
+                window.__mlDec = dec;   // tests
+                if (dec.refetchOthers) { cq.gen += 1; cq.pages = new Set(); cq.loading = new Set(); }
+                applyPage(r.page, sig, cq.gen);
+                renderSide();
+                const vg = ilib.root && ilib.root.querySelector(".reflib-ib-vgrid");
+                if (dec.relayout || !vg) renderGrid();
+                else if (dec.resize) { ilib.lay = computeLayout(); if (cq.total) vg.style.height = ilib.lay.height + "px"; renderWindow(); }
+                else if (dec.applyPage) renderWindow();
+                return;
+            }
             setMeta(r);   // counts/tree always; the page only if the filter didn't change meanwhile
             ilib.q.gen += 1; ilib.q.pages = new Set(); ilib.q.loading = new Set();
             if (ilib.q.sig === sig) applyPage(r.page, sig, ilib.q.gen);

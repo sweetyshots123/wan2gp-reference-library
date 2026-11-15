@@ -175,10 +175,15 @@ def _item_files(i) -> List[str]:
     return [p for p in dict.fromkeys([i.get("path")] + list(i.get("files") or [])) if p]
 
 
-def is_missing(i) -> bool:
+def is_missing(i, known=None, gone=frozenset()) -> bool:
+    """1.12.16: `known` = files of the folders index (the scan listed them): present unless in `gone` (background
+    re-check), no stat. Other files (collections, pool, Video Library) are checked on disk as before."""
     if i.get("virtual") or i.get("kind") == "mask":
         return False
-    return not any(os.path.isfile(p) for p in _item_files(i))
+    for p in _item_files(i):
+        if (p not in gone) if (known is not None and p in known) else os.path.isfile(p):
+            return False
+    return True
 
 
 def _disk_files(i, fdata) -> List[str]:
@@ -427,4 +432,5 @@ def undo(token: str) -> Dict[str, Any]:
 
 def missing_hashes() -> List[str]:
     from . import imagelib
+    imagelib.missing_recheck_now()   # 1.12.16: exact state on disk before acting (the catalog's is re-checked in the background)
     return [i["hash"] for i in imagelib.catalog()["items"] if i.get("missing") and forgettable(i)]

@@ -24,6 +24,7 @@ _NAME_RE = re.compile(r"(^|[_\-. ])seed[_\-]?\d+|^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m
 _lock = threading.Lock()
 _cache: Dict[str, Any] = {"key": None, "data": None}
 _side: Dict[str, bool] = {}
+_dir_names: Dict[str, frozenset] = {}   # 1.12.16: directory -> names (sidecar lookup for files the scan hasn't flagged)
 
 
 def path() -> str:
@@ -61,6 +62,11 @@ def _norm(p: str) -> str:
     return os.path.normcase(os.path.realpath(p)).rstrip("\\/") if p else ""
 
 
+def prime_sidecars(m: Dict[str, bool]) -> None:
+    """1.12.16: sidecar presence from the folder scan's own directory listing (no isfile pair per file)."""
+    _side.update(m)
+
+
 def _auto(i: Dict[str, Any], ai_dirs: List[str]) -> bool:
     if i.get("virtual"):
         return False
@@ -73,9 +79,16 @@ def _auto(i: Dict[str, Any], ai_dirs: List[str]) -> bool:
         np_ = os.path.normcase(os.path.abspath(p))
         if any(np_.startswith(d + os.sep) for d in ai_dirs):
             return True
-        if p not in _side:   # cached per path: one stat pair the first time a file is seen
-            b = os.path.splitext(p)[0]
-            _side[p] = os.path.isfile(b + ".json") or os.path.isfile(b + "_settings.json")
+        if p not in _side:   # cached per path; 1.12.16: from one listing per directory (cached), not a stat pair per file
+            d, n = os.path.split(p)
+            names = _dir_names.get(d)
+            if names is None:
+                try:
+                    names = _dir_names[d] = frozenset(os.listdir(d))
+                except OSError:
+                    names = _dir_names[d] = frozenset()
+            b = os.path.splitext(n)[0]
+            _side[p] = (b + ".json") in names or (b + "_settings.json") in names
         if _side[p]:
             return True
     return False

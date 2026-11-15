@@ -2,6 +2,7 @@
 import "../../request_priority.js";
 const Net: any = (globalThis as any).ReflibNet;
 const viewSched = Net?.createScheduler?.() || null;
+const lanes = Net?.createLanes?.() || null;   // 1.12.16: preview / media in their own lane, never behind a slow query
 const thumbGate = Net?.createThumbGate?.() || { enterViewer() {}, leaveViewer() {}, blocked: false, whenFree() { return Promise.resolve(); } };
 export const viewerNet = { enter: () => thumbGate.enterViewer(), leave: () => thumbGate.leaveViewer(), blocked: () => !!thumbGate.blocked };
 export type Kind = "image" | "video" | "audio" | "mask";
@@ -46,12 +47,14 @@ async function rawCall<T = Resp>(action: string, body: Record<string, any> = {})
 }
 
 /** 1.12.9: viewer actions (preview/media_url/…) jump the queue; thumbs wait while the viewer is open. */
-export async function call<T = Resp>(action: string, body: Record<string, any> = {}): Promise<T & Resp> {
+export async function call<T = Resp>(action: string, body: Record<string, any> = {}, opts: { bg?: boolean } = {}): Promise<T & Resp> {
   const ch = Net?.channel?.(action) || (action === "thumbs" ? "thumb" : "normal");
-  const prio = ch === "view" ? 10 : ch === "thumb" ? 0 : 5;
+  // 1.12.16: bg = refresh while indexing: behind anything the user asked for
+  const prio = opts.bg ? (Net?.bgPrio ?? 1) : ch === "view" ? 10 : ch === "thumb" ? 0 : 5;
   // Gate wait is outside the scheduler so parked thumbs never block preview/media_url.
   if (ch === "thumb") await thumbGate.whenFree();
   const run = () => rawCall<T>(action, body);
+  if (lanes) return lanes.enqueue(action, run, prio);
   if (viewSched) return viewSched.enqueue(run, prio);
   return run();
 }
