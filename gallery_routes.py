@@ -123,12 +123,16 @@ def mount(app, dependencies=None) -> None:
         return Response("preparing", status_code=425)
 
     async def _grow_play(fh, digest, src, _play):
-        import asyncio
+        import asyncio, time as _t
+        last = _t.monotonic()
         try:
             while True:
                 chunk = fh.read(64 * 1024)
                 if chunk:
                     yield chunk
+                    if _t.monotonic() - last > 5:   # a browser still reading the stream keeps the job alive (idle cancel)
+                        last = _t.monotonic()
+                        await run_in_threadpool(_play.status, digest, src)
                     continue
                 cur = await run_in_threadpool(_play.status, digest, src)
                 if cur.get("play") == "ready":

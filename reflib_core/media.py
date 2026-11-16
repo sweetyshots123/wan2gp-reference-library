@@ -21,6 +21,46 @@ def is_video_path(path) -> bool:
 BINARY_RESOLVER = None   # host hook (1.5.0): the WanGP adapter sets WanGP's resolver; standalone apps may leave it
 
 
+def _ffmpeg_bins_candidate(name):
+    """When WanGP's resolver is not hooked: env, then a nearby ffmpeg_bins/ (D:\\Wan2GP\\ffmpeg_bins when the plugin lives under plugins/)."""
+    env_map = {"ffmpeg": "FFMPEG_BINARY", "ffprobe": "FFPROBE_BINARY", "ffplay": "FFPLAY_BINARY"}
+    envp = os.environ.get(env_map.get(name) or "", "")
+    if envp and os.path.isfile(envp):
+        return envp
+    exe = name + (".exe" if os.name == "nt" else "")
+    roots = []
+
+    def add(p):
+        if p:
+            roots.append(p)
+
+    try:
+        from . import storage
+        d = storage.PLUGIN_DIR
+        add(d)
+        add(os.path.dirname(d))                 # .../plugins
+        add(os.path.dirname(os.path.dirname(d)))  # .../Wan2GP
+    except Exception:
+        pass
+    here = os.path.dirname(os.path.abspath(__file__))          # .../reflib_core
+    plugin = os.path.dirname(here)                             # .../wan2gp-reference-library
+    add(plugin)
+    add(os.path.dirname(plugin))
+    add(os.path.dirname(os.path.dirname(plugin)))              # .../Wan2GP when __file__ is the installed plugin
+    add(os.getcwd())
+    seen = set()
+    for root in roots:
+        if not root:
+            continue
+        cand = os.path.normpath(os.path.join(root, "ffmpeg_bins", exe))
+        if cand in seen:
+            continue
+        seen.add(cand)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
 def find_binary(name):
     try:
         path = BINARY_RESOLVER(name) if BINARY_RESOLVER else None
@@ -28,7 +68,10 @@ def find_binary(name):
             return path
     except Exception:
         pass
-    found = shutil.which(name)
+    local = _ffmpeg_bins_candidate(name)
+    if local:
+        return local
+    found = shutil.which(name) or (shutil.which(name + ".exe") if os.name == "nt" else None)
     if found:
         return found
     if name == "ffmpeg":
@@ -255,13 +298,15 @@ def make_poster(path, dest, max_side=480, at=0.1) -> bool:
     try:
         info = probe(path)
         ss = poster_times(info.get("duration"), at)[0]
-        # thumbnail filter: most representative of the next frames (skips a black lead-in)
-        cmd = [exe, "-v", "error", "-y", "-ss", f"{ss:.3f}", "-i", path, "-frames:v", "1",
-               "-vf", f"thumbnail=25,scale='min({max_side},iw)':-2", "-q:v", "4", tmp]
-        subprocess.run(cmd, capture_output=True, timeout=60, creationflags=_NO_WINDOW)
-        if os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
-            os.replace(tmp, dest)
-            return True
+        # thumbnail filter: most representative of the next frames (skips a black lead-in). Retried from the start:
+        # input seeking can return no frame at all (e.g. long-GOP H.264 in .ts/.m2ts/.mts) - first frame as last resort
+        for at_s in ([ss, 0.0] if ss > 0 else [0.0]):
+            cmd = [exe, "-v", "error", "-y", "-ss", f"{at_s:.3f}", "-i", path, "-frames:v", "1",
+                   "-vf", f"thumbnail=25,scale='min({max_side},iw)':-2", "-q:v", "4", tmp]
+            subprocess.run(cmd, capture_output=True, timeout=60, creationflags=_NO_WINDOW)
+            if os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, dest)
+                return True
     except Exception:
         pass
     try:

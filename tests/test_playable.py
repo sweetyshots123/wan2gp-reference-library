@@ -282,17 +282,60 @@ def test_session_evict_enforces_cap():
 @need_ff
 def test_idle_cancel_does_not_stick_failed():
     os.environ["REFLIB_PLAY_IDLE_S"] = "0.3"
-    P._reset_for_tests()
-    src = os.path.join(td, "idle.mp4")
-    _clip(src, "mpeg4", tag="mp4v", seconds=8, size="320x240", rate="25")
-    digest = _h("idle")
-    st = P.ensure(digest, src)
-    assert st["play"] == "preparing"
-    time.sleep(2.0)  # no further status/ensure polls
-    with P._lock:
-        left = [j for k, j in P._jobs.items() if k.startswith(digest) and j.get("state") == "preparing"]
-    assert not left, "idle job should have been abandoned, not left preparing"
-    # not a sticky failure: a new ensure + wait (with polls) completes
-    os.environ["REFLIB_PLAY_IDLE_S"] = "45"
+    try:
+        P._reset_for_tests()
+        src = os.path.join(td, "idle.mp4")
+        _clip(src, "mpeg4", tag="mp4v", seconds=8, size="320x240", rate="25")
+        digest = _h("idle")
+        st = P.ensure(digest, src)
+        assert st["play"] == "preparing"
+        time.sleep(2.0)  # no further status/ensure polls
+        with P._lock:
+            left = [j for k, j in P._jobs.items() if k.startswith(digest) and j.get("state") == "preparing"]
+        assert not left, "idle job should have been abandoned, not left preparing"
+    finally:
+        os.environ.pop("REFLIB_PLAY_IDLE_S", None)
+    # not a sticky failure: a new ensure + wait (with polls) completes under the default idle timeout
     st2 = P.wait(digest, src, timeout=60)
     assert st2["play"] == "ready", st2
+
+
+def test_idle_default_covers_hidden_tab_throttle():
+    os.environ.pop("REFLIB_PLAY_IDLE_S", None)
+    assert P.idle_s() == 150
+
+
+def test_failed_probe_is_retried(monkeypatch):
+    src = os.path.join(td, "probe_retry.mp4")
+    if FFMPEG:
+        _clip(src, "libx264", seconds=1, size="160x120", rate="25")
+    else:
+        pytest.skip("ffmpeg required")
+    P._probe_cache.clear()
+    P._probe_fail.clear()
+    n = {"calls": 0}
+    hidden = {"on": True}
+    real = P.media.find_binary
+
+    def flip(name):
+        if name == "ffprobe":
+            n["calls"] += 1
+            if hidden["on"]:
+                return None
+        return real(name)
+
+    monkeypatch.setattr(P.media, "find_binary", flip)
+    st1 = P.status(_h("prretry"), src)
+    assert st1.get("mode") == "original", st1  # unknown codec, no ffprobe
+    # still inside the retry window: stays original (no transcode)
+    st1b = P.status(_h("prretry"), src)
+    assert st1b.get("mode") == "original"
+    # expire the failure and make ffprobe visible: H.264 is classified as original (not transcoded)
+    hidden["on"] = False
+    with P._lock:
+        for k in list(P._probe_fail):
+            P._probe_fail[k] = time.time() - (P.PROBE_RETRY_S + 1)
+    st2 = P.status(_h("prretry"), src)
+    assert st2.get("mode") == "original", st2
+    assert st2.get("play") == "original"
+    assert (st2.get("codec") or "") in {"h264", "avc1"}

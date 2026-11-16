@@ -6,6 +6,12 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.22 — Idle timeout, probe retry, TS poster fallback, ffmpeg_bins lookup
+
+- Idle default 150 s (`REFLIB_PLAY_IDLE_S`); `_grow_play` calls `status()` every 5 s while the stream is read so a background tab does not cancel a running transcode. Failed ffprobe results live in `_probe_fail` and are retried after `PROBE_RETRY_S` (20 s). `make_poster`'s ffmpeg path retries at t=0 when mid-stream `-ss` yields no frame (long-GOP MPEG-TS).
+- `media.find_binary`: after the WanGP `BINARY_RESOLVER` hook, also `FFMPEG_BINARY`/`FFPROBE_BINARY` and a nearby `ffmpeg_bins/` (plugin dir, WanGP root, cwd), then PATH, then imageio_ffmpeg (ffmpeg only).
+- Tests: `tests/test_playable.py` (idle default, probe retry, no env leak), `tests/test_media_bins.py`.
+
 ## 1.12.21 — Playable-path fixes; more video containers indexed
 
 - `reflib_core/playable.py`: stderr drain thread; remux via `.tmp.mp4` + `os.replace`; probe cache `(abspath, size, mtime_ns)` (empty results cached too); `CACHE_VERSION = 2` (`-bf 0`, `-avoid_negative_ts make_non_negative`); job key includes the source sig (stale / sticky-failed jobs pruned); `evict(needed, keep=)` skips only `preparing` jobs, ignores `.tmp.mp4`, LRU mtime touch, runs after each write; `REFLIB_PLAY_MAX_JOBS` (default 2, lazy semaphore) and `REFLIB_PLAY_IDLE_S` (default 45, abandon without a sticky failure). No ffprobe → mode `original`.

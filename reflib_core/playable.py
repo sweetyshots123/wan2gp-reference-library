@@ -46,6 +46,8 @@ _flight: Dict[str, threading.Event] = {}       # key -> event set when the job f
 _encoder: Optional[list] = None                # ["h264_nvenc", ...] or ["libx264", ...]
 _encoder_name: Optional[str] = None
 _probe_cache: Dict[tuple, Dict[str, Any]] = {}  # (abspath, size, mtime_ns) -> probe(); status() runs on every poll
+_probe_fail: Dict[tuple, float] = {}             # failed ffprobe runs: retried after PROBE_RETRY_S (a lock / AV scan is transient)
+PROBE_RETRY_S = 20.0
 _slots = None  # BoundedSemaphore, built lazily so tests can change REFLIB_PLAY_MAX_JOBS
 
 
@@ -70,11 +72,13 @@ def _max_jobs() -> int:
 
 
 def idle_s() -> float:
-    """Seconds without a status/ensure poll before a running transcode is abandoned. 0 disables. Default 45."""
+    """Seconds without a status/ensure poll before a running transcode is abandoned. 0 disables. Default 150:
+    Chrome throttles timers of a hidden tab to one wake-up per minute, so anything under ~60 s cancels and restarts
+    a long transcode forever while the tab is in the background."""
     try:
-        return max(0.0, float(os.environ.get("REFLIB_PLAY_IDLE_S") or 45))
+        return max(0.0, float(os.environ.get("REFLIB_PLAY_IDLE_S") or 150))
     except ValueError:
-        return 45.0
+        return 150.0
 
 
 def _get_slots():
@@ -123,6 +127,7 @@ def _reset_for_tests() -> None:
         _jobs.clear()
         _flight.clear()
         _probe_cache.clear()
+        _probe_fail.clear()
         _encoder = None
         _encoder_name = None
         _slots = None
@@ -144,25 +149,38 @@ def probe(path: str) -> Dict[str, Any]:
         return empty
     with _lock:
         hit = _probe_cache.get(ck)
+        failed_at = _probe_fail.get(ck)
     if hit is not None:
         return dict(hit)
+    if failed_at is not None and time.time() - failed_at < PROBE_RETRY_S:
+        return dict(empty)
     def _remember(val: Dict[str, Any]) -> Dict[str, Any]:
         with _lock:
             if len(_probe_cache) > 4096:
                 _probe_cache.clear()
             _probe_cache[ck] = val
+            _probe_fail.pop(ck, None)
         return dict(val)
+
+    def _failed() -> Dict[str, Any]:   # not cached for good: ffprobe may appear, a lock may go away
+        with _lock:
+            if len(_probe_fail) > 4096:
+                _probe_fail.clear()
+            _probe_fail[ck] = time.time()
+        return dict(empty)
 
     exe = media.find_binary("ffprobe")
     if not exe:
-        return _remember(empty)
+        return _failed()
     cmd = [exe, "-v", "error", "-show_streams", "-show_format", "-of", "json", path]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore",
                              timeout=30, creationflags=_NO_WINDOW)
         data = json.loads(res.stdout or "{}")
     except Exception:
-        return _remember(empty)
+        return _failed()
+    if res.returncode != 0 and not data.get("streams"):
+        return _failed()
     streams = data.get("streams") or []
     v = next((s for s in streams if s.get("codec_type") == "video"), {})
     a = next((s for s in streams if s.get("codec_type") == "audio"), {})

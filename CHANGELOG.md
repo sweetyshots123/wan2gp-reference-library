@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.22
+
+Small follow-ups from the 1.12.21 retest (none were blockers).
+
+- **Idle cancel:** default is 150 s (Chrome can throttle a hidden tab's timers to one wake-up per minute, so 45 s cancelled and restarted a long transcode forever). While a browser is still reading the `/reflib/play` stream, the job is kept alive. The idle-cancel test no longer leaks `REFLIB_PLAY_IDLE_S` into later tests.
+- **ffprobe:** a failed or missing probe is retried after 20 s, not cached until restart (a locked file or a late-appearing ffprobe can recover).
+- **Thumbnails:** on the ffmpeg poster path, a long-GOP H.264 `.ts` / `.m2ts` / `.mts` that yields no frame when seeking mid-stream is retried from the first frame.
+- **Binaries:** `media.find_binary` still prefers WanGP's resolver when the plugin is loaded. If that hook is missing, it now also looks at `FFMPEG_BINARY` / `FFPROBE_BINARY` and a nearby `ffmpeg_bins/` folder (the same place WanGP keeps ffmpeg and ffprobe), then PATH, then imageio_ffmpeg for ffmpeg.
+
+
 ## 1.12.21
 
 Fixes for the 1.12.19 playable path (peer retest), and index more video containers so they can play through the same transcode.
