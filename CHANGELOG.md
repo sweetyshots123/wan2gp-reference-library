@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.23
+
+Packaging fix plus three small `find_binary` hardenings from the 1.12.22 retest.
+
+- **Dist:** rebuild and commit `gallery/dist` so `__REFLIB_BUILD__` is `1.12.23`. The 1.12.22 zip still had the 1.12.21 bundle, which made every Galería tab show a reload bar that a reload could not clear. `tests/test_dist_version.py` checks that the committed dist matches `plugin_info.json`.
+- **find_binary:** do not walk parents of `PLUGIN_DIR` when it is `REFLIB_DATA_DIR` (a data dir under `/tmp` must not pull in `/tmp/ffmpeg_bins`). Require a runnable file (`+x` on POSIX) so a half-copied `ffmpeg_bins` stub cannot shadow PATH. Resolve `FFMPEG_BINARY` / `FFPROBE_BINARY` to an absolute path so a relative env value does not change meaning if the cwd later changes.
+
+
 ## 1.12.22
 
 Small follow-ups from the 1.12.21 retest (none were blockers).

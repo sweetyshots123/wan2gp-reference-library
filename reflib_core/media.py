@@ -21,12 +21,17 @@ def is_video_path(path) -> bool:
 BINARY_RESOLVER = None   # host hook (1.5.0): the WanGP adapter sets WanGP's resolver; standalone apps may leave it
 
 
+def _runnable(p):
+    """A regular file we can actually execute (POSIX needs +x; a stub without it must not shadow PATH)."""
+    return bool(p) and os.path.isfile(p) and (os.name == "nt" or os.access(p, os.X_OK))
+
+
 def _ffmpeg_bins_candidate(name):
     """When WanGP's resolver is not hooked: env, then a nearby ffmpeg_bins/ (D:\\Wan2GP\\ffmpeg_bins when the plugin lives under plugins/)."""
     env_map = {"ffmpeg": "FFMPEG_BINARY", "ffprobe": "FFPROBE_BINARY", "ffplay": "FFPLAY_BINARY"}
     envp = os.environ.get(env_map.get(name) or "", "")
-    if envp and os.path.isfile(envp):
-        return envp
+    if envp and _runnable(envp):
+        return os.path.abspath(envp)   # a relative env path must not change meaning with the cwd
     exe = name + (".exe" if os.name == "nt" else "")
     roots = []
 
@@ -37,11 +42,14 @@ def _ffmpeg_bins_candidate(name):
     try:
         from . import storage
         d = storage.PLUGIN_DIR
+        if os.path.abspath(d) == os.path.abspath(os.environ.get("REFLIB_DATA_DIR") or "\0"):
+            d = None   # a data dir (e.g. /tmp/x/data) is not a code location: its parents may be shared/world-writable
+    except Exception:
+        d = None
+    if d:
         add(d)
         add(os.path.dirname(d))                 # .../plugins
         add(os.path.dirname(os.path.dirname(d)))  # .../Wan2GP
-    except Exception:
-        pass
     here = os.path.dirname(os.path.abspath(__file__))          # .../reflib_core
     plugin = os.path.dirname(here)                             # .../wan2gp-reference-library
     add(plugin)
@@ -56,7 +64,7 @@ def _ffmpeg_bins_candidate(name):
         if cand in seen:
             continue
         seen.add(cand)
-        if os.path.isfile(cand):
+        if _runnable(cand):
             return cand
     return None
 

@@ -6,6 +6,11 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.23 — Dist version match; find_binary hardening
+
+- Rebuild `gallery/dist` so `__REFLIB_BUILD__` matches 1.12.23 (StaleBar in `gallery/src/App.tsx`). `tests/test_dist_version.py`.
+- `media.find_binary`: skip `PLUGIN_DIR` ancestors when `PLUGIN_DIR` is `REFLIB_DATA_DIR`; `_runnable()` (POSIX `X_OK`); env binary paths are `abspath`. Tests in `tests/test_media_bins.py`.
+
 ## 1.12.22 — Idle timeout, probe retry, TS poster fallback, ffmpeg_bins lookup
 
 - Idle default 150 s (`REFLIB_PLAY_IDLE_S`); `_grow_play` calls `status()` every 5 s while the stream is read so a background tab does not cancel a running transcode. Failed ffprobe results live in `_probe_fail` and are retried after `PROBE_RETRY_S` (20 s). `make_poster`'s ffmpeg path retries at t=0 when mid-stream `-ss` yields no frame (long-GOP MPEG-TS).
