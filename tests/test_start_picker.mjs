@@ -16,7 +16,7 @@ const c = vm.createContext({ Set, Map, JSON, String, Object, Promise, console, i
     toast: (...args) => toasts.push(args), closeBrowser: () => closes++,
     GRID_SVG: '', esc: s => s, bridgeButton: () => true,
 });
-vm.runInContext(section + '\nglobalThis.api = {startPickField,pickOpen,pickLoad,pickEnd,pkt,mountStartPickButtons};', c);
+vm.runInContext(section + '\nglobalThis.api = {startPickField,imagePickField,pickOpen,pickLoad,pickEnd,pkt,mountStartPickButtons,mountGuidePickButtons};', c);
 const api = c.api;
 assert.equal(api.startPickField({className: 'reflib-start-add reflib-start-generate'}).field, 'image_start');
 assert.equal(api.startPickField({className: 'reflib-si-video_guide-generate'}), null);
@@ -47,4 +47,47 @@ assert.equal(children[0].textContent, 'Choose from library');
 language = 'es'; api.mountStartPickButtons(); assert.equal(children[0].textContent, 'Elegir de la librería');
 let stopped = 0; click({preventDefault: () => stopped++, stopPropagation: () => stopped++}); assert.equal(stopped, 2);
 assert.equal(ilib.pick.field, 'image_start');
+api.pickEnd();
+
+// Control Image (image_guide): same "Elegir de la librería" label, history bridge, replaces the current image.
+assert.equal(api.imagePickField({className: 'block reflib-ipick reflib-ipick-image_guide-generate'}).field, 'image_guide');
+assert.equal(api.imagePickField({className: 'reflib-start-add reflib-start-generate'}), null);
+const guide = {className: 'block reflib-ipick reflib-ipick-image_guide-edit', querySelector: () => ({textContent: 'Control Image'})};
+api.pickOpen(guide);
+assert.equal(ilib.pick.kind, 'image');
+assert.equal(ilib.pick.field, 'image_guide');
+assert.equal(ilib.pick.tab, 'edit');
+assert.equal(ilib.pick.label, 'Control Image');
+await api.pickLoad('v'); // wrong kind
+assert.equal(requests.length, 2); // start + video earlier, this one rejected
+await api.pickLoad('i');
+assert.equal(requests[2].to, 'image_guide');
+assert.equal(requests[2].target, 'edit:history');
+assert.equal(closes, 3);
+language = 'es';
+assert.equal(api.pkt('start_btn'), 'Elegir de la librería');
+assert.match(api.pkt('tip_g', {label: 'Imagen de control'}), /Imagen de control/);
+language = 'en';
+assert.match(api.pkt('tip_g', {label: 'Control Image'}), /Control Image/);
+
+let gchildren = [];
+const glabel = { parentNode: null, after(b) { gchildren.push(b); } };
+const gblock = {
+    className: 'block reflib-ipick reflib-ipick-image_guide-generate',
+    querySelector: (sel) => String(sel).includes('ipick-btn') ? gchildren[0] : (String(sel).includes('label') ? glabel : {textContent: 'Control Image'}),
+    contains: (n) => gchildren.includes(n),
+    insertBefore(b) { gchildren.push(b); },
+    appendChild(b) { gchildren.push(b); },
+};
+glabel.parentNode = gblock;
+const prevDoc = c.document;
+c.document = { querySelectorAll: (sel) => String(sel).includes('reflib-ipick') ? [gblock] : [],
+    createElement: () => ({ addEventListener() {}, setAttribute() {} }) };
+api.mountGuidePickButtons(); api.mountGuidePickButtons();
+assert.equal(gchildren.length, 1);
+assert.equal(gchildren[0].textContent, 'Choose from library');
+assert.equal(gchildren[0].type, 'button');
+c.document = prevDoc;
+
 console.log('start picker: routing, filtering, cancel/restore, EN/ES, mount idempotence and video regression OK');
+console.log('control image picker: field, history bridge, EN/ES, mount idempotence OK');

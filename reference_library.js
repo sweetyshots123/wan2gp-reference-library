@@ -4738,6 +4738,8 @@
               banner_v: "Choose a video for “{label}”", banner_a: "Choose an audio for “{label}”", hint: "Double-click it, or select it and press “Load into…”. Esc cancels.",
               load: "Load into “{label}”", load_tip: "Load the selected item into “{label}”", want_v: "Select one video", want_a: "Select one audio", cancel: "Cancel",
               loaded: "“{name}” loaded into “{label}”", gone: "“{label}” is not shown by the current model", vlib: "Video Library", vl_badge: "video lib.", vlib_tip: "The Video Library's own videos (saved with 📚, Media Editor crops, imports)",
+              tip_g: "Choose an image from the library for “{label}” (replaces the current one)",
+              banner_g: "Choose an image for “{label}”", hint_g: "Double-click an image, or select one and press “Load into…”. Esc cancels.",
               preparing: "Preparing “{name}”…" },
         es: { start_btn: "Elegir de la librería", start_label: "Imágenes iniciales", tip_i: "Añadir una imagen de la librería a las imágenes iniciales (conserva las existentes)",
               banner_i: "Elige una imagen para añadir a las imágenes iniciales", hint_i: "Doble clic sobre una imagen, o selecciona una y pulsa Añadir. Se conservan las existentes. Esc cancela.",
@@ -4746,6 +4748,8 @@
               banner_v: "Elige un vídeo para «{label}»", banner_a: "Elige un audio para «{label}»", hint: "Doble clic sobre él, o selecciónalo y pulsa «Cargar en…». Esc cancela.",
               load: "Cargar en «{label}»", load_tip: "Cargar el elemento seleccionado en «{label}»", want_v: "Selecciona un vídeo", want_a: "Selecciona un audio", cancel: "Cancelar",
               loaded: "«{name}» cargado en «{label}»", gone: "«{label}» no aparece con el modelo actual", vlib: "Librería de vídeos", vl_badge: "lib. vídeos", vlib_tip: "Los vídeos propios de la Librería de vídeos (guardados con 📚, recortes de Media Editor, importados)",
+              tip_g: "Elegir una imagen de la librería para «{label}» (sustituye la actual)",
+              banner_g: "Elige una imagen para «{label}»", hint_g: "Doble clic sobre una imagen, o selecciónala y pulsa «Cargar en…». Esc cancela.",
               preparing: "Preparando «{name}»…" },
     };
     const pkt = (k, p = {}) => String((PKT[lang()] || PKT.en)[k] || PKT.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => p[n] ?? "");
@@ -4757,6 +4761,10 @@
     function startPickField(block) {
         const m = /\breflib-start-(generate|edit)\b/.exec(block.className || "");
         return m ? { field: "image_start", tab: m[1] } : null;
+    }
+    function imagePickField(block) {
+        const m = /\breflib-ipick-(\w+)-(generate|edit)\b/.exec(block.className || "");
+        return m ? { field: m[1], tab: m[2] } : null;
     }
     function mountStartPickButtons() {
         for (const block of document.querySelectorAll(".reflib-start-add")) {
@@ -4776,8 +4784,29 @@
             b.title = tip; b.setAttribute("aria-label", tip);
         }
     }
+    function mountGuidePickButtons() {
+        for (const block of document.querySelectorAll(".reflib-ipick")) {
+            const f = imagePickField(block);
+            if (!f || !bridgeButton(`${f.tab}:history`)) continue;
+            let b = block.querySelector(".reflib-ipick-btn");
+            if (!b || !block.contains(b)) {
+                if (b) b.remove();
+                b = document.createElement("button"); b.type = "button"; b.className = "reflib-ipick-btn";
+                b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); pickOpen(block); });
+                b.addEventListener("pointerdown", e => e.stopPropagation());
+                const lab = block.querySelector(".label-wrap, .label-container, [data-testid=\"block-label\"]");
+                if (lab && lab.parentNode === block) lab.after(b);
+                else if (block.firstChild) block.insertBefore(b, block.firstChild);
+                else block.appendChild(b);
+            }
+            const label = pkt("start_btn"), tip = pkt("tip_g", { label: pkLabel(block, f.field) });
+            if (b.textContent !== label) b.textContent = label;
+            b.title = tip; b.setAttribute("aria-label", tip);
+        }
+    }
     function mountPickButtons() {
         mountStartPickButtons();
+        mountGuidePickButtons();
         for (const block of document.querySelectorAll(".reflib-savein")) {
             const f = svField(block); if (!f) continue;
             if (!bridgeButton(`${f.tab}:history`)) continue;   // no loading bridge on this tab -> no button
@@ -4799,11 +4828,11 @@
     }
     setInterval(mountPickButtons, 700);
     function pickOpen(block) {
-        const f = startPickField(block) || svField(block); if (!f) return;
-        const kind = f.field === "image_start" ? "image" : SV_AUDIO.test(f.field) ? "audio" : f.field === "video_mask" ? "mask" : "video";   // 1.7.0 Video Mask: the masks first
+        const f = startPickField(block) || imagePickField(block) || svField(block); if (!f) return;
+        const kind = (f.field === "image_start" || f.field === "image_guide" || f.field === "image_end" || f.field === "image_mask") ? "image" : SV_AUDIO.test(f.field) ? "audio" : f.field === "video_mask" ? "mask" : "video";   // 1.7.0 Video Mask: the masks first
         // the whole library, filtered to that kind (not the folder / tags the browser was last left on); restored on close
         const prev = ilib.pick ? ilib.pick.prevF : pkSnap(ilib.f);
-        ilib.pick = { tab: f.tab, field: f.field, kind, label: kind === "image" ? pkt("start_label") : pkLabel(block, f.field), prevF: prev };
+        ilib.pick = { tab: f.tab, field: f.field, kind, label: f.field === "image_start" ? pkt("start_label") : pkLabel(block, f.field), prevF: prev };
         Object.assign(ilib.f, { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false,
                                 atags: new Set(), xtags: new Set(), ranges: {}, jst: "", used: false, kind });
         const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
@@ -4823,7 +4852,9 @@
         const pk = ilib.pick;
         el.hidden = !pk;
         if (!pk) { el.innerHTML = ""; return; }
-        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pk.mode === "assign" ? mkt("assign_banner", { label: pk.label }) : pkt(pk.kind === "image" ? "banner_i" : pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt(pk.kind === "image" ? "hint_i" : "hint"))}</small>
+        const imgKey = pk.field === "image_start" ? "banner_i" : "banner_g";
+        const hintKey = pk.field === "image_start" ? "hint_i" : (pk.kind === "image" ? "hint_g" : "hint");
+        const html = `<span class="reflib-pk-bico">${GRID_SVG}</span><b>${esc(pk.mode === "assign" ? mkt("assign_banner", { label: pk.label }) : pkt(pk.kind === "image" ? imgKey : pk.kind === "audio" ? "banner_a" : "banner_v", { label: pk.label }))}</b><small>${esc(pkt(hintKey))}</small>
             <button type="button" class="reflib-ib-btn" data-act="pkcancel">${esc(pkt("cancel"))}</button>`;
         if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
     }
@@ -4838,7 +4869,7 @@
         const req = { hash: h, to: pk.field, target: `${pk.tab}:${pk.field === "image_start" ? "image_start" : "history"}` };
         return sendBridge(req).then(r => {
             if (r && r.ok && (r.restored || []).includes(pk.field)) {
-                toast(pkt(pk.kind === "image" ? "added_i" : "loaded", { name: name.replace(/\.[A-Za-z0-9]{1,5}$/, ""), label: pk.label }), "ok");
+                toast(pkt(pk.field === "image_start" ? "added_i" : "loaded", { name: name.replace(/\.[A-Za-z0-9]{1,5}$/, ""), label: pk.label }), "ok");
                 closeBrowser();
             } else toast((r && r.error) || pkt(pk.kind === "image" ? "gone_i" : "gone", { label: pk.label }), "error");
             return r;

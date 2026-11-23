@@ -6,6 +6,11 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.24 — Control Image library picker
+
+- WanGP **Control Image** (`image_guide`) gets **Choose from library / Elegir de la librería** under the field label (same Media Library explorer, images only). Picking one **sets** that single-image input via the existing `<tab>:history` bridge, which now accepts image `to` fields. Tagged even when `video_guide` is missing (image-only forms). Galería has no equivalent send-to-`image_guide` action.
+- Tests: `tests/test_image_guide_picker.py`, `tests/test_start_picker.mjs`. `tests/test_browser_chips.mjs` waits for cards before measuring at 1920 px.
+
 ## 1.12.23 — Dist version match; find_binary hardening
 
 - Rebuild `gallery/dist` so `__REFLIB_BUILD__` matches 1.12.23 (StaleBar in `gallery/src/App.tsx`). `tests/test_dist_version.py`.
@@ -182,5 +187,26 @@ Python tests use real Gradio and core AMG Add; only the model-stack dimension-la
 6. Change away from Start with Image: its controls and new button must hide together. Switch back: exactly one button, even after repeated model changes.
 7. Repeat in ES and EN (live switch), and on edit form if it exposes a compatible gallery. Smoke-test ordinary Reference Images, video and audio library pickers to confirm their original destinations still work.
 
+# Reference Library: Control Image picker (1.12.24)
+
+- **User flow:** On a model that shows **Control Image** (e.g. Z-Image Turbo Fun ControlNet with Control Image Process = Transfer Human Pose / Depth / Edges / raw), **Choose from library / Elegir de la librería** appears under the Control Image label. It opens the existing Media Library explorer, filtered to images. Double-click one image, or select one and press **Load into “Control Image”**. The chosen image **replaces** the current Control Image (this input holds only one). Cancel/Esc does not modify the input.
+- **Destination:** `image_guide` on the originating generate/edit form, through the existing `<tab>:history` bridge (`{hash, to: "image_guide", target: "<tab>:history"}`). The history media handler now accepts image kinds for `image_guide` / `image_mask` / start / end / refs, not only video/audio.
+- **Hook:** the plugin already requests `image_guide` (Cropper watch). It tags the `gr.Image` with `reflib-ipick reflib-ipick-image_guide-<tab>` even when the form has no `video_guide`, and still registers the `<tab>:history` bridge so an image-only model can be filled. JS mounts a translated text button under the Gradio label (not over the preview or Gradio's own clear control). The button hides with the input when the model does not show Control Image. No WanGP core patch, no overlap with Dragger. Galería has no send-to-`image_guide` action; a later one should use this same history path.
+- **Privacy:** only the selected library image is staged locally, like other pickers. No user/library data in the commit.
+
+## Tests
+
+```sh
+PYTHONPATH=/path/to/Wan2GP python tests/test_image_guide_picker.py
+node tests/test_start_picker.mjs
+```
+
+## Browser retest (pending)
+
+1. Load Z-Image Turbo Fun ControlNet (or any image model with Control Image Process) so the Control Image dropzone is visible. Confirm **Elegir de la librería** under the label, empty and after an image is set, dark/light, narrow window.
+2. Open the button, pick a synthetic library image: Control Image shows it; start/end/reference galleries are unchanged; no generation.
+3. Repeat in EN. Cancel/Esc leaves the input unchanged. Hide Control Image by switching process to “No Control Image”: the button hides with the field.
+
 ## 1.12.5 truncated thumbnails
+
 Image thumbnails tolerate truncated JPEGs for the duration of one open (flag restored under a lock). Persistent decode failures are remembered by path+mtime+size and logged once.

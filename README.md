@@ -4,7 +4,9 @@
 
 In **Start with Image**, the starting-images gallery has **Choose from library** beside its normal Add/Remove/Left/Right/Clear controls. It opens the same Media Library explorer, filtered to images. Double-click an image, or select one and press **Add to starting images**. Existing images are kept; the new image is inserted after the selected image, just like WanGP's Add. Virtual image crops are supported. Esc/Cancel leaves inputs unchanged.
 
-This targets `image_start` only, not Reference Images (`image_refs`). It does not start generation or create queue entries. Choose one image at a time; no implicit replacement. The control follows its gallery's visibility and theme, with English/Spanish labels. If an older WanGP does not expose the gallery's state/Add components, no button is installed. See [feature/integration details](docs/FEATURES.md).
+On **Control Image** (the single dropzone used by image models such as Z-Image Turbo with a control process), the same **Choose from library** button sits under the field label. Picking an image sets that Control Image (it holds only one).
+
+Start with Image targets `image_start` only, not Reference Images (`image_refs`). Control Image targets `image_guide`. Neither starts generation or creates queue entries. Choose one image at a time. The Start with Image button follows its gallery's visibility and theme; the Control Image button hides with that field. English/Spanish labels. If an older WanGP does not expose the starting-gallery's state/Add components, that button is not installed. See [feature/integration details](docs/FEATURES.md).
 
 
 Save WanGP **Reference Images** as named collections and **Control Videos** in a video library, and load them back with one click.

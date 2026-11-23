@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.24
+
+- **Control Image library button.** On WanGP's single **Control Image** dropzone (`image_guide` — used by image models such as Z-Image Turbo Fun ControlNet when Control Image Process is Pose, Depth, Edges or raw), the same **Choose from library / Elegir de la librería** button as Start with Image now appears under the field label. It opens the media explorer filtered to images; choosing one **sets** that Control Image (it holds only one). Uses the existing history media bridge, which now accepts an image `to` field, not only video/audio. The Control Image is tagged and the history bridge is registered even when the form has no Control Video, so image-only models still get the button. Galería has no send-to-Control-Image action; both sides would share this same `<tab>:history` path if one is added later.
+
+
 ## 1.12.23
 
 Packaging fix plus three small `find_binary` hardenings from the 1.12.22 retest.

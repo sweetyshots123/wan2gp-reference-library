@@ -47,6 +47,8 @@ console.log("Media Library");
 for (const w of [1280, 1920]) {
   await check(`chip area height at ${w} px`, async () => {
     await size(w); await mlBoot();
+    // Wait for cards after the resize; at 1920 px a layout pass can precede the grid (peer flake).
+    assert.ok(await waitFor(`document.querySelectorAll('.reflib-ib-card').length > 3`, 8000), "no cards before measure at " + w);
     const h = await H(".reflib-ib-filters"); heights["ml_" + w] = h; console.log(`    ML .reflib-ib-filters height @${w}: ${h}px`);
     await shot(`ml-${w}`);
     if (!MEASURE_ONLY) assert.ok(h <= 70, `collapsed rows should be ~2 lines, got ${h}px`);
@@ -96,6 +98,7 @@ async function gBoot() {
 for (const w of [1280, 1920]) {
   await check(`Galería tag facets row height at ${w} px`, async () => {
     await size(w); await gBoot();
+    assert.ok(await waitFor(`document.querySelectorAll('figure.tile').length > 3`, 8000), "no cards before measure at " + w);
     const h = await ev(`Math.round([...document.querySelectorAll('.facets')].reduce((a, e) => a + e.getBoundingClientRect().height, 0))`), n = await ev(`document.querySelectorAll('.facets .chip').length`);
     heights["gal_" + w] = h; console.log(`    Galería .facets height @${w}: ${h}px (${n} chips)`);
     await shot(`gal-${w}`);

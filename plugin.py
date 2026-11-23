@@ -84,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.23"
+PLUGIN_VERSION = "1.12.24"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -964,6 +964,19 @@ WATCH_IMAGES = ("image_start", "image_end", "image_refs", "image_guide")        
 # 1.6.4 "📚 Guardar en librería": every WanGP video / audio input (WanGP 18.18 names; missing ones are skipped)
 SAVE_VIDEO_INPUTS = ("video_guide", "video_guide2", "video_guide3", "video_source", "video_mask")
 SAVE_AUDIO_INPUTS = ("audio_guide", "audio_guide2", "audio_guide3", "audio_source", "replace_voice_sample", "replace_voice_sample2")
+# Single-file image inputs the history / pick bridge can fill (Control Image and optional mask).
+IMAGE_DIRECT_INPUTS = ("image_guide", "image_mask")
+# Gallery image inputs are also "image" kind, but start uses its own Add bridge.
+IMAGE_KIND_INPUTS = IMAGE_DIRECT_INPUTS + ("image_start", "image_end", "image_refs")
+
+
+def _direct_kind(to):
+    """Kind of library item the media-browser 'to' field accepts."""
+    if to in SAVE_AUDIO_INPUTS:
+        return "audio"
+    if to in IMAGE_KIND_INPUTS:
+        return "image"
+    return "video"
 
 
 def _stage_video(path, name):
@@ -1305,6 +1318,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
     def __init__(self):
         self._hist_comps = {}
         self._extra_comps = {}
+        self._image_hist = {}  # tab -> image inputs when video_guide is absent (image-only models)
         super().__init__()
         self.name = "Reference Library"
         self.version = PLUGIN_VERSION
@@ -1433,9 +1447,12 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             return json.dumps(out), gr.skip(), gr.skip()
 
     def _setup_video_target(self, tab, components):
+        # Control Image must be tagged even when this form has no Control Video (Z-Image etc. in image mode).
+        self._tag_image_pick(tab, components)
         video = components.get("video_guide")
         if not isinstance(video, gr.Video):
             print(f"[Reference Library] {tab}:video_guide not found, video bar skipped")
+            self._register_image_hist(tab, components)
             return
         # Tag the block for reference_library.js (several WanGP video inputs share elem_id "video_input").
         classes = video.elem_classes if isinstance(video.elem_classes, list) else ([video.elem_classes] if video.elem_classes else [])
@@ -1465,6 +1482,30 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         show = bool(settings.get("video_bar", True)) and (tab != "edit" or bool(settings.get("show_edit_bar", True)))
         # Always inserted (hidden when disabled) so the crop notices still reach the page.
         self.insert_after("video_guide", lambda t=tab, v=show: self.create_vbar(t, v))
+
+    def _tag_image_pick(self, tab, components):
+        """Mark WanGP's Control Image (a plain gr.Image, no AMG controls) so JS can mount Choose from library."""
+        guide = components.get("image_guide")
+        if not isinstance(guide, gr.Image):
+            return
+        cl = guide.elem_classes if isinstance(guide.elem_classes, list) else ([guide.elem_classes] if guide.elem_classes else [])
+        extra = ["reflib-ipick", f"reflib-ipick-image_guide-{tab}"]
+        if any(x not in cl for x in extra):
+            guide.elem_classes = cl + [x for x in extra if x not in cl]
+
+    def _register_image_hist(self, tab, components):
+        """Record image inputs so the history / pick bridge can fill Control Image when there is no video_guide."""
+        watch_images = {name: components[name] for name in WATCH_IMAGES
+                        if isinstance(components.get(name), gr.components.Component)}
+        extra = {n: components.get(n) for n in ("video_mask", "image_mask") + AUDIO_TARGETS}
+        if not watch_images and not any(isinstance(c, (gr.Image, gr.ImageEditor)) for c in extra.values()):
+            return
+        self._extra_comps.setdefault(tab, extra)
+        self._image_hist[tab] = {"watch_images": watch_images}
+
+    def _hist_tabs(self):
+        """Tabs that can receive a history/pick media fill (video form and image-only forms)."""
+        return list(dict.fromkeys([*self.vtargets, *self._image_hist]))
 
     # ------------------------------------------------------------ 1.6.4 "Guardar en librería"
     def _setup_save_targets(self, tab, components):
@@ -1855,14 +1896,19 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         return self._err(lang, "bad_request")
 
     def _hist_targets(self, tab):
-        vt = self.vtargets[tab]
-        hcomps = [("video_guide", vt["video"])] + [(n, c) for n, c in vt["watch"].items() if n == "video_source"]
+        vt = self.vtargets.get(tab) or {}
+        ih = self._image_hist.get(tab) or {}
+        hcomps = []
+        if isinstance(vt.get("video"), gr.Video):
+            hcomps.append(("video_guide", vt["video"]))
+            hcomps += [(n, c) for n, c in (vt.get("watch") or {}).items() if n == "video_source"]
         for n in ("video_mask", "image_mask") + AUDIO_TARGETS:
             c = self._extra_comps.get(tab, {}).get(n)
             if isinstance(c, (gr.Video, gr.Image, gr.ImageEditor, gr.Gallery, gr.Audio)):
                 hcomps.append((n, c))
+        watch_images = vt.get("watch_images") or ih.get("watch_images") or {}
         for n in ("image_start", "image_end", "image_guide"):
-            c = vt.get("watch_images", {}).get(n)
+            c = watch_images.get(n)
             if isinstance(c, (gr.Image, gr.Gallery)):
                 hcomps.append((n, c))
         # 1.6.8: every input that has the library button (Control Video 2/3, Soundtrack, Voice Samples...) can receive a
@@ -1897,10 +1943,10 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 return (json.dumps({"ok": False, "id": req.get("id"), "error": tr(req.get("lang", "en"), "mask_missing" if not m else "err_target_missing"),
                                     "target": f"{tab}:history"}), *[gr.skip() for _ in comps])
             direct = {"video_guide": [vsrc], "video_mask": [_mk.path_of(m)]}
-        elif req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library video/audio -> one WanGP input
+        elif req.get("hash") and req.get("to"):   # 1.6.0 media browser: one library item -> one WanGP input
             to, src = str(req["to"]), imagelib.media_path(str(req["hash"]))
             ent = imagelib.entry_for(str(req["hash"])) or {}
-            want = "audio" if to in SAVE_AUDIO_INPUTS else "video"   # 1.6.8: every audio input, not just "Voice to follow"
+            want = _direct_kind(to)
             if src and (ent.get("kind") == want or (want == "video" and ent.get("kind") == "mask")) and any(n == to for n, _ in comps):   # 1.7.0 masks are videos
                 direct[to] = [src]
             else:
@@ -2764,7 +2810,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     fn=None, inputs=[bridge_resp], outputs=None, show_progress="hidden",
                     js="(r) => { if (window.referenceLibrary) window.referenceLibrary.bridgeResponse(r); }")
             # 1.5.5 history -> generator form media (control video, masks, start/end images): target "<tab>:history"
-            for tab in list(self.vtargets):
+            for tab in self._hist_tabs():
                 hcomps = self._hist_targets(tab)
                 hbtn = gr.Button("hbridge", elem_id=f"reflib_bridge_{tab}_history")
                 hbtn.click(fn=lambda raw, t=tab: self.history_media(t, raw), inputs=[bridge_req],
