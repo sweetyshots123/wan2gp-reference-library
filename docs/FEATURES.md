@@ -12,7 +12,8 @@
 - **Shared rules (`view_state_rules.js`):** Pure module (`ReflibViewState`) shared by Media Library and Galería. Handles normalization, stale pruning against `meta` (collections, folders/subfolders with parent fallback, tags), active-filter detection, and per-browser `localStorage` persistence. Ephemeral `sim` sessions are dropped on persist/restore.
 - **Media Library:** Keeps search, filters, `chipQ`, expanded folders/facets, sort, and scroll across modal close/reopen and browser/standalone restarts; temporary picker sessions (`start_image` / `image_guide`) restore cleanly without overwriting saved user state. Includes **Reset filters / Restablecer filtros**. New chrome uses theme tokens so it stays readable in standalone dark and in-WanGP light/dark.
 - **Galería:** Keeps startup route (`resolveStartupRoute`), search, Omni chips, tag row chips + `chipQ`, `af` facets (with controlled range inputs) + `afOpen`, `manage`, and scroll across close/reopen and restarts. Includes **↺ Restablecer filtros**.
-- **Tests:** `tests/test_view_state_rules.mjs`, `tests/test_browser_keepstate.mjs`, `tests/test_browser_remember_setting.py`. Also `tests/test_browser_standalone_theme.mjs` (1.12.26 contrast) still applies.
+- **Standalone notice once:** the `/reflib/media-library/` “Media Library independiente…” banner is shown only the first visit (`ReflibStandalone.takePageNotice`, `localStorage` key `reflib_standalone_notice_seen`) and sits in normal flow under the toolbar, so it does not overlap search or **Restablecer filtros**. The Galería has no equivalent recurring notice.
+- **Tests:** `tests/test_view_state_rules.mjs`, `tests/test_browser_keepstate.mjs`, `tests/test_browser_remember_setting.py`, `tests/test_browser_standalone_notice.mjs`. Also `tests/test_browser_standalone_theme.mjs` (1.12.26 contrast) still applies.
 
 ## 1.12.26 — Standalone Media Library dark theme contrast
 

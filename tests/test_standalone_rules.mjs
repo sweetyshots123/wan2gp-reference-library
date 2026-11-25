@@ -21,6 +21,26 @@ const b = S.takeBridgeNotice("es");
 assert.ok(a && /WanGP/.test(a));
 assert.equal(b, null);
 
+const mem = () => {
+  const map = new Map();
+  return {
+    getItem(k) { return map.has(k) ? map.get(k) : null; },
+    setItem(k, v) { map.set(k, String(v)); },
+    removeItem(k) { map.delete(k); },
+  };
+};
+const ls = mem();
+assert.equal(S.PAGE_NOTICE_KEY, "reflib_standalone_notice_seen");
+assert.match(S.pageNoticeMessage("es"), /Media Library independiente/);
+assert.match(S.pageNoticeMessage("en"), /Standalone Media Library/);
+assert.equal(S.takePageNotice(ls), true, "first visit shows the page notice");
+assert.equal(ls.getItem(S.PAGE_NOTICE_KEY), "1");
+assert.equal(S.takePageNotice(ls), false, "later visits are silent");
+assert.equal(S.takePageNotice(ls), false);
+S.resetPageNotice(ls);
+assert.equal(ls.getItem(S.PAGE_NOTICE_KEY), null);
+assert.equal(S.takePageNotice(ls), true, "reset allows the notice again");
+
 // Source contracts: Viewer must not hardcode offerLabels(..., "es")
 const viewer = fs.readFileSync(path.join(root, "gallery/src/Viewer.tsx"), "utf8");
 assert.ok(!/offerLabels\([^)]*,\s*["']es["']\s*\)/.test(viewer), "Viewer must not hardcode offerLabels lang es");

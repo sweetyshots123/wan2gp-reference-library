@@ -5990,15 +5990,22 @@
             if (document.body) document.body.classList.add("dark");
             openBrowser({});
             setFull(true);
-            // Hide / soften WanGP-only chrome once
-            const tip = document.createElement("div");
-            tip.className = "reflib-standalone-tip";
-            const es = String(lang() || "").toLowerCase().startsWith("es");
-            tip.textContent = es
-                ? "Media Library independiente. Acciones de WanGP (añadir a referencias, vídeo de control, historial…) están ocultas aquí."
-                : "Standalone Media Library. WanGP actions (add to references, control video, history…) are hidden here.";
-            document.body.appendChild(tip);
-            setTimeout(() => tip.remove(), 8000);
+            // 1.12.27: standalone page banner once only (ReflibStandalone.takePageNotice / localStorage)
+            const SA = window.ReflibStandalone;
+            if (!SA || typeof SA.takePageNotice !== "function" || SA.takePageNotice()) {
+                const tip = document.createElement("div");
+                tip.className = "reflib-standalone-tip";
+                tip.setAttribute("role", "status");
+                tip.textContent = (SA && SA.pageNoticeMessage) ? SA.pageNoticeMessage(lang()) : (
+                    String(lang() || "").toLowerCase().startsWith("es")
+                        ? "Media Library independiente. Acciones de WanGP (añadir a referencias, vídeo de control, historial…) están ocultas aquí."
+                        : "Standalone Media Library. WanGP actions (add to references, control video, history…) are hidden here."
+                );
+                const head = ilib.root && ilib.root.querySelector(".reflib-ib-head");
+                if (head) head.insertAdjacentElement("afterend", tip);
+                else if (ilib.root) ilib.root.insertAdjacentElement("afterbegin", tip);
+                setTimeout(() => tip.remove(), 8000);
+            }
             // Close button leaves the page
             const origClose = closeBrowser;
             // keep closeBrowser for lightbox etc.; × on shell navigates away only when standalone
