@@ -13,9 +13,11 @@ type CR = {
 };
 export const Chips: CR = (globalThis as any).ReflibChips;
 
-export function ChipRow({ row, items, onPick }: { row: string; items: ChipItem[]; onPick: (it: ChipItem) => void }) {
+export function ChipRow({ row, items, onPick, q: qProp, onQ }: { row: string; items: ChipItem[]; onPick: (it: ChipItem) => void; q?: string; onQ?: (q: string) => void }) {
   const [open, setOpenSt] = useState(() => Chips.isOpen(null, row));
-  const [q, setQ] = useState("");
+  const [qLocal, setQLocal] = useState("");
+  const q = qProp !== undefined ? qProp : qLocal;
+  const setQ = onQ || setQLocal;
   const [hid, setHid] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const list = Chips.arrange(items);

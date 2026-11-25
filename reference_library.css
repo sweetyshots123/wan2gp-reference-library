@@ -240,6 +240,13 @@ input.reflib-ib-q { flex: 1 1 auto; min-width: 120px; margin-left: 8px; }
 .reflib-ib-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 6px 12px; border-radius: var(--button-small-radius, 6px); font-size: 12.5px; font-weight: 600;
   background: var(--button-secondary-background-fill); color: var(--button-secondary-text-color); white-space: nowrap; line-height: 1.4; }
 .reflib-ib-btn:hover { filter: brightness(1.12); }
+.reflib-ib-reset[hidden] { display: none !important; }
+.reflib-ib-reset {
+  padding: 5px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px var(--color-accent, var(--button-secondary-border-color, currentColor));
+}
 .reflib-ib-btn.reflib-ib-primary { background: var(--button-primary-background-fill); color: var(--button-primary-text-color); }
 .reflib-ib-btn.reflib-ib-danger { background: transparent; color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,.5); }
 .reflib-ib-btn.reflib-ib-danger.armed { background: #dc2626; color: #fff; }

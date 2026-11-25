@@ -16,7 +16,8 @@ button:disabled { opacity:.5; }
 main { padding:18px 22px 80px; }
 .bar { display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:10px; }
 .bar h1 { margin:0; font-size:28px; } .bar h1 small { font-size:16px; margin-left:6px; }
-.bar .tools { margin-left:auto; display:flex; gap:8px; align-items:center; }
+.bar .tools { margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.resetbtn { border-color:var(--acc); color:var(--acc); background:var(--bg3); flex-shrink:0; }
 .facets { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 14px; }
 .chip { display:inline-flex; gap:4px; align-items:center; padding:3px 10px; border-radius:14px; background:var(--bg3); border:1px solid #33333d; font-size:13px; }
 .chip.model { color:var(--model); } .chip.on { background:var(--acc); color:#111; }

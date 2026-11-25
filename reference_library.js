@@ -5,6 +5,7 @@
     let cfg = __REFLIB_SETTINGS__;
     const log = (...a) => console.log("[Reference Library]", ...a);
     const RS = window.ReflibSelection;   // 1.9.6: selection_rules.js, shared with the Galería
+    const VS = () => window.ReflibViewState || null;   // 1.12.27: view_state_rules.js, shared with the Galería
     const I18N = {
         en: {
             error: "Error: {e}",
@@ -666,8 +667,9 @@
             serverSettingsLoaded = true;
         }
         cfg = next;
+        if (VS() && typeof cfg.browser_remember_state === "boolean") VS().syncRememberFlag(localStorage, cfg.browser_remember_state);
         if (fromServer || source === "saved") tabLang = lang(); else localizeTab(false);
-        if (source === "saved") { toast(t("settings_applied"), "ok"); try { sessionStorage.removeItem(SORT_KEY); sessionStorage.removeItem(SORT_KEY + "_used"); } catch (e) {} if (ilib.open) { newQuery(); render(); } }   // 1.7.4: a new default sort applies now
+        if (source === "saved") { toast(t("settings_applied"), "ok"); try { sessionStorage.removeItem(SORT_KEY); sessionStorage.removeItem(SORT_KEY + "_used"); } catch (e) {} if (ilib.open) { if (!rememberOn()) resetAllFilters({ noQuery: true }); newQuery(); render(); } }   // 1.7.4: a new default sort applies now
         applyTooltips();
         for (const tab of Object.keys(applied)) renderChips(tab);
         log("settings applied, language:", lang());
@@ -738,7 +740,7 @@
             set_key_set: "set", set_fallback: "Local fallback", set_jev_url: "Jev server URL (empty = in process)", set_latest: "Jev: use latest instead of pinned 1.13", set_save: "Save",
             browse: "Media browser", browse_tip: "Browse all images, videos and audio (collections, unassigned pool, folders)", close: "Close (Esc)",
             open_galeria: "Open in Galería", open_galeria_tip: "Open this library in Galería (new tab)",
-            search_ph: "Search by name…", import: "Import", import_tip: "Upload or drop images, videos or audio here: they go to the unassigned pool",
+            search_ph: "Search by name…", reset_filters: "Reset filters", reset_filters_tip: "Reset search, filters and sort", import: "Import", import_tip: "Upload or drop images, videos or audio here: they go to the unassigned pool",
             k_all: "All", k_image: "Photos", k_video: "Videos", k_audio: "Audio", k_mask: "Masks", k_tip: "Media type", chip_kind: "Type: {k}",
             k_tree: "{i} photos · {v} videos · {a} audio", dur_none: "duration pending…", play: "Play", pause: "Pause",
             to_vctl: "Use as control video", to_vctl_tip: "Put this video in WanGP's control video input", to_vlib: "Add to Video Library", to_vlib_tip: "Copy the selected videos into the Video Library",
@@ -839,7 +841,7 @@
             set_key_set: "guardada", set_fallback: "Respaldo local", set_jev_url: "URL del servidor Jev (vacío = en proceso)", set_latest: "Jev: usar la última en vez de la 1.13 fijada", set_save: "Guardar",
             browse: "Explorador de medios", browse_tip: "Examinar imágenes, vídeos y audios (colecciones, sin colección, carpetas)", close: "Cerrar (Esc)",
             open_galeria: "Abrir en Galería", open_galeria_tip: "Abrir esta librería en la Galería (pestaña nueva)",
-            search_ph: "Buscar por nombre…", import: "Importar", import_tip: "Sube o suelta aquí imágenes, vídeos o audios: van a la bolsa sin colección",
+            search_ph: "Buscar por nombre…", reset_filters: "Restablecer filtros", reset_filters_tip: "Restablecer búsqueda, filtros y orden", import: "Importar", import_tip: "Sube o suelta aquí imágenes, vídeos o audios: van a la bolsa sin colección",
             k_all: "Todo", k_image: "Fotos", k_video: "Vídeos", k_audio: "Audios", k_mask: "Máscaras", k_tip: "Tipo de medio", chip_kind: "Tipo: {k}",
             k_tree: "{i} fotos · {v} vídeos · {a} audios", dur_none: "duración pendiente…", play: "Reproducir", pause: "Pausa",
             to_vctl: "Usar como vídeo de control", to_vctl_tip: "Pone este vídeo en la entrada de vídeo de control de WanGP", to_vlib: "Añadir a la Librería de vídeos", to_vlib_tip: "Copia los vídeos seleccionados en la Librería de vídeos",
@@ -913,11 +915,90 @@
         };
     }
     const ilib = { open: false, data: null, sel: makeSel(), thumbs: new Map(), preview: null, pvItem: null, lang: null,
-                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [], fav: false },
+                   f: { cols: new Set(), none: false, folders: new Set(), tags: new Set(), q: "", node: null, sub: true, recent: false, used: false, atags: new Set(), xtags: new Set(), ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [], fav: false, sim: "" },
                    at: { status: null, facets: null, body: null, tax: null, sig: "", img: null, setOpen: false, settings: null, models: null, open: new Set() }, recentPages: 1, recentMore: false, addOpen: false, root: null,
-                   expanded: new Set(), faddOpen: false, tree: null, treeFor: null,
+                   expanded: new Set(), chipQ: {}, faddOpen: false, tree: null, treeFor: null, _pendingScroll: 0, _stateRestored: false,
                    q: { sig: "", total: 0, items: [], groups: null, pages: new Set(), loading: new Set(), gen: 0, ready: false },
                    lay: null, info: null, infoSig: 0, selSig: 0, anchorIdx: -1, scan: null };
+    let vsSaveT = null, vsScrollT = null;
+    const rememberOn = () => { const v = VS(); return v ? v.shouldRemember(cfg, localStorage) : (cfg.browser_remember_state !== false); };
+    function applyFilterObj(f) {
+        const d = (VS() && VS().mlDefaultFilter()) || { cols: [], none: false, folders: [], tags: [], q: "", node: null, sub: true, recent: false, used: false, atags: [], xtags: [], ranges: {}, jst: "", kind: "", hasmask: false, missing: false, origins: [], fav: false, sim: "" };
+        const s = f || d;
+        ilib.f = {
+            cols: new Set(s.cols || []),
+            none: !!s.none,
+            folders: new Set(s.folders || []),
+            tags: new Set(s.tags || []),
+            q: s.q || "",
+            node: s.node ? { fid: String(s.node.fid), rel: String(s.node.rel || "") } : null,
+            sub: s.sub !== false,
+            recent: !!s.recent && !s.used,
+            used: !!s.used,
+            atags: new Set(s.atags || []),
+            xtags: new Set(s.xtags || []),
+            ranges: s.ranges ? JSON.parse(JSON.stringify(s.ranges)) : {},
+            jst: s.jst || "",
+            kind: s.kind || "",
+            hasmask: !!s.hasmask,
+            missing: !!s.missing,
+            origins: Array.isArray(s.origins) ? s.origins.slice() : [],
+            fav: !!s.fav,
+            sim: s.sim || "",
+        };
+    }
+    function saveViewState() {
+        const v = VS(); if (!v || ilib.pick) return;
+        if (!rememberOn()) { v.clearML(localStorage); return; }
+        const main = ilib.root && ilib.root.querySelector(".reflib-ib-main");
+        const tree = ilib.root && ilib.root.querySelector(".reflib-ib-tree");
+        const scroll = main && ilib.open ? Math.round(main.scrollTop || 0) : (ilib._pendingScroll || 0);
+        const treeScroll = tree && ilib.open ? Math.round(tree.scrollTop || 0) : (ilib.treeScroll || 0);
+        const payload = {
+            f: ilib.f,
+            sort: sortCur(),
+            recentPages: ilib.recentPages,
+            expanded: ilib.expanded,
+            chipQ: ilib.chipQ || {},
+            atOpen: ilib.at ? ilib.at.open : [],
+            scroll,
+            treeScroll,
+        };
+        if (!v.mlHasActiveFilters(ilib.f, ilib.chipQ, sortCur(), cfg.browser_sort) && !(ilib.expanded && ilib.expanded.size) && !(ilib.at && ilib.at.open && ilib.at.open.size) && scroll === 0 && treeScroll === 0) {
+            v.clearML(localStorage);
+        } else {
+            v.saveML(localStorage, payload, cfg.browser_sort);
+        }
+    }
+    function saveViewStateSoon() { clearTimeout(vsSaveT); vsSaveT = setTimeout(saveViewState, 160); }
+    function restoreViewState() {
+        const v = VS(); if (!v || !rememberOn()) return false;
+        const st = v.loadML(localStorage, cfg.browser_sort);
+        if (!st) return false;
+        applyFilterObj(st.f);
+        ilib.recentPages = st.recentPages || 1;
+        ilib.expanded = new Set(st.expanded || []);
+        ilib.chipQ = Object.assign({}, st.chipQ || {});
+        if (ilib.at) ilib.at.open = new Set(st.atOpen || []);
+        ilib._pendingScroll = st.scroll || 0;
+        ilib.treeScroll = st.treeScroll || 0;
+        setSort(st.sort, true);
+        const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q");
+        if (qi) qi.value = ilib.f.q || "";
+        ilib._stateRestored = true;
+        return true;
+    }
+    function resetAllFilters(opts = {}) {
+        applyFilterObj(null);
+        EXT.forEach(x => { if (x.clear) x.clear(ilib.f); });
+        ilib.chipQ = {}; ilib.recentPages = 1; ilib._pendingScroll = 0;
+        if (opts.clearExpanded) { ilib.expanded = new Set(); ilib.treeScroll = 0; if (ilib.at) ilib.at.open = new Set(); }
+        const defSort = SORTS.includes(cfg.browser_sort) ? cfg.browser_sort : "date_desc";
+        setSort(defSort, true);
+        const qi = ilib.root && ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
+        const v = VS(); if (v && !opts.keepSaved) v.clearML(localStorage);
+        if (ilib.open && !opts.noQuery) { newQuery(); render(); }
+    }
 
     // 1.4.3: requests share one hidden textbox per channel, so they MUST go one at a time. 1.4.4: everything the
     // browser needs to open and scroll (open, query, range, sel_info, thumbs…) is read-only and goes through the
@@ -1027,16 +1108,32 @@
     const tz = () => new Date().getTimezoneOffset();
     function setMeta(data) {
         const m = data.meta;
+        if (data.remember_state !== undefined) {
+            cfg.browser_remember_state = !!data.remember_state;
+            if (VS()) VS().syncRememberFlag(localStorage, cfg.browser_remember_state);
+        }
         // replies can arrive out of order (queued vs unqueued channel): never go back to an older index state
         if (ilib.data && m.rev != null && ilib.data.rev != null && m.rev < ilib.data.rev) { if (data.scan) ilib.scan = data.scan; return; }
         ilib.data = Object.assign({}, m, { default_collection: data.default_collection || (ilib.data && ilib.data.default_collection) || "" });
         Object.defineProperty(ilib.data, "images", { get: loadedItems, enumerable: false });   // tests / compat: loaded items only
         ilib.colNames = new Map(m.collections.map(c => [c.id, c.name]));
-        const cols = new Set(m.collections.map(c => c.id));
-        for (const c of [...ilib.f.cols]) if (!cols.has(c)) ilib.f.cols.delete(c);
-        const fids = new Set(m.folders.map(f => f.id));
-        for (const f of [...ilib.f.folders]) if (!fids.has(f)) ilib.f.folders.delete(f);
-        if (ilib.f.node && !fids.has(ilib.f.node.fid)) ilib.f.node = null;
+        const v = VS();
+        if (v && !ilib.pick) {
+            const pr = v.mlPruneStale(v.mlFromState({ f: ilib.f, sort: sortCur(), recentPages: ilib.recentPages, expanded: ilib.expanded, chipQ: ilib.chipQ, atOpen: ilib.at && ilib.at.open }, cfg.browser_sort), m);
+            if (pr.changed) {
+                ilib.f.cols = new Set(pr.state.f.cols);
+                ilib.f.folders = new Set(pr.state.f.folders);
+                ilib.f.tags = new Set(pr.state.f.tags);
+                ilib.f.node = pr.state.f.node;
+                ilib.expanded = new Set(pr.state.expanded);
+            }
+        } else {
+            const cols = new Set(m.collections.map(c => c.id));
+            for (const c of [...ilib.f.cols]) if (!cols.has(c)) ilib.f.cols.delete(c);
+            const fids = new Set(m.folders.map(f => f.id));
+            for (const f of [...ilib.f.folders]) if (!fids.has(f)) ilib.f.folders.delete(f);
+            if (ilib.f.node && !fids.has(ilib.f.node.fid)) ilib.f.node = null;
+        }
         if (data.scan) { ilib.scan = data.scan; if (!data.scan.running) ilib.scanSeq = data.scan.seq; }
         if (data.paused != null) ilib.paused = data.paused;
     }
@@ -1060,6 +1157,7 @@
     // A new filter: forget the pages; same filter after a change (tag, add, delete…): refetch, keep showing the old ones.
     function newQuery(keepScroll) {
         navRecord();
+        if (!navApplying && !ilib.pick) saveViewState();
         const sig = JSON.stringify(filterSnap());
         setTimeout(() => loadFacets(), 0);
         const q = ilib.q;
@@ -1208,6 +1306,8 @@
             c.hidden = !C.match({ label: c.dataset.ql || "", id: c.dataset.qi || "", active: !!c.dataset.on, fixed: !!c.dataset.fx }, q);
         });
         chipLayout();
+        syncResetBtn();
+        saveViewStateSoon();
     }
     function keepChipFocus(fn) {   // re-rendering the filter rows must not steal the chip filter field while typing
         const a = document.activeElement, row = a && a.classList && a.classList.contains("reflib-ib-chipq") ? a.dataset.row : null, pos = row ? a.selectionStart : 0;
@@ -1241,9 +1341,17 @@
             const sc = tr.scrollTop, tmp = document.createElement("div");
             tmp.innerHTML = renderTree(d);
             const nt = tmp.firstElementChild;
-            if (nt) { tr.replaceWith(nt); nt.scrollTop = sc; }
+            if (nt) { tr.replaceWith(nt); nt.scrollTop = sc; nt.addEventListener("scroll", onTreeScroll, { passive: true }); }
         }
         renderFooter();
+    }
+    function syncResetBtn() {
+        const rst = ilib.root && ilib.root.querySelector(".reflib-ib-reset");
+        if (!rst) return;
+        const v = VS(), active = v ? v.mlHasActiveFilters(ilib.f, ilib.chipQ, sortCur(), cfg.browser_sort) : false;
+        rst.hidden = !active;
+        rst.textContent = "↺ " + it("reset_filters");
+        rst.title = it("reset_filters_tip");
     }
     function render() {
         const root = ilib.root;
@@ -1262,6 +1370,8 @@
         root.querySelector(".reflib-ib-x").title = it("close");
         const search = root.querySelector(".reflib-ib-q");
         search.placeholder = it("search_ph");
+        if (document.activeElement !== search && search.value !== (ilib.f.q || "")) search.value = ilib.f.q || "";
+        syncResetBtn();
         const imp = root.querySelector(".reflib-ib-import");
         imp.textContent = it("import"); imp.title = it("import_tip");
         const rs = root.querySelector(".reflib-ib-rescan");
@@ -1317,13 +1427,22 @@
         replaceKeeping(body, `<div class="reflib-ib-filters">${filters}</div>
             <div class="reflib-ib-split">${renderTree(d)}<div class="reflib-ib-main">${renderFilterChips(d)}${renderCrumbs(d)}<div class="reflib-ib-vgrid"></div><div class="reflib-ib-gridend"></div></div><div class="reflib-ib-pvhost"></div></div><div class="reflib-ib-foothost"></div>`, keepPv);
         const treeEl = body.querySelector(".reflib-ib-tree");
-        if (treeEl) treeEl.scrollTop = ilib.treeScroll || 0;
+        if (treeEl) { treeEl.scrollTop = ilib.treeScroll || 0; treeEl.addEventListener("scroll", onTreeScroll, { passive: true }); }
         const main = body.querySelector(".reflib-ib-main");
         main.addEventListener("scroll", onGridScroll, { passive: true });
         if (ilib.ro) { ilib.ro.disconnect(); ilib.ro.observe(main); }
         ilib.cards = new Map(); ilib.heads = new Map();
         renderGrid();
-        main.scrollTop = scroll;
+        if (ilib._pendingScroll > 0 && ilib.q.ready) {
+            if (ilib.q.total && main.clientHeight > 0 && main.scrollHeight > main.clientHeight) {
+                main.scrollTop = Math.min(ilib._pendingScroll, Math.max(0, main.scrollHeight - main.clientHeight));
+                ilib._pendingScroll = 0;
+            } else if (!ilib.q.total) {
+                ilib._pendingScroll = 0;
+            }
+        } else {
+            main.scrollTop = scroll;
+        }
         renderWindow();
         renderPreview();
         renderFooter();
@@ -1384,6 +1503,15 @@
     function onGridScroll() {
         if (scrollRaf) return;
         scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; renderWindow(); });
+        if (ilib.open && !ilib.pick && !ilib._pendingScroll) {
+            clearTimeout(vsScrollT); vsScrollT = setTimeout(saveViewState, 200);
+        }
+    }
+    function onTreeScroll(e) {
+        if (e && e.target) ilib.treeScroll = e.target.scrollTop || 0;
+        if (ilib.open && !ilib.pick) {
+            clearTimeout(vsScrollT); vsScrollT = setTimeout(saveViewState, 200);
+        }
     }
     function visibleRows(extra) {
         const main = ilib.root.querySelector(".reflib-ib-main"), vg = main.querySelector(".reflib-ib-vgrid");
@@ -1649,12 +1777,7 @@
     }
     function chipClick(act, el) {
         const f = ilib.f, k = el.dataset.key, kind = el.dataset.kind;
-        if (act === "chipclear") {
-            f.cols.clear(); f.none = false; f.node = null; f.tags.clear(); f.atags.clear(); f.xtags.clear(); f.ranges = {}; f.q = ""; f.jst = ""; f.kind = ""; f.hasmask = false; f.missing = false; f.origins = []; f.fav = false;
-            EXT.forEach(x => { if (x.clear) x.clear(f); });
-            const qi = ilib.root.querySelector(".reflib-ib-q"); if (qi) qi.value = "";
-            newQuery(); return true;
-        }
+        if (act === "chipclear") { resetAllFilters(); return true; }
         if (act === "chipmode") {
             if (f.atags.has(k)) { f.atags.delete(k); f.xtags.add(k); } else { f.xtags.delete(k); f.atags.add(k); }
             newQuery(); return true;
@@ -2194,7 +2317,7 @@
         if (act === "atcancel") { sendIlib({ action: "at_cancel" }).then(r => { if (r && r.at) { ilib.at.status = r.at; renderAtBar(); } }).catch(() => {}); return true; }
         if (act === "atunload") { sendIlib({ action: "at_unload" }).then(r => { if (r && r.at) { ilib.at.status = r.at; renderAtBar(); } }).catch(() => {}); return true; }
         if (act === "atfacet") { const tg = el.dataset.tag; if (ilib.f.xtags.has(tg)) ilib.f.xtags.delete(tg); else if (ilib.f.atags.has(tg)) ilib.f.atags.delete(tg); else ilib.f.atags.add(tg); newQuery(); return true; }
-        if (act === "atcat") { const c = el.dataset.cat; ilib.at.open.has(c) ? ilib.at.open.delete(c) : ilib.at.open.add(c); const host = ilib.root.querySelector(".reflib-ib-facets"); if (host) host.outerHTML = renderFacets(); return true; }
+        if (act === "atcat") { const c = el.dataset.cat; ilib.at.open.has(c) ? ilib.at.open.delete(c) : ilib.at.open.add(c); saveViewState(); const host = ilib.root.querySelector(".reflib-ib-facets"); if (host) host.outerHTML = renderFacets(); return true; }
         if (act === "atedit") {
             sendIlib({ action: "at_edit", hash: ilib.preview, tag: el.dataset.tag, op: el.dataset.op }).then(r => {
                 if (r && r.ok) { ilib.at.img = r.img; const host = ilib.root.querySelector(".reflib-ib-autohost"); if (host) host.innerHTML = renderAutoPanel(ilib.preview); loadFacets(true); }
@@ -2516,6 +2639,7 @@
             <div class="reflib-ib-head"><span class="reflib-ib-ico">${GRID_SVG}</span><h3 class="reflib-ib-title"></h3>
               <a class="reflib-ib-btn reflib-ib-galeria" href="/reflib/gallery/" target="_blank" rel="noopener"></a><button type="button" class="reflib-ib-btn reflib-ib-resume-cfg" data-act="resumecfg" title="resume">⏱</button>
               <input type="search" class="reflib-ib-q" spellcheck="false">
+              <button type="button" class="reflib-ib-btn reflib-ib-reset" data-act="resetfilters" hidden></button>
               <button type="button" class="reflib-ib-btn reflib-ib-import"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-addfolder"></button>
               <button type="button" class="reflib-ib-btn reflib-ib-rescan"></button>
@@ -3483,7 +3607,7 @@
         if (ilib.f && ilib.f.used) return SORTS.includes(v) ? v : "used";
         return SORTS.includes(v) ? v : (SORTS.includes(cfg.browser_sort) ? cfg.browser_sort : "date_desc");
     }
-    function setSort(v) { try { if (v === "used" || v === "sim") sessionStorage.removeItem(sortKey()); else sessionStorage.setItem(sortKey(), v); } catch (e) {} }
+    function setSort(v, skipSave) { try { if (v === "used" || v === "sim") sessionStorage.removeItem(sortKey()); else sessionStorage.setItem(sortKey(), v); } catch (e) {} if (!skipSave && !ilib.pick) saveViewState(); }
     document.addEventListener("change", (e) => {
         const so = e.target && e.target.closest && e.target.closest(".reflib-ib-sort");
         if (!so || !(SORTS.includes(so.value) || so.value === "used" || so.value === "sim")) return;
@@ -3714,6 +3838,7 @@
             ilib.picker = null; renderPicker();
             addFolder();
         }
+        else if (act === "resetfilters") resetAllFilters();
         else if (act === "hist") histOpen();
         else if (act === "reloadpage") location.reload();
         else if (act === "navback") navGo(nav.i - 1);
@@ -3739,8 +3864,9 @@
         else if (act === "caret") {
             const key = el.dataset.key;
             ilib.expanded.has(key) ? ilib.expanded.delete(key) : ilib.expanded.add(key);
+            saveViewState();
             const tree = ilib.root.querySelector(".reflib-ib-tree");
-            if (tree) { const sc = tree.scrollTop; tree.outerHTML = renderTree(ilib.data); ilib.root.querySelector(".reflib-ib-tree").scrollTop = sc; }
+            if (tree) { const sc = tree.scrollTop; tree.outerHTML = renderTree(ilib.data); const nt = ilib.root.querySelector(".reflib-ib-tree"); nt.scrollTop = sc; nt.addEventListener("scroll", onTreeScroll, { passive: true }); }
         }
         else if (act === "crumb") {
             const fid = el.dataset.fid;
@@ -3925,11 +4051,21 @@
     }
     function openBrowser(opts = {}) {
         if (!ilib.root) buildModal();
+        if (!ilib.pick) {
+            if (rememberOn()) {
+                restoreViewState();
+                if (opts.collection_id) { ilib.f.cols = new Set([opts.collection_id]); ilib.f.none = false; ilib.f.folders.clear(); ilib._pendingScroll = 0; saveViewState(); }
+            } else {
+                resetAllFilters({ noQuery: true, clearExpanded: true });
+                if (opts.collection_id) { ilib.f.cols = new Set([opts.collection_id]); ilib.f.none = false; ilib.f.folders.clear(); }
+            }
+        }
+        const qi = ilib.root.querySelector(".reflib-ib-q");
+        if (qi) qi.value = ilib.f.q || "";
         ilib.root.classList.toggle("reflib-ib-full", fullPref());
         ilib.open = true;
         setTimeout(() => { pollAt(); loadFacets(true); }, 400);   // after the first page: never delays the shell
         ilib.preview = null; ilib.addOpen = false; ilib.delArmed = false; if (ilib.at) { ilib.at.setOpen = false; renderAtSettings(false); }   // 1.5.2: settings start closed, the gear always opens them
-        if (opts.collection_id) { ilib.f.cols = new Set([opts.collection_id]); ilib.f.none = false; ilib.f.folders.clear(); }
         ilib.root.classList.add("open");
         document.documentElement.classList.add("reflib-ib-lock");
         // the shell shows at once (last known counts, if any); counts + tree + page 1 arrive in one small request
@@ -3942,7 +4078,18 @@
         const gen = ilib.q.gen;
         return sendIlib({ action: "open", f: filterSnap(), limit: PAGE, tz: tz() }).then(r => {
             if (!r || r.ok === false) return r;
+            const beforeSig = JSON.stringify(filterSnap());
             setMeta(r);
+            if (!ilib.pick && !rememberOn()) {
+                resetAllFilters({ noQuery: true, clearExpanded: true });
+                if (opts.collection_id) { ilib.f.cols = new Set([opts.collection_id]); }
+            }
+            const afterSig = JSON.stringify(filterSnap());
+            if (afterSig !== beforeSig && !ilib.pick) {
+                saveViewState();
+                newQuery();
+                return r;
+            }
             if (r.page && ilib.q.sig === sig && ilib.q.gen === gen) applyPage(r.page, sig, gen);
             render();
             if (r.scan && (r.scan.running || r.scan.thumbs_pending || r.scan.pause_set)) pollScan(false);
@@ -3951,7 +4098,13 @@
     }
     function closeBrowser() {
         if (!ilib.root) return;
+        const wasPick = !!ilib.pick;
         pickEnd();   // 1.6.8: back to the filter the user had
+        if (!wasPick) {
+            if (rememberOn()) saveViewState();
+            else resetAllFilters({ noQuery: true, clearExpanded: true });
+        }
+        clearTimeout(vsSaveT); clearTimeout(vsScrollT);
         closeLightbox(); stopAudio();
         ilib.open = false;
         ilib.root.classList.remove("open");
@@ -3961,6 +4114,7 @@
         ilib.cards = new Map(); ilib.heads = new Map();
         reloadLists();
     }
+    window.addEventListener("pagehide", () => { if (ilib.open && !ilib.pick && rememberOn()) saveViewState(); });
     setInterval(() => { if (ilib.open && ilib.lang !== lang()) render(); }, 700);
 
     // ---- 1.5.6 delete menu + confirm + undo (Historial and Usadas como referencia) ----
@@ -5848,7 +6002,7 @@
             // Close button leaves the page
             const origClose = closeBrowser;
             // keep closeBrowser for lightbox etc.; × on shell navigates away only when standalone
-            const x = () => { try { saveResume(ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia")); } catch (e) {} location.href = "/reflib/gallery/"; };
+            const x = () => { try { if (!ilib.pick && rememberOn()) saveViewState(); saveResume(ilib.lightbox && ilib.lightbox.querySelector("video.reflib-ib-lbmedia")); } catch (e) {} location.href = "/reflib/gallery/"; };
             // re-bind after modal built
             setTimeout(() => {
                 const btn = ilib.root && ilib.root.querySelector(".reflib-ib-x");
@@ -5865,7 +6019,7 @@
         extend: (x) => { EXT.push(x); }, ilibRefresh: () => { newQuery(); render(); }, esc, it,
         get settings() { return cfg; },
         get tabRequest() { return tabRequest; },
-        openBrowser, closeBrowser, sendIlib, forgetOpen: (hs, done) => fgOpen(false, hs, done), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibShowPreview: (h, item) => {   // 1.12.2: open any item in the details preview, even when its card is not on the current page
+        openBrowser, closeBrowser, resetFilters: () => resetAllFilters(), sendIlib, forgetOpen: (hs, done) => fgOpen(false, hs, done), pickOpen, pickLoad, mountPickButtons, pickState: () => ilib.pick && Object.assign({}, ilib.pick), maskEvent, mkUse, mkAssignStart, mkState: () => mk, openResizeMenu, runResize, saveInput, mountSaveButtons, svState: (b) => svState.get(b), vOpen, vEditor, vMeTrim, vShowOriginal, vShowCopy, cropApi2, cropApi3, settingsInput, settingsLoaderCandidates, seedInput, forceRandomSeed, histOpen, histClose, histFindVideo, pvReuse, hmState: () => Object.assign({}, hmRun), playerSrc, histState: () => hist, refsAvailable, ilibShown: () => shownList(), ilibState: () => ilib, ilibShowPreview: (h, item) => {   // 1.12.2: open any item in the details preview, even when its card is not on the current page
             if (!viewPref().details) setView({ details: true });
             const i = ilib.q.items.findIndex(x => x && x.hash === h);
             const r = showPreview(h, i);

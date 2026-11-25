@@ -6,10 +6,19 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.27 — Remember search and filters on reopen
+
+- **Setting:** `browser_remember_state` (**Remember search and filters on reopen / Recordar búsqueda y filtros al reabrir**), default **ON**. Exposed via `ui_pref` and `_ilib_payload().remember_state`.
+- **Shared rules (`view_state_rules.js`):** Pure module (`ReflibViewState`) shared by Media Library and Galería. Handles normalization, stale pruning against `meta` (collections, folders/subfolders with parent fallback, tags), active-filter detection, and per-browser `localStorage` persistence. Ephemeral `sim` sessions are dropped on persist/restore.
+- **Media Library:** Keeps search, filters, `chipQ`, expanded folders/facets, sort, and scroll across modal close/reopen and browser/standalone restarts; temporary picker sessions (`start_image` / `image_guide`) restore cleanly without overwriting saved user state. Includes **Reset filters / Restablecer filtros**. New chrome uses theme tokens so it stays readable in standalone dark and in-WanGP light/dark.
+- **Galería:** Keeps startup route (`resolveStartupRoute`), search, Omni chips, tag row chips + `chipQ`, `af` facets (with controlled range inputs) + `afOpen`, `manage`, and scroll across close/reopen and restarts. Includes **↺ Restablecer filtros**.
+- **Tests:** `tests/test_view_state_rules.mjs`, `tests/test_browser_keepstate.mjs`, `tests/test_browser_remember_setting.py`. Also `tests/test_browser_standalone_theme.mjs` (1.12.26 contrast) still applies.
+
 ## 1.12.26 — Standalone Media Library dark theme contrast
 
 - `/reflib/media-library/` is a bare HTML page (no Gradio CSS). It now sets dark `--body-text-color` / surface tokens on `html.reflib-standalone` and adds the `.dark` class so existing `.dark` rules apply. The 1.12.7 shell background stays `#0e0e12`. The Media Library modal inside WanGP is unchanged (it already uses Gradio’s theme variables).
 - Test: `tests/test_browser_standalone_theme.mjs` (synthetic mock; checks contrast of title, search, chips, tree, captions and footer buttons).
+
 
 ## 1.12.25 — Control Image picker placement
 

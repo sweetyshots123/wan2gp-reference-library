@@ -1,8 +1,16 @@
 # Changelog
 
+## 1.12.27
+
+- **Remember search and filters on reopen.** Added setting **Remember search and filters on reopen / Recordar búsqueda y filtros al reabrir** (`browser_remember_state`, default ON) in Reference Library settings.
+- **Shared persistence (`view_state_rules.js`, `window.ReflibViewState`):** Pure logic module served by `plugin.py` and shared by both UIs. Persists state in `localStorage` (`reflib_ml_view_state`, `reflib_gal_view_state`, `reflib_remember_state`), drops ephemeral `sim` session IDs across restarts, and prunes stale deleted collections, folders (falling back to nearest existing parent when `meta.tree` is available), and tags.
+- **Media Library (`reference_library.js`):** Keeps search text, collection/tag/folder/subfolder/kind/origin/auto-tag/facet/favorite/recent/used filters, chip filter inputs (`chipQ`), expanded folder tree and facet categories, sort order, and main/tree scroll positions across modal close/reopen, tab reloads, and browser restarts (while skipping save/overwrite during temporary Start/Control Image picker opens). Added header **Reset filters / Restablecer filtros** button when filters are active, and turning the setting OFF clears filters and saved state. Reset button and other new chrome use Gradio/standalone theme tokens (readable in standalone dark and in-WanGP light/dark).
+- **Galería (`gallery/src/`):** Keeps active route/tab (`#/explorar`, `#/coleccion/...`, `#/carpeta/...`, `#/buscar`, etc.), search text, Omni chips, tag row chips (`extraTags`) and chip filter input (`chipQ`), auto-tag/body-range facets (`af`) and expanded facet categories (`afOpen`), `manage` mode, and `window.scrollY` across close/reopen and reloads. Fixed `FacetPanel` range inputs to be controlled so restore/reset updates them. Added **↺ Restablecer filtros** button in the toolbar when filters or a non-home view are active.
+
 ## 1.12.26
 
 - **Standalone Media Library contrast.** The `/reflib/media-library/` page (the Gradio-free dark shell with the “Media Library independiente…” banner) now defines dark theme tokens and adds the `.dark` class. Since 1.12.7 the page used a near-black background (`#0e0e12`) but never set Gradio’s `--body-text-color` (or `.dark`), so tabs, search, chips, the folder tree, card captions and footer buttons rendered as black-on-black (~1.1:1). The in-WanGP explorer already inherited WanGP’s dark theme and was not affected. Blue selected buttons (Todo / Detalles) were already explicit white-on-blue.
+
 
 
 ## 1.12.25

@@ -18,10 +18,16 @@ export function afToFilter(a: AFilt): Partial<Filter> & Record<string, any> {
 }
 const JST: Record<string, string> = { queued: "En cola", processing: "Procesando", done: "Autoetiquetadas", failed: "Con error", local: "Etiquetadas localmente", never: "Sin autoetiquetar" };
 
-export function FacetPanel({ f, af, setAf, rev }: { f: Filter; af: AFilt; setAf: (a: AFilt) => void; rev: number }) {
+export function FacetPanel({ f, af, setAf, rev, openCats, onOpenCats }: { f: Filter; af: AFilt; setAf: (a: AFilt) => void; rev: number; openCats?: string[]; onOpenCats?: (cats: string[]) => void }) {
   const [r, setR] = useState<any>(null);
   const [tax, setTx] = useState<any[] | null>(null);
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [openLocal, setOpenLocal] = useState<Set<string>>(new Set());
+  const open = openCats ? new Set(openCats) : openLocal;
+  const setOpen = (fn: (s: Set<string>) => Set<string>) => {
+    const next = fn(open);
+    if (onOpenCats) onOpenCats([...next]);
+    else setOpenLocal(next);
+  };
   const [atRev, setAtRev] = useState(0);
   useEffect(() => { const h = () => setAtRev((x) => x + 1); window.addEventListener(AT_DONE, h); return () => window.removeEventListener(AT_DONE, h); }, []);
   const fk = JSON.stringify(f);
@@ -68,8 +74,8 @@ export function FacetPanel({ f, af, setAf, rev }: { f: Filter; af: AFilt; setAf:
       {avail.length > 0 && <div className="fcat"><div className="fct open">Rangos corporales <small className="muted">estimado</small></div>
         {avail.map((k) => { const st = bs[k] || { min: 0, max: 1 }, cur = af.ranges[k] || [], ratio = st.max <= 2, step = ratio ? 0.01 : 1;
           return <div key={k} className="frange" title="Filtrar por rango estimado"><span>{bodyName(k)}</span>
-            <input type="number" step={step} placeholder={ratio ? Number(st.min).toFixed(2) : String(Math.floor(st.min))} defaultValue={cur[0] != null && cur[0] > -1e8 ? cur[0] : ""} onChange={(e) => setRange(k, 0, e.target.value)} />–
-            <input type="number" step={step} placeholder={ratio ? Number(st.max).toFixed(2) : String(Math.ceil(st.max))} defaultValue={cur[1] != null && cur[1] < 1e8 ? cur[1] : ""} onChange={(e) => setRange(k, 1, e.target.value)} /></div>; })}
+            <input type="number" step={step} placeholder={ratio ? Number(st.min).toFixed(2) : String(Math.floor(st.min))} value={cur[0] != null && cur[0] > -1e8 ? cur[0] : ""} onChange={(e) => setRange(k, 0, e.target.value)} />–
+            <input type="number" step={step} placeholder={ratio ? Number(st.max).toFixed(2) : String(Math.ceil(st.max))} value={cur[1] != null && cur[1] < 1e8 ? cur[1] : ""} onChange={(e) => setRange(k, 1, e.target.value)} /></div>; })}
       </div>}
     </aside>
   );

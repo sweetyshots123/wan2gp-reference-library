@@ -84,7 +84,7 @@ from . import promptlink
 # Public read-only API for other plugins (Prompt Library). Registered at load; callers look it up lazily.
 _public_api.register()
 
-PLUGIN_VERSION = "1.12.26"
+PLUGIN_VERSION = "1.12.27"
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(_PLUGIN_DIR, "settings.json")
 TAB_IDS = ("generate", "edit")
@@ -323,6 +323,8 @@ TEXT = {
         "sec_img_crops": "### Image crops",
         "browser_fullscreen": "Always open the media browser full screen",
         "browser_fullscreen_info": "The media browser opens filling the whole screen (the ⛶ button in its header still switches for the current session).",
+        "browser_remember_state": "Remember search and filters on reopen",
+        "browser_remember_state_info": "When closing and reopening the media browser or Galería, keep your search text, filters, folder/collection, sort order, view and scroll position.",
         "browser_sort": "Default sort order in the media browser",
         "browser_sort_info": "How the explorer orders what it shows (any folder, collection, filter or search). The sort menu in its header changes it for the current session.",
         "open_ml": "Open Media Library",
@@ -601,6 +603,8 @@ TEXT = {
         "sec_img_crops": "### Recortes de imágenes",
         "browser_fullscreen": "Abrir siempre a pantalla completa",
         "browser_fullscreen_info": "El explorador de medios se abre ocupando toda la pantalla (el botón ⛶ de su cabecera sigue cambiándolo solo para esa vez).",
+        "browser_remember_state": "Recordar búsqueda y filtros al reabrir",
+        "browser_remember_state_info": "Al cerrar y volver a abrir el explorador de medios o la Galería, mantiene la búsqueda, los filtros, la carpeta/colección, el orden, la vista y la posición de desplazamiento.",
         "browser_sort": "Orden por defecto en el explorador de medios",
         "browser_sort_info": "Cómo ordena el explorador lo que muestra (cualquier carpeta, colección, filtro o búsqueda). El menú de orden de su cabecera lo cambia solo para la sesión actual.",
         "open_ml": "Abrir Media Library",
@@ -743,6 +747,7 @@ DEFAULT_SETTINGS = {
     "crop_save_images": "auto",   # image crops from Cropper (1.3): "auto" | "ask" | "off"
     "index_paused": False,        # 1.4.4: pause background indexing of watched folders
     "browser_fullscreen": False,  # 1.5.5: always open the image browser full screen (also kept in localStorage)
+    "browser_remember_state": True,  # 1.12.27: remember search, filters, folder/collection, sort and scroll on reopen
     "browser_details": False,     # 1.5.9: right details panel in the image browser (off: a click only selects)
     "browser_thumb": "m",         # 1.5.9: thumbnail size l / m / s
     "browser_sort": "date_desc",  # 1.7.4: default explorer sort (date_desc | date_asc | name_asc | name_desc)
@@ -899,7 +904,7 @@ def build_js(settings=None):
     with open(os.path.join(_PLUGIN_DIR, "reference_library.js"), "r", encoding="utf-8") as reader:
         script = reader.read()
     try:   # 1.9.6 / 1.12.6 / 1.12.7: selection + frame-capture stay + playback resume rules shared with the Galería
-        for _shared in ("selection_rules.js", "wheel_rules.js", "viewer_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js", "fullscreen_rules.js", "tag_complete.js", "filter_rules.js", "chip_rules.js"):
+        for _shared in ("selection_rules.js", "wheel_rules.js", "viewer_rules.js", "frame_capture_rules.js", "playback_rules.js", "standalone_rules.js", "request_priority.js", "person_match.js", "progressive_media.js", "fullscreen_rules.js", "tag_complete.js", "filter_rules.js", "chip_rules.js", "view_state_rules.js"):
             with open(os.path.join(_PLUGIN_DIR, _shared), "r", encoding="utf-8") as reader:
                 script = reader.read() + "\n" + script
     except OSError:
@@ -2542,7 +2547,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         "sec_messages", "toasts", "toast_s", "sec_prompts", "on_apply_prompts", "save", "sec_manager",
         "mgr_dd", "mgr_refresh", "mgr_name", "mgr_new", "mgr_rename", "mgr_dup", "mgr_delete", "mgr_apply",
         "mgr_prompts_title", "mgr_prompts_save", "mgr_gallery", "mgr_gallery_title", "mgr_add", "mgr_remove", "mgr_left", "mgr_right", "mgr_cover", "mgr_export", "mgr_import",
-        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "resume_min_m", "sec_playback", "browser_fullscreen", "browser_sort", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
+        "video_bar", "mask_autosave", "sec_videos", "crop_save", "sec_img_crops", "crop_save_images", "index_paused", "resume_min_m", "sec_playback", "browser_fullscreen", "browser_remember_state", "browser_sort", "vsec", "vmgr_title", "vmgr_name", "vmgr_rename", "vmgr_load", "vmgr_delete",
         "vmgr_import", "vmgr_left", "vmgr_right", "vmgr_download", "vmgr_export",
     )
 
@@ -2596,6 +2601,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "sec_playback": {"value": t("sec_playback")},
             "resume_min_m": {"label": t("resume_min_m"), "info": t("resume_min_m_info")},
             "browser_fullscreen": {"label": t("browser_fullscreen"), "info": t("browser_fullscreen_info")},
+            "browser_remember_state": {"label": t("browser_remember_state"), "info": t("browser_remember_state_info")},
             "browser_sort": {"label": t("browser_sort"), "info": t("browser_sort_info"), "choices": browser_sort_choices(lang)},
             "vsec": {"value": t("vsec")},
             "vmgr_title": {"value": _panel_title_html(tr(lang, "vmgr_title", n=len(videostore.list_videos())), t("vmgr_title_tip"))},
@@ -2655,6 +2661,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                                                minimum=0, maximum=1440, step=0.5, elem_id="reflib_resume_min_m", **tx["resume_min_m"])
             with gr.Group():
                 ui["browser_fullscreen"] = gr.Checkbox(value=current("browser_fullscreen"), elem_id="reflib_browser_fullscreen", **tx["browser_fullscreen"])
+                ui["browser_remember_state"] = gr.Checkbox(value=current("browser_remember_state"), elem_id="reflib_browser_remember_state", **tx["browser_remember_state"])
                 ui["browser_sort"] = gr.Dropdown(value=current("browser_sort"), elem_id="reflib_browser_sort", **tx["browser_sort"])
             with gr.Group():
                 ui["sec_messages"] = gr.Markdown(tx["sec_messages"]["value"])
@@ -2892,9 +2899,9 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         ui["save"].click(
             fn=self._save_from_ui,
             inputs=[ui["replace_mode"], ui["auto_apply"], ui["show_edit"], ui["toasts"], ui["toast_s"], ui["language"],
-                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"], ui["browser_sort"], ui["resume_min_m"]],
+                    ui["on_apply_prompts"], ui["video_bar"], ui["crop_save"], ui["crop_save_images"], ui["index_paused"], browser_lang, ui["browser_fullscreen"], ui["mask_autosave"], ui["browser_sort"], ui["resume_min_m"], ui["browser_remember_state"]],
             outputs=[status, settings_json] + tab_outputs + bar_outputs + prompt_outputs, show_progress="hidden",
-            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma,bs,rm) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma, bs, rm]",
+            js="(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,l,fs,ma,bs,rm,brs) => [a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10, navigator.language || '', fs, ma, bs, rm, brs]",
         ).then(fn=None, inputs=[settings_json], outputs=None,
                js="(s) => { if (window.referenceLibrary) window.referenceLibrary.applySettings(s, 'saved'); }")
 
@@ -3566,7 +3573,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                 gr.update(choices=choices, label=tr(lang, "mgr_prompts"), interactive=promptlink.can_write()))
 
     def _save_from_ui(self, replace_mode, auto_apply, show_edit, toasts, toast_s, language="auto", on_apply_prompts="offer",
-                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True, browser_sort="date_desc", resume_min_m=5):
+                      video_bar=True, crop_save="auto", crop_save_images="auto", index_paused=False, browser_lang="", browser_fullscreen=None, mask_autosave=True, browser_sort="date_desc", resume_min_m=5, browser_remember_state=None):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings["browser_sort"] = _coerce("browser_sort", "date_desc", browser_sort)
         settings.update({
@@ -3583,6 +3590,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
             "index_paused": bool(index_paused),
             "mask_autosave": bool(mask_autosave),
             "browser_fullscreen": bool(load_settings().get("browser_fullscreen", False)) if browser_fullscreen is None else bool(browser_fullscreen),
+            "browser_remember_state": bool(load_settings().get("browser_remember_state", True)) if browser_remember_state is None else bool(browser_remember_state),
         })
         _cur = load_settings()
         settings.update({k: _cur.get(k, DEFAULT_SETTINGS[k]) for k in ("browser_details", "browser_thumb")})   # 1.5.9: set from the browser header
@@ -3683,7 +3691,7 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
         the "query" action). Kept small whatever the library size."""
         scan = imagelib.start_scan() if rescan else imagelib.scan_status()
         out = {"ok": True, "meta": imagelib.meta(), "scan": scan, "default_collection": self._last_applied.get("generate") or "",
-               "paused": imagelib.is_paused()}
+               "paused": imagelib.is_paused(), "remember_state": bool(load_settings().get("browser_remember_state", True))}
         return out
 
     def _outputs_dir(self):
@@ -3812,11 +3820,11 @@ class ReferenceLibraryPlugin(WAN2GPPlugin):
                     out.update({k: v for k, v in self._ilib_payload(lang).items() if k != "ok"})
             elif action == "ui_pref":   # 1.5.5 browser UI preferences
                 st = load_settings()
-                for k in ("browser_fullscreen", "browser_details", "browser_thumb"):   # 1.5.9: only the keys sent
+                for k in ("browser_fullscreen", "browser_details", "browser_thumb", "browser_remember_state"):   # 1.5.9 / 1.12.27: only the keys sent
                     if k in req:
                         st[k] = _coerce(k, DEFAULT_SETTINGS[k], req[k])
                 save_settings(st)
-                out = {"ok": True, **{k: st[k] for k in ("browser_fullscreen", "browser_details", "browser_thumb")}}
+                out = {"ok": True, **{k: st[k] for k in ("browser_fullscreen", "browser_details", "browser_thumb", "browser_remember_state")}}
             elif action in ("used_del", "used_undo"):   # 1.5.6
                 from .reflib_core import refusage
                 if action == "used_undo":

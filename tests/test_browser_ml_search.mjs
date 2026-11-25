@@ -33,6 +33,7 @@ async function check(name, fn) { try { await fn(); console.log("  ok  " + name);
 
 // api: "ok" = /reflib/api reachable from the page, "down" = only the bridge works (404 for direct calls)
 const inject = (api, qcost) => `(() => {
+  try { localStorage.clear(); } catch {}
   const INVAL = ${INVAL}, REB = ${REB}, API = ${JSON.stringify(api)};
   const COST = { query: ${qcost}, at_facets: 18, at_suggest: 60, thumbs: 25, open: 45 }, NEEDCAT = new Set(["query", "at_facets", "at_suggest", "open", "range", "index_of"]);
   let dirty = false, rebuilding = null; window.__rlog = []; window.__bridgeN = {}; const T0 = performance.now(); window.__T = () => performance.now() - T0;

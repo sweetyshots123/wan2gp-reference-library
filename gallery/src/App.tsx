@@ -23,6 +23,7 @@ import Omni, { Chip, chipsFilter } from "./Omni";
 import { ChipRow, Chips } from "./ChipRow";
 import { Thumb, Toasts, fmtDur, toast } from "./ui";
 import { resumeMinS, setResumeMinM } from "./playback";
+import "../../view_state_rules.js";   // 1.12.27: shared view-state persistence & reset rules (ReflibViewState)
 
 // ---------------- rutas (hash): fáciles de ampliar añadiendo un caso en parseRoute + una vista
 type Route =
@@ -56,25 +57,46 @@ function parseRoute(): Route {
 
 const PAGE = 120;
 const SORTS: [string, string][] = [["date_desc", "Fecha · recientes"], ["date_asc", "Fecha · antiguas"], ["name_asc", "Nombre A–Z"], ["name_desc", "Nombre Z–A"]];
+const VS: any = (globalThis as any).ReflibViewState || null;
+
+function readInitialView() {
+  const remember = VS ? VS.shouldRemember(null, localStorage) : true;
+  const saved = remember && VS ? VS.loadGal(localStorage, localStorage.getItem("gal.sort") || "date_desc") : null;
+  const startupHash = VS ? VS.resolveStartupRoute(location.hash, saved?.route, remember) : (location.hash || "#/");
+  if (startupHash && startupHash !== (location.hash || "#/") && startupHash.startsWith("#/")) {
+    try { history.replaceState(null, "", startupHash); } catch { location.hash = startupHash; }
+  }
+  return { remember, saved, didRestore: !!(remember && saved) };
+}
 
 export default function App() {
+  const bootRef = useRef<ReturnType<typeof readInitialView> | null>(null);
+  if (!bootRef.current) bootRef.current = readInitialView();
+  const boot = bootRef.current;
+  const rememberRef = useRef<boolean>(boot.remember);
+  const pendingScroll = useRef<number>(boot.saved?.scroll || 0);
+  const didRestoreRef = useRef<boolean>(boot.didRestore);
+  const syncedRememberRef = useRef<boolean>(false);
+
   const [route, setRoute] = useState<Route>(parseRoute);
-  const [fopen, setFopen] = useState(() => localStorage.getItem("gal.fside") !== "0");
-  useEffect(() => { localStorage.setItem("gal.fside", fopen ? "1" : "0"); }, [fopen]);
+  const [fopen, setFopen] = useState(() => boot.remember ? (localStorage.getItem("gal.fside") !== "0") : true);
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.fside", fopen ? "1" : "0"); }, [fopen]);
   const fside = fopen && (route.v === "carpetas" || route.v === "carpeta");
   const [meta, setMeta] = useState<Meta | null>(null);
   const [total, setTotal] = useState(0);
   const [sections, setSections] = useState<Section[] | null>(null);
   const [ver, setVer] = useState(0);                       // sube cuando llegan páginas nuevas
-  const [text, setText] = useState("");                    // lo que se está escribiendo en la búsqueda
-  const [chips, setChips] = useState<Chip[]>([]);          // filtros de la búsqueda (Y)
-  const [kinds, setKinds] = useState<string[]>(() => { try { const k = JSON.parse(localStorage.getItem("gal.kinds") || "[]"); return Array.isArray(k) ? k : []; } catch { return []; } });   // [] = todo
+  const [text, setText] = useState<string>(() => boot.saved?.text || "");                    // lo que se está escribiendo en la búsqueda
+  const [chips, setChips] = useState<Chip[]>(() => boot.saved?.chips || []);          // filtros de la búsqueda (Y)
+  const [kinds, setKinds] = useState<string[]>(() => { if (!boot.remember) return []; try { const k = JSON.parse(localStorage.getItem("gal.kinds") || "[]"); return Array.isArray(k) ? k : []; } catch { return []; } });   // [] = todo
   const [kc, setKc] = useState<Record<string, number>>({});
-  const [sort, setSort] = useState(() => localStorage.getItem("gal.sort") || "date_desc");
-  const [extraTags, setExtraTags] = useState<string[]>([]);
-  const [af, setAf] = useState<AFilt>(AF0);   // 1.9.5: facetas de la Media Library (atags / xtags / jst / rangos)
-  const [fpanel, setFpanel] = useState(() => localStorage.getItem("gal.facets") === "1");
-  useEffect(() => { localStorage.setItem("gal.facets", fpanel ? "1" : "0"); }, [fpanel]);
+  const [sort, setSort] = useState(() => boot.remember ? (localStorage.getItem("gal.sort") || boot.saved?.sort || "date_desc") : "date_desc");
+  const [extraTags, setExtraTags] = useState<string[]>(() => boot.saved?.extraTags || []);
+  const [chipQ, setChipQ] = useState<Record<string, string>>(() => boot.saved?.chipQ || {});
+  const [af, setAf] = useState<AFilt>(() => boot.saved?.af || AF0);   // 1.9.5: facetas de la Media Library (atags / xtags / jst / rangos)
+  const [afOpen, setAfOpen] = useState<string[]>(() => boot.saved?.afOpen || []);
+  const [fpanel, setFpanel] = useState(() => boot.remember ? (localStorage.getItem("gal.facets") === "1") : false);
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.facets", fpanel ? "1" : "0"); }, [fpanel]);
   const [, setTaxOk] = useState(false);
   const [simRef, setSimRef] = useState<SimRef | null>(() => { try { return JSON.parse(sessionStorage.getItem("gal.sim") || "null"); } catch { return null; } });   // 1.9.3: búsqueda de similares activa (sim_search)
   useEffect(() => { const h = (e: any) => { setSimRef(e.detail); try { sessionStorage.setItem("gal.sim", JSON.stringify(e.detail)); } catch {} setViewer(null); setSolo(null); setSel(new Set()); if (location.hash !== "#/similares") location.hash = "#/similares"; else refresh(); }; window.addEventListener(SIM_EVENT, h); return () => window.removeEventListener(SIM_EVENT, h); });
@@ -101,13 +123,36 @@ export default function App() {
   const pages = useRef(new Map<number, number>());         // página -> generación cargada / pidiéndose
   const gen = useRef(0);
 
-  useEffect(() => { const h = () => { setRoute(parseRoute()); setViewer(null); setExtraTags([]); setSel(new Set()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
-  const [manage, setManage] = useState(false);
-  useEffect(() => { localStorage.setItem("gal.size", String(size)); }, [size]);
-  useEffect(() => { localStorage.setItem("gal.sort", sort); }, [sort]);
-  useEffect(() => { localStorage.setItem("gal.kinds", JSON.stringify(kinds)); }, [kinds]);
-  const [origins, setOrigins] = useState<string[]>(() => { try { const k = JSON.parse(localStorage.getItem("gal.origins") || "[]"); return Array.isArray(k) ? k : []; } catch { return []; } });   // 1.10.0 IA / Real
-  useEffect(() => { localStorage.setItem("gal.origins", JSON.stringify(origins)); }, [origins]);
+  useEffect(() => { const h = () => { pendingScroll.current = 0; setRoute(parseRoute()); setViewer(null); setExtraTags([]); setSel(new Set()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
+  const [manage, setManage] = useState<boolean>(() => !!boot.saved?.manage);
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.size", String(size)); }, [size]);
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.sort", sort); }, [sort]);
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.kinds", JSON.stringify(kinds)); }, [kinds]);
+  const [origins, setOrigins] = useState<string[]>(() => { if (!boot.remember) return []; try { const k = JSON.parse(localStorage.getItem("gal.origins") || "[]"); return Array.isArray(k) ? k : []; } catch { return []; } });   // 1.10.0 IA / Real
+  useEffect(() => { if (rememberRef.current) localStorage.setItem("gal.origins", JSON.stringify(origins)); }, [origins]);
+  const stateSnap = useRef<any>(null);
+  stateSnap.current = {
+    route: location.hash && location.hash.startsWith("#/") ? location.hash : "#/",
+    text, chips, kinds, origins, sort, extraTags, chipQ, af, afOpen, fpanel, fopen, manage, size,
+    scroll: pendingScroll.current > 0 ? pendingScroll.current : Math.round(window.scrollY || 0),
+  };
+  useEffect(() => {
+    if (!VS || !rememberRef.current) return;
+    const s = stateSnap.current;
+    if (!VS.galHasActiveFilters(s, "date_desc") && !s.fpanel && s.fopen && !s.manage && s.size === 220 && !s.scroll && !(s.afOpen && s.afOpen.length)) {
+      VS.clearGal(localStorage);
+    } else {
+      VS.saveGal(localStorage, s, "date_desc");
+    }
+  }, [route, text, chips, kinds, origins, sort, extraTags, chipQ, af, afOpen, fpanel, fopen, manage, size]);
+  useEffect(() => {
+    let t = 0;
+    const saveNow = () => { if (!VS || !rememberRef.current || pendingScroll.current > 0) return; VS.saveGal(localStorage, { ...stateSnap.current, scroll: Math.round(window.scrollY || 0) }, "date_desc"); };
+    const onScroll = () => { if (!rememberRef.current || pendingScroll.current > 0) return; window.clearTimeout(t); t = window.setTimeout(saveNow, 200); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pagehide", saveNow);
+    return () => { window.clearTimeout(t); window.removeEventListener("scroll", onScroll); window.removeEventListener("pagehide", saveNow); };
+  }, []);
 
   const routeFilter = (r: Route): Filter | null => {
     switch (r.v) {
@@ -140,10 +185,61 @@ export default function App() {
   }, [baseKey, kinds, origins, sort, extraTags, JSON.stringify(af)]);
   const fkey = JSON.stringify(filter);
 
-  const applyMeta = (r: any) => { const m = metaOf(r); if (m) { setMeta(m); rev.current = m.rev; } };
+  const resetFilters = useCallback(() => {
+    pendingScroll.current = 0;
+    setText(""); setChips([]); setKinds([]); setOrigins([]); setExtraTags([]); setChipQ({}); setAf(AF0); setSort("date_desc");
+    setSimRef(null); try { sessionStorage.removeItem("gal.sim"); } catch {}
+    try { localStorage.setItem("gal.kinds", "[]"); localStorage.setItem("gal.origins", "[]"); localStorage.setItem("gal.sort", "date_desc"); } catch {}
+    VS?.clearGal(localStorage);
+    if (location.hash && location.hash !== "#/" && location.hash !== "#") location.hash = "#/";
+    window.scrollTo(0, 0);
+  }, []);
+  const applyMeta = (r: any) => {
+    if (r && typeof r.remember_state === "boolean") {
+      const on = r.remember_state;
+      rememberRef.current = on;
+      VS?.syncRememberFlag(localStorage, on);
+      if (!syncedRememberRef.current) {
+        syncedRememberRef.current = true;
+        if (!on && (didRestoreRef.current || kinds.length || origins.length || sort !== "date_desc")) {
+          didRestoreRef.current = false;
+          resetFilters();
+        }
+      }
+    }
+    const m = metaOf(r);
+    if (m) {
+      setMeta(m); rev.current = m.rev;
+      if (VS) {
+        const pr = VS.galPruneStale(stateSnap.current, m, !!simRef);
+        if (pr.changed) {
+          if (JSON.stringify(pr.state.chips) !== JSON.stringify(stateSnap.current.chips)) setChips(pr.state.chips);
+          if (JSON.stringify(pr.state.extraTags) !== JSON.stringify(stateSnap.current.extraTags)) setExtraTags(pr.state.extraTags);
+          if (pr.state.route !== stateSnap.current.route) location.hash = pr.state.route;
+          if (rememberRef.current) VS.saveGal(localStorage, pr.state, "date_desc");
+        }
+      }
+    }
+  };
   const tz = -new Date().getTimezoneOffset();
 
   const totalRef = useRef(0); totalRef.current = total;
+  useEffect(() => {
+    if (pendingScroll.current <= 0 || total <= 0 || ver <= 0) return;
+    const want = pendingScroll.current;
+    let n = 0;
+    const tryScroll = () => {
+      if (document.documentElement.scrollHeight >= want + window.innerHeight * 0.5 || ++n > 15) {
+        window.scrollTo(0, want);
+        pendingScroll.current = 0;
+        return true;
+      }
+      return false;
+    };
+    if (tryScroll()) return;
+    const iv = window.setInterval(() => { if (tryScroll()) window.clearInterval(iv); }, 80);
+    return () => window.clearInterval(iv);
+  }, [ver, total]);
   const fetchPage = useCallback(async (p: number, g: number, withSections = false, bg = false, pre: any = null) => {
     if (!filter) return;
     pages.current.set(p, g);
@@ -382,6 +478,7 @@ export default function App() {
   }, [meta, chips, v]);
 
   const dateNote = sort.startsWith("date") ? "Fecha: la de importación a la Media Library (o la de modificación del archivo si no hay)." : "";
+  const hasActiveFilters = VS ? VS.galHasActiveFilters({ route: location.hash && location.hash.startsWith("#/") ? location.hash : "#/", text, chips, kinds, origins, sort, extraTags, chipQ, af }, "date_desc") : false;
 
   return (
     <div className={`app ${drag ? "dragging" : ""}`}
@@ -440,6 +537,7 @@ export default function App() {
               <button className={selMode ? "on" : ""} onClick={() => { setSelMode(!selMode); setSel(new Set()); }} title="Seleccionar (S)">☑ Seleccionar</button>
               <button className={fpanel ? "on" : ""} onClick={() => setFpanel(!fpanel)} title="Facetas: etiquetas automáticas, estado del autoetiquetado y rangos corporales (como en la Media Library)">🏷 Facetas{afActive(af) ? ` (${afActive(af)})` : ""}</button>
               <button onClick={() => startSimIndex(null)} title="Calcula pose y cara de toda la biblioteca para «Similares» (solo lo que falta; en segundo plano, como en la Media Library)">⧉ Calcular poses y caras</button>
+              {hasActiveFilters && <button className="resetbtn" onClick={resetFilters} title="Restablecer búsqueda, filtros, orden y vista">↺ Restablecer filtros</button>}
             </div>
           </div>
           {v === "buscar" && chips.length > 0 && (
@@ -450,7 +548,8 @@ export default function App() {
             </div>
           )}
           {(facet.length > 0 || extraTags.length > 0) && (
-            <ChipRow row="gtags" items={[...Chips.tagItems(extraTags.map((t) => ({ tag: t, count: 0 })), () => true).map((x) => ({ ...x, count: undefined })), ...Chips.tagItems(facet.map(([tag, count]) => ({ tag, count })), () => false)]}
+            <ChipRow row="gtags" q={chipQ.gtags || ""} onQ={(q) => setChipQ((p) => ({ ...p, gtags: q }))}
+              items={[...Chips.tagItems(extraTags.map((t) => ({ tag: t, count: 0 })), () => true).map((x) => ({ ...x, count: undefined })), ...Chips.tagItems(facet.map(([tag, count]) => ({ tag, count })), () => false)]}
               onPick={(x) => setExtraTags(x.active ? extraTags.filter((t) => t !== x.id) : [...extraTags, x.id])} />
           )}
           {dateNote && <p className="muted datenote">{dateNote}</p>}
@@ -465,11 +564,12 @@ export default function App() {
           )}
           {!total && ver > 1 && <p className="empty">{v === "buscar" ? "Sin resultados." : "Nada por aquí todavía. Arrastra imágenes o vídeos a la ventana para importarlos."}</p>}
         </main>
-        {fpanel && filter && <FacetPanel f={filter} af={af} setAf={setAf} rev={meta?.rev || 0} />}
+        {fpanel && filter && <FacetPanel f={filter} af={af} setAf={setAf} rev={meta?.rev || 0} openCats={afOpen} onOpenCats={setAfOpen} />}
         </div>
       ) : (
         <main>
           <div className="bar"><h1>{title}</h1>{tq && <p className="muted">filtrando por «{text}»</p>}
+            {hasActiveFilters && <button className="resetbtn" onClick={resetFilters} title="Restablecer búsqueda, filtros, orden y vista">↺ Restablecer filtros</button>}
             {(v === "tags" || v === "personas" || v === "colecciones") && <button className="ml" onClick={() => setManage(!manage)}>{manage ? "Ver tarjetas" : "Gestionar"}</button>}</div>
           {meta && manage && v === "tags" && <ManageList kind="tag" rows={meta.tags.filter((t) => !isPerson(t.tag) && t.tag.toLowerCase() !== FAV).filter((t) => !tq || fold(t.tag).includes(tq)).map((t) => ({ key: t.tag, label: t.tag, count: t.count }))} after={refresh} />}
           {meta && manage && v === "personas" && <ManageList kind="persona" rows={meta.tags.filter((t) => isPerson(t.tag)).filter((t) => !tq || fold(personName(t.tag)).includes(tq)).map((t) => ({ key: t.tag, label: personName(t.tag), count: t.count }))} after={refresh} />}
