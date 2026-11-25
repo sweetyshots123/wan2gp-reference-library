@@ -6,6 +6,11 @@
 - **Open Media Library:** Reference Library tab top link → `/reflib/media-library/` (new tab, Media Library alone). Media Library header → Galería (`/reflib/gallery/`). Galería header → standalone Media Library + WanGP / Reference Library (`/`).
 - **Privacy:** frames stay on the PC in `pool/`; no new network calls.
 
+## 1.12.26 — Standalone Media Library dark theme contrast
+
+- `/reflib/media-library/` is a bare HTML page (no Gradio CSS). It now sets dark `--body-text-color` / surface tokens on `html.reflib-standalone` and adds the `.dark` class so existing `.dark` rules apply. The 1.12.7 shell background stays `#0e0e12`. The Media Library modal inside WanGP is unchanged (it already uses Gradio’s theme variables).
+- Test: `tests/test_browser_standalone_theme.mjs` (synthetic mock; checks contrast of title, search, chips, tree, captions and footer buttons).
+
 ## 1.12.25 — Control Image picker placement
 
 - The Control Image **Choose from library / Elegir de la librería** button sits to the right of Gradio's floating field label (or just below it when the box is too narrow for the top-right toolbar). It no longer overlaps the "Control Image" / "Imagen de control" title.

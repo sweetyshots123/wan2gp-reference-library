@@ -5830,8 +5830,10 @@
 
     // 1.12.7: standalone Media Library page (/reflib/media-library/)
     if (window.__REFLIB_STANDALONE__) {
-        document.documentElement.classList.add("reflib-standalone");
+        document.documentElement.classList.add("reflib-standalone", "dark");
+        if (document.body) document.body.classList.add("dark");
         const bootStand = () => {
+            if (document.body) document.body.classList.add("dark");
             openBrowser({});
             setFull(true);
             // Hide / soften WanGP-only chrome once

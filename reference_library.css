@@ -1015,7 +1015,32 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .reflib-ib-resume button:hover { filter: brightness(1.1); }
 .reflib-ib-resume-go { outline: 1px solid rgba(120,180,255,.55); }
 .reflib-ib-resume-cfg { opacity: .85; }
-html.reflib-standalone, html.reflib-standalone body { height: 100%; margin: 0; background: #0e0e12; }
+/* 1.12.26: the standalone page is a bare HTML shell (no Gradio theme, no .dark).
+   It has used a near-black background since 1.12.7, but text still used
+   --body-text-color / light fallbacks (#111) with those variables unset, so almost
+   all labels sat as black on #0e0e12 (contrast ~1.1:1). Set dark tokens here and
+   add .dark in JS so existing .dark rules apply. In-WanGP modal is unchanged. */
+html.reflib-standalone {
+  color-scheme: dark;
+  --reflib-scheme: dark;
+  --body-text-color: #e5e7eb;
+  --body-text-color-subdued: #9ca3af;
+  --background-fill-primary: #15161c;
+  --background-fill-secondary: #1c1f2a;
+  --input-background-fill: #1c1f2a;
+  --input-border-color: #3a4152;
+  --border-color-primary: #3a4152;
+  --block-background-fill: #15161c;
+  --block-border-color: #3a4152;
+  --color-accent: #3b82f6;
+  --button-secondary-background-fill: #334155;
+  --button-secondary-text-color: #f8fafc;
+  --button-secondary-border-color: #64748b;
+  --button-primary-background-fill: #2563eb;
+  --button-primary-text-color: #fff;
+  color: var(--body-text-color);
+}
+html.reflib-standalone, html.reflib-standalone body { height: 100%; margin: 0; background: #0e0e12; color: var(--body-text-color); }
 html.reflib-standalone .reflib-ib-bg { position: fixed; inset: 0; display: block; opacity: 1; pointer-events: auto; background: #0e0e12; }
 html.reflib-standalone .reflib-ib-bg.open { display: block; }
 html.reflib-standalone .reflib-ib-modal { width: 100%; height: 100%; max-width: none; border-radius: 0; }

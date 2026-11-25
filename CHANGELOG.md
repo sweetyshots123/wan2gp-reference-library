@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.26
+
+- **Standalone Media Library contrast.** The `/reflib/media-library/` page (the Gradio-free dark shell with the “Media Library independiente…” banner) now defines dark theme tokens and adds the `.dark` class. Since 1.12.7 the page used a near-black background (`#0e0e12`) but never set Gradio’s `--body-text-color` (or `.dark`), so tabs, search, chips, the folder tree, card captions and footer buttons rendered as black-on-black (~1.1:1). The in-WanGP explorer already inherited WanGP’s dark theme and was not affected. Blue selected buttons (Todo / Detalles) were already explicit white-on-blue.
+
+
 ## 1.12.25
 
 - **Control Image picker placement.** Gradio's Control Image title is a floating `BlockLabel` (`position: absolute` at the top-left of the block). The **Choose from library / Elegir de la librería** button no longer sits in normal flow under that title (where the two texts overlapped). It is placed immediately to the right of the label, or just below it when the box is too narrow to clear the top-right toolbar. Same button style as Start with Image.
