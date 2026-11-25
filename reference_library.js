@@ -4784,6 +4784,42 @@
             b.title = tip; b.setAttribute("aria-label", tip);
         }
     }
+    function placeGuidePickButton(block, b) {
+        // Gradio's BlockLabel floats (position:absolute) at the top-left of the block. Inserting the
+        // button in normal flow (after the label, or as first child) puts it in the same corner, on
+        // top of "Control Image". Sit it immediately to the right of the label; if the box is too
+        // narrow to clear Gradio's top-right toolbar, drop just below the label instead.
+        const lab = block.querySelector(".label-wrap, .label-container, [data-testid=\"block-label\"]");
+        if (lab) {
+            if (b.parentNode !== lab.parentNode || b.previousElementSibling !== lab) lab.after(b);
+            if (typeof block.getBoundingClientRect !== "function" || typeof lab.getBoundingClientRect !== "function") return;
+            const br = block.getBoundingClientRect(), lr = lab.getBoundingClientRect();
+            if (!br.width && !br.height) return;
+            const gap = 8;
+            let top = lr.top - br.top, left = lr.right - br.left + gap;
+            const tool = block.querySelector(".icon-button-wrapper");
+            let rightLimit = (br.width || 1e9) - gap;
+            if (tool && typeof tool.getBoundingClientRect === "function") {
+                const tr = tool.getBoundingClientRect();
+                if (tr.width) rightLimit = Math.min(rightLimit, tr.left - br.left - gap);
+            }
+            const btnW = b.offsetWidth || 180;
+            if (left + btnW > rightLimit) {
+                top = lr.bottom - br.top + 4;
+                left = Math.max(0, lr.left - br.left);
+            }
+            b.style.position = "absolute";
+            b.style.top = Math.max(0, top) + "px";
+            b.style.left = Math.max(0, left) + "px";
+            b.style.margin = "0";
+            b.style.zIndex = "var(--layer-2, 2)";
+            return;
+        }
+        if (b.parentNode !== block) {
+            if (block.firstChild) block.insertBefore(b, block.firstChild);
+            else block.appendChild(b);
+        }
+    }
     function mountGuidePickButtons() {
         for (const block of document.querySelectorAll(".reflib-ipick")) {
             const f = imagePickField(block);
@@ -4794,16 +4830,14 @@
                 b = document.createElement("button"); b.type = "button"; b.className = "reflib-ipick-btn";
                 b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); pickOpen(block); });
                 b.addEventListener("pointerdown", e => e.stopPropagation());
-                const lab = block.querySelector(".label-wrap, .label-container, [data-testid=\"block-label\"]");
-                if (lab && lab.parentNode === block) lab.after(b);
-                else if (block.firstChild) block.insertBefore(b, block.firstChild);
-                else block.appendChild(b);
             }
             const label = pkt("start_btn"), tip = pkt("tip_g", { label: pkLabel(block, f.field) });
             if (b.textContent !== label) b.textContent = label;
             b.title = tip; b.setAttribute("aria-label", tip);
+            placeGuidePickButton(block, b);
         }
     }
+
     function mountPickButtons() {
         mountStartPickButtons();
         mountGuidePickButtons();

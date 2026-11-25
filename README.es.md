@@ -4,7 +4,7 @@
 
 En **Start with Image**, la galería de imágenes iniciales incorpora **Elegir de la librería** junto a Add/Remove/Left/Right/Clear. Abre el mismo explorador de Media Library, filtrado a imágenes. Haz doble clic en una imagen, o selecciona una y pulsa **Añadir a imágenes iniciales**. Conserva las existentes e inserta la nueva después de la seleccionada, como Add de WanGP. Admite recortes virtuales de imágenes. Esc/Cancelar no modifica los inputs.
 
-En **Control Image** (*Imagen de control*, el recuadro de una sola imagen de modelos como Z-Image Turbo con un proceso de control) aparece el mismo botón **Elegir de la librería** bajo la etiqueta del campo. Al elegir una imagen se pone en ese recuadro (solo admite una).
+En **Control Image** (*Imagen de control*, el recuadro de una sola imagen de modelos como Z-Image Turbo con un proceso de control) aparece el mismo botón **Elegir de la librería** a la derecha de la etiqueta del campo (o justo debajo si el recuadro es estrecho). Al elegir una imagen se pone en ese recuadro (solo admite una).
 
 Start with Image va solo a `image_start`, nunca a Reference Images (`image_refs`). Control Image va a `image_guide`. Ninguno inicia generación ni crea tareas en la cola. Se elige una imagen cada vez. El botón de Start with Image sigue la visibilidad y el tema de su galería; el de Control Image se oculta con ese campo. Textos EN/ES. Si WanGP no expone el estado y los componentes Add de la galería inicial, ese botón no se instala. [Detalles de integración](docs/FEATURES.md).
 

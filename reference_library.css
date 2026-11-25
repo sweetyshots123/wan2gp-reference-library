@@ -974,17 +974,19 @@ audio.reflib-ib-pvmedia { background: transparent; margin-top: 6px; }
 .amg-controls .reflib-start-pick:hover { filter: brightness(1.1); }
 .amg-controls .reflib-start-pick:focus-visible { outline: 2px solid var(--color-accent, #60a5fa); outline-offset: 2px; }
 
-/* Control Image (gr.Image, no AMG controls): the same label, under the block's title, never over the preview X. */
+/* Control Image (gr.Image, no AMG controls): same button as Start with Image, to the right of
+   Gradio's floating BlockLabel (JS sets top/left). Fallback left clears a typical "Imagen de control". */
 .reflib-ipick { position: relative; }
-.reflib-ipick > .reflib-ipick-btn {
-    display: inline-flex; align-items: center; margin: 0 0 8px 0; padding: 6px 10px;
-    border-radius: var(--button-small-radius, 6px);
+.reflib-ipick .reflib-ipick-btn {
+    display: inline-flex; align-items: center; position: absolute; z-index: var(--layer-2, 2);
+    top: var(--block-label-margin, 0px); left: 11.5rem; margin: 0; padding: 6px 10px;
+    border-radius: var(--button-small-radius, 6px); white-space: nowrap;
     border: 1px solid var(--button-secondary-border-color, #64748b);
     background: var(--button-secondary-background-fill, #334155);
     color: var(--button-secondary-text-color, #f8fafc); font: inherit; font-size: 13px; cursor: pointer;
 }
-.reflib-ipick > .reflib-ipick-btn:hover { filter: brightness(1.1); }
-.reflib-ipick > .reflib-ipick-btn:focus-visible { outline: 2px solid var(--color-accent, #60a5fa); outline-offset: 2px; }
+.reflib-ipick .reflib-ipick-btn:hover { filter: brightness(1.1); }
+.reflib-ipick .reflib-ipick-btn:focus-visible { outline: 2px solid var(--color-accent, #60a5fa); outline-offset: 2px; }
 
 /* 1.12.6: top of Reference Library tab — open Media Library (Galería) in a new tab */
 .reflib-top-links { display: flex; gap: 10px; align-items: center; margin: 4px 0 10px; flex-wrap: wrap; }

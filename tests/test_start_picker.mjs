@@ -16,7 +16,7 @@ const c = vm.createContext({ Set, Map, JSON, String, Object, Promise, console, i
     toast: (...args) => toasts.push(args), closeBrowser: () => closes++,
     GRID_SVG: '', esc: s => s, bridgeButton: () => true,
 });
-vm.runInContext(section + '\nglobalThis.api = {startPickField,imagePickField,pickOpen,pickLoad,pickEnd,pkt,mountStartPickButtons,mountGuidePickButtons};', c);
+vm.runInContext(section + '\nglobalThis.api = {startPickField,imagePickField,pickOpen,pickLoad,pickEnd,pkt,mountStartPickButtons,mountGuidePickButtons,placeGuidePickButton};', c);
 const api = c.api;
 assert.equal(api.startPickField({className: 'reflib-start-add reflib-start-generate'}).field, 'image_start');
 assert.equal(api.startPickField({className: 'reflib-si-video_guide-generate'}), null);
@@ -71,22 +71,53 @@ language = 'en';
 assert.match(api.pkt('tip_g', {label: 'Control Image'}), /Control Image/);
 
 let gchildren = [];
-const glabel = { parentNode: null, after(b) { gchildren.push(b); } };
+const glabel = {
+    parentNode: null,
+    after(b) {
+        b.parentNode = glabel.parentNode;
+        b.previousElementSibling = glabel;
+        if (!gchildren.includes(b)) gchildren.push(b);
+    },
+};
+const toolbar = {
+    className: 'icon-button-wrapper',
+    getBoundingClientRect: () => ({ top: 0, left: 320, right: 400, width: 80, height: 28, bottom: 28 }),
+};
 const gblock = {
     className: 'block reflib-ipick reflib-ipick-image_guide-generate',
-    querySelector: (sel) => String(sel).includes('ipick-btn') ? gchildren[0] : (String(sel).includes('label') ? glabel : {textContent: 'Control Image'}),
+    querySelector: (sel) => {
+        const s = String(sel);
+        if (s.includes('ipick-btn')) return gchildren[0] || null;
+        if (s.includes('icon-button-wrapper')) return toolbar;
+        if (s.includes('label')) return glabel;
+        return { textContent: 'Control Image' };
+    },
     contains: (n) => gchildren.includes(n),
-    insertBefore(b) { gchildren.push(b); },
-    appendChild(b) { gchildren.push(b); },
+    insertBefore(b) { if (!gchildren.includes(b)) gchildren.push(b); },
+    appendChild(b) { if (!gchildren.includes(b)) gchildren.push(b); },
+    getBoundingClientRect: () => ({ top: 0, left: 0, right: 400, width: 400, height: 280, bottom: 280 }),
 };
 glabel.parentNode = gblock;
+glabel.getBoundingClientRect = () => ({ top: 0, left: 0, right: 130, width: 130, height: 24, bottom: 24 });
 const prevDoc = c.document;
 c.document = { querySelectorAll: (sel) => String(sel).includes('reflib-ipick') ? [gblock] : [],
-    createElement: () => ({ addEventListener() {}, setAttribute() {} }) };
+    createElement: () => ({ addEventListener() {}, setAttribute() {}, style: {}, offsetWidth: 160 }) };
 api.mountGuidePickButtons(); api.mountGuidePickButtons();
 assert.equal(gchildren.length, 1);
 assert.equal(gchildren[0].textContent, 'Choose from library');
 assert.equal(gchildren[0].type, 'button');
+assert.equal(gchildren[0].style.position, 'absolute');
+assert.equal(gchildren[0].style.top, '0px');
+assert.equal(gchildren[0].style.left, '138px'); // label right 130 + 8 gap
+assert.equal(gchildren[0].previousElementSibling, glabel);
+
+// Narrow box: button would collide with the top-right toolbar, so it drops below the label.
+gblock.getBoundingClientRect = () => ({ top: 0, left: 0, right: 260, width: 260, height: 280, bottom: 280 });
+toolbar.getBoundingClientRect = () => ({ top: 0, left: 180, right: 260, width: 80, height: 28, bottom: 28 });
+api.mountGuidePickButtons();
+assert.equal(gchildren.length, 1);
+assert.equal(gchildren[0].style.top, '28px'); // label bottom 24 + 4
+assert.equal(gchildren[0].style.left, '0px');
 c.document = prevDoc;
 
 console.log('start picker: routing, filtering, cancel/restore, EN/ES, mount idempotence and video regression OK');

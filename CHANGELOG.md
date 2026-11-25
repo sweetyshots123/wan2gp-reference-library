@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.25
+
+- **Control Image picker placement.** Gradio's Control Image title is a floating `BlockLabel` (`position: absolute` at the top-left of the block). The **Choose from library / Elegir de la librería** button no longer sits in normal flow under that title (where the two texts overlapped). It is placed immediately to the right of the label, or just below it when the box is too narrow to clear the top-right toolbar. Same button style as Start with Image.
+
 ## 1.12.24
 
 - **Control Image library button.** On WanGP's single **Control Image** dropzone (`image_guide` — used by image models such as Z-Image Turbo Fun ControlNet when Control Image Process is Pose, Depth, Edges or raw), the same **Choose from library / Elegir de la librería** button as Start with Image now appears under the field label. It opens the media explorer filtered to images; choosing one **sets** that Control Image (it holds only one). Uses the existing history media bridge, which now accepts an image `to` field, not only video/audio. The Control Image is tagged and the history bridge is registered even when the form has no Control Video, so image-only models still get the button. Galería has no send-to-Control-Image action; both sides would share this same `<tab>:history` path if one is added later.
